@@ -1,0 +1,37 @@
+/* frontend_next/app/globals.css */
+
+/* Tailwind v4 방식 import */
+@import "tailwindcss";
+
+/* === HAMA UX 커스텀 컴포넌트 레이어 === */
+@layer components {
+  .btn {
+    @apply rounded px-3 py-2 border border-black/10 bg-white hover:bg-black/5 active:-translate-y-[1px] transition;
+  }
+  .btn-primary {
+    @apply bg-black text-white hover:bg-black/90;
+  }
+  .btn-danger {
+    @apply bg-red-500 text-white hover:bg-red-500/90;
+  }
+  .input {
+    @apply w-full rounded border border-black/15 outline-none px-3 py-2 focus:ring-2 focus:ring-black/10 bg-white;
+  }
+  .select {
+    @apply rounded border border-black/15 px-3 py-2 bg-white;
+  }
+  .card {
+    @apply rounded border border-black/10 bg-white px-4 py-3;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border border-black/10 bg-black/5 px-2 py-1 text-xs;
+  }
+}
+
+/* === 마이크 펄스 애니메이션 === */
+@keyframes mic-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0,0,0,.15); transform: scale(1); }
+  70%  { box-shadow: 0 0 0 14px rgba(0,0,0,0); transform: scale(1.03); }
+  100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); transform: scale(1); }
+}
+.mic-pulse { animation: mic-pulse 1.4s ease-out infinite; }

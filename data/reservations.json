@@ -1,0 +1,47 @@
+[
+  {
+    "id": "5c36d8f4-1998-477c-b64b-5a09522e0d18",
+    "when": "2025-10-27T14:22:57.846Z",
+    "placeId": "mock-1",
+    "placeName": "테스트 결과: 오산카페",
+    "address": "경기 오산시 어딘가 123",
+    "lat": 37.15,
+    "lng": 127.07,
+    "phone": "031-000-0000",
+    "user": {
+      "id": "tester-001",
+      "name": "Internal Tester"
+    },
+    "status": "confirmed"
+  },
+  {
+    "id": "a8052a64-bf72-426f-98a7-4963e16914f9",
+    "when": "2025-10-27T14:38:31.778Z",
+    "placeId": "mock-1",
+    "placeName": "테스트 결과: 오산카페",
+    "address": "경기 오산시 어딘가 123",
+    "lat": 37.15,
+    "lng": 127.07,
+    "phone": "031-000-0000",
+    "user": {
+      "id": "tester-001",
+      "name": "Internal Tester"
+    },
+    "status": "confirmed"
+  },
+  {
+    "id": "37fb9743-b0d2-4e41-bf15-b226c9ec1cea",
+    "when": "2025-10-27T14:38:57.648Z",
+    "placeId": "mock-1",
+    "placeName": "테스트 매장",
+    "address": "경기 어딘가 123",
+    "lat": 37,
+    "lng": 127,
+    "phone": null,
+    "user": {
+      "id": "tester-001",
+      "name": "Internal Tester"
+    },
+    "status": "confirmed"
+  }
+]
