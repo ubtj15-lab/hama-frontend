@@ -1,20 +1,11 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
 
-// 검색 결과 타입(백엔드 응답 필드명에 맞춤)
-type Place = {
-  id: string;
-  name: string;
-  address?: string;
-  lat?: number;
-  lng?: number;
-  phone?: string | null;
-  rating?: number;
-  reviewCount?: number;
-  categories?: string[];
-  openNow?: boolean;
-};
+import React, { useEffect, useRef, useState } from "react";
+import Script from "next/script";
+import { useRouter, useSearchParams } from "next/navigation";
+import MicButton from "../components/MicButton";
 
+/** Kakao 타입 전역 선언 */
 declare global {
   interface Window {
     kakao: any;
@@ -22,223 +13,235 @@ declare global {
 }
 
 export default function MapPage() {
-  const mapRef = useRef<any>(null);
-  const infoRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const router = useRouter();
+  const params = useSearchParams();
 
-  const [query, setQuery] = useState("오산 카페");
-  const [results, setResults] = useState<Place[]>([]);
-  const [loading, setLoading] = useState(false);
+  // URL 파라미터 (검색 카드/추천 카드에서 넘어옴)
+  const name = params.get("q") ?? "목적지";
+  const lat = Number(params.get("lat") ?? 37.566535);
+  const lng = Number(params.get("lng") ?? 126.9779692);
 
-  // Kakao 지도 스크립트 로드 + 지도 초기화
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [sdkReady, setSdkReady] = useState(false);
+
+  /** SDK 로드 후 지도 초기화 */
   useEffect(() => {
-    // 이미 로드됐다면 스킵
-    if (typeof window !== "undefined" && window.kakao && window.kakao.maps) {
-      initMap();
+    if (!sdkReady || !mapRef.current) return;
+    if (!window.kakao?.maps) return;
+
+    window.kakao.maps.load(() => {
+      const center = new window.kakao.maps.LatLng(lat, lng);
+      const map = new window.kakao.maps.Map(mapRef.current!, {
+        center,
+        level: 3,
+      });
+      const marker = new window.kakao.maps.Marker({ position: center });
+      marker.setMap(map);
+
+      const iw = new window.kakao.maps.InfoWindow({
+        content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
+      });
+      iw.open(map, marker);
+    });
+  }, [sdkReady, lat, lng, name]);
+
+  /** 길안내(카카오맵 링크) */
+  const handleNavigate = () => {
+    const url = `https://map.kakao.com/link/to/${encodeURIComponent(
+      name
+    )},${lat},${lng}`;
+    window.open(url, "_blank");
+  };
+
+  /** 예약 페이지로 이동 */
+  const handleReserve = () => {
+    router.push(`/reserve?q=${encodeURIComponent(name)}`);
+  };
+
+  /** 🎤 음성 명령 처리 */
+  const handleVoiceCommand = (text: string) => {
+    const t = text.replace(/\s+/g, "");
+    // "길안내", "길 찾아줘" 등 포함되면
+    if (t.includes("길안내") || t.includes("길찾기") || t.includes("길찾아줘")) {
+      handleNavigate();
       return;
     }
-
-    const script = document.createElement("script");
-    script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_APPKEY}&autoload=false`;
-    script.async = true;
-    script.onload = () => {
-      window.kakao.maps.load(() => {
-        initMap();
-      });
-    };
-    document.head.appendChild(script);
-  }, []);
-
-  function initMap() {
-    const container = document.getElementById("map");
-    if (!container) return;
-
-    const center = new window.kakao.maps.LatLng(37.5665, 126.9780); // 서울시청
-    const options = { center, level: 4 };
-    mapRef.current = new window.kakao.maps.Map(container, options);
-    infoRef.current = new window.kakao.maps.InfoWindow({ zIndex: 3 });
-  }
-
-  // 마커/인포윈도우 유틸
-  function clearMarkers() {
-    markersRef.current.forEach((m) => m.setMap(null));
-    markersRef.current = [];
-  }
-
-  function panTo(lat: number, lng: number) {
-    if (!mapRef.current) return;
-    const pos = new window.kakao.maps.LatLng(lat, lng);
-    mapRef.current.panTo(pos);
-  }
-
-  function openInfo(p: Place) {
-    if (!mapRef.current || !window.kakao?.maps) return;
-
-    const html = `
-      <div style="padding:8px 10px;max-width:260px;font-size:13px;">
-        <div style="font-weight:600;margin-bottom:6px;">${escapeHtml(p.name)}</div>
-        <div style="color:#666;margin-bottom:6px;">${escapeHtml(p.address ?? "")}</div>
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;">
-          ${p.phone ? `<span style="color:#555;">${escapeHtml(p.phone)}</span>` : ""}
-          ${typeof p.rating === "number" ? `<span>★ ${p.rating.toFixed(1)}</span>` : ""}
-          ${typeof p.reviewCount === "number" ? `<span>(${p.reviewCount})</span>` : ""}
-          ${p.openNow ? `<span style="color:#10b981;">영업중</span>` : ""}
-        </div>
-        <button id="fr-reserve-btn-${p.id}" style="
-          background:#111;color:#fff;padding:7px 10px;border-radius:8px;cursor:pointer;
-          font-size:13px; border:none;">30분 뒤 예약</button>
-      </div>
-    `;
-
-    const pos = new window.kakao.maps.LatLng(p.lat!, p.lng!);
-    infoRef.current.setContent(html);
-    infoRef.current.setPosition(pos);
-    infoRef.current.open(mapRef.current);
-
-    // 버튼 이벤트 부착
-    setTimeout(() => {
-      const btn = document.getElementById(`fr-reserve-btn-${p.id}`);
-      if (btn) {
-        btn.addEventListener("click", async () => {
-          try {
-            const when = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-            const payload = {
-              placeId: p.id,
-              placeName: p.name,
-              address: p.address,
-              lat: p.lat,
-              lng: p.lng,
-              phone: p.phone ?? null,
-              user: { id: "tester-001", name: "Internal Tester" },
-              when,
-            };
-            const res = await fetch("/api/reservations", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(payload),
-            });
-            const data = await res.json();
-            if (!res.ok || !data.ok) {
-              alert(`예약 실패: ${data?.error ?? res.status}`);
-              return;
-            }
-            alert(`예약 완료! \n${p.name}\n${new Date(when).toLocaleString()}`);
-          } catch (e: any) {
-            alert(`예약 오류: ${e?.message ?? "Unknown"}`);
-          }
-        });
-      }
-    }, 0);
-  }
-
-  function drawMarkers(items: Place[]) {
-    if (!mapRef.current || !window.kakao?.maps) return;
-    clearMarkers();
-
-    items.forEach((p) => {
-      if (typeof p.lat !== "number" || typeof p.lng !== "number") return;
-
-      const marker = new window.kakao.maps.Marker({
-        map: mapRef.current,
-        position: new window.kakao.maps.LatLng(p.lat, p.lng),
-      });
-      markersRef.current.push(marker);
-
-      window.kakao.maps.event.addListener(marker, "click", () => {
-        openInfo(p);
-      });
-    });
-
-    // 첫 결과로 지도 이동
-    const first = items.find((it) => typeof it.lat === "number" && typeof it.lng === "number");
-    if (first) panTo(first.lat!, first.lng!);
-  }
-
-  // 검색
-  async function handleSearch() {
-    if (!query.trim()) return;
-    try {
-      setLoading(true);
-      const r = await fetch(`/api/places/search?query=${encodeURIComponent(query)}`, { cache: "no-store" });
-      const data = await r.json();
-      const items: Place[] = Array.isArray(data?.results) ? data.results : [];
-      setResults(items);
-      drawMarkers(items);
-    } catch (e) {
-      console.error(e);
-      alert("검색 중 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
+    // "예약", "예약해줘" 등 포함되면
+    if (t.includes("예약")) {
+      handleReserve();
+      return;
     }
-  }
+    // 그 외엔 그냥 무시 (원하면 토스트/alert로 안내 가능)
+  };
 
   return (
-    <main className="p-4" style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 16 }}>
-      <section style={{ gridColumn: "1 / span 2" }}>
-        <h1 style={{ fontWeight: 700, fontSize: 18, marginBottom: 8 }}>🗺️ FreeReserve 지도 + 검색 + 예약</h1>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="예) 오산 카페 / 강남 설렁탕"
-            style={{ flex: 1, height: 40, padding: "0 12px", border: "1px solid #ddd", borderRadius: 8 }}
-          />
-          <button
-            onClick={handleSearch}
-            style={{ height: 40, padding: "0 16px", borderRadius: 8, border: "1px solid #111", background: "#111", color: "#fff" }}
-          >
-            {loading ? "검색 중..." : "검색"}
-          </button>
-        </div>
-      </section>
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#eef5fb",
+        padding: "16px 12px 80px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      {/* 상단 바 */}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 6,
+        }}
+      >
+        <button
+          onClick={() => router.back()}
+          style={topBtnStyle}
+          aria-label="뒤로"
+        >
+          ⬅️
+        </button>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 18,
+            fontWeight: 700,
+            color: "#0f172a",
+            fontFamily: "Noto Sans KR, sans-serif",
+            flex: 1,
+            textAlign: "center",
+          }}
+        >
+          지도 / 길안내
+        </h1>
+        <div style={{ width: 44 }} />
+      </div>
 
-      <div id="map" style={{ width: "100%", height: 560, borderRadius: 12, border: "1px solid #eee", gridColumn: "1 / 2" }} />
-
-      <aside style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, overflowY: "auto", height: 560 }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>결과 {results.length}건</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {results.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => {
-                if (typeof p.lat === "number" && typeof p.lng === "number") {
-                  panTo(p.lat, p.lng);
-                  openInfo(p);
-                } else {
-                  alert("좌표 정보가 없는 장소입니다.");
-                }
-              }}
-              style={{
-                textAlign: "left",
-                border: "1px solid #eee",
-                borderRadius: 10,
-                padding: "10px 12px",
-                background: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.name}</div>
-              <div style={{ color: "#666", fontSize: 12, marginBottom: 4 }}>{p.address}</div>
-              <div style={{ display: "flex", gap: 6, fontSize: 12 }}>
-                {typeof p.rating === "number" && <span>★ {p.rating.toFixed(1)}</span>}
-                {typeof p.reviewCount === "number" && <span>({p.reviewCount})</span>}
-                {p.openNow && <span style={{ color: "#10b981" }}>영업중</span>}
-              </div>
-            </button>
-          ))}
+      {/* 목적지 카드 */}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          background: "#ffffff",
+          borderRadius: 14,
+          padding: "10px 12px",
+          boxShadow: "0 6px 14px rgba(0,0,0,0.08)",
+          fontFamily: "Noto Sans KR, system-ui, sans-serif",
+        }}
+      >
+        <div style={{ fontWeight: 700, color: "#0f172a" }}>{name}</div>
+        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+          {lat.toFixed(6)}, {lng.toFixed(6)}
         </div>
-      </aside>
+      </div>
+
+      {/* 지도 */}
+      <div
+        ref={mapRef}
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          height: 520,
+          borderRadius: 18,
+          overflow: "hidden",
+          boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
+          background: "#cfe6ff",
+        }}
+      />
+
+      {/* 버튼들 */}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 420,
+          display: "flex",
+          gap: 10,
+          marginTop: 10,
+        }}
+      >
+        <button
+          onClick={handleNavigate}
+          style={primaryBtn}
+          aria-label="길안내 시작"
+        >
+          길안내 시작
+        </button>
+        <button
+          onClick={handleReserve}
+          style={ghostBtn}
+          aria-label="예약 페이지"
+        >
+          예약하기
+        </button>
+      </div>
+
+      {/* 🎤 음성 명령 버튼 */}
+      <div
+        style={{
+          marginTop: 16,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        <MicButton onResult={handleVoiceCommand} size={52} />
+        <div
+          style={{
+            fontSize: 11,
+            color: "#6b7280",
+            fontFamily: "Noto Sans KR, system-ui, sans-serif",
+            textAlign: "center",
+          }}
+        >
+          “길안내 시작” 또는 “예약해줘” 라고 말해보세요
+        </div>
+      </div>
+
+      {/* Kakao Maps SDK */}
+      <Script
+        id="kakao-map-sdk"
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_APP_KEY}&autoload=false`}
+        strategy="afterInteractive"
+        onLoad={() => setSdkReady(true)}
+      />
     </main>
   );
 }
 
-// XSS 방어용 간단 이스케이프
-function escapeHtml(s: string) {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+const topBtnStyle: React.CSSProperties = {
+  border: "none",
+  background: "#fff",
+  borderRadius: 12,
+  padding: "10px 12px",
+  boxShadow: "0 6px 14px rgba(0,0,0,0.08)",
+  cursor: "pointer",
+};
+
+const primaryBtn: React.CSSProperties = {
+  flex: 1,
+  height: 48,
+  borderRadius: 12,
+  border: "none",
+  background: "#2563eb",
+  color: "#fff",
+  fontWeight: 700,
+  cursor: "pointer",
+  boxShadow: "0 8px 18px rgba(37,99,235,.35)",
+};
+
+const ghostBtn: React.CSSProperties = {
+  flex: 1,
+  height: 48,
+  borderRadius: 12,
+  border: "1px solid #cbd5e1",
+  background: "#ffffff",
+  color: "#0f172a",
+  fontWeight: 700,
+  cursor: "pointer",
+  boxShadow: "0 6px 14px rgba(0,0,0,0.06)",
+};

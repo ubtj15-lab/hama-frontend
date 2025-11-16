@@ -2,9 +2,14 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-// (네가 쓰는 import 그대로 유지: loadKakaoSdk, MicButton, QuickReserve 등)
+// 실제 프로젝트에 맞게 주석 풀고 경로 맞춰줘!
+// import { loadKakaoSdk } from "@/lib/kakao";
+// import MicButton from "@/components/MicButton";
+// import QuickReserve from "@/components/QuickReserve";
 
-// ====== 헬퍼들(카테고리 매핑/스마트검색 등)은 여기 위쪽에 두기 ======
+declare const kakao: any;
+
+// ===== 카테고리 매핑 (원래 쓰던 거 그대로) =====
 const CATEGORY_MAP: Record<string, string> = {
   카페: "CE7",
   편의점: "CS2",
@@ -24,60 +29,79 @@ function inferCategory(text: string): string | undefined {
   return undefined;
 }
 
-async function smartSearch(
-  text: string,
-  center: kakao.maps.LatLng,
-  radius = 1500
-): Promise<{
-  data: kakao.maps.services.PlacesSearchResult;
-  status: kakao.maps.services.Status;
-}> {
-  const ps = new kakao.maps.services.Places();
-  const category = inferCategory(text);
-  const keyword = text.replace(/\s+/g, " ").trim();
+// ===== 스마트 검색 헬퍼 =====
+type SmartSearchParams = {
+  text: string;
+  center: any;      // 타입 귀찮으면 any 로 완화
+  radius?: number;
+};
 
-  const once = (r: number) =>
-    new Promise<{
-      data: kakao.maps.services.PlacesSearchResult;
-      status: kakao.maps.services.Status;
-    }>((resolve) => {
-      if (category) {
-        ps.categorySearch(
-          category,
-          (data, status) => resolve({ data, status }),
-          { location: center, radius: r }
-        );
-      } else {
-        ps.keywordSearch(
-          keyword,
-          (data, status) => resolve({ data, status }),
-          { location: center, radius: r }
-        );
-      }
+type SmartSearchResult = {
+  data: any;
+  status: any;
+};
+
+async function smartSearch({
+  text,
+  center,
+  radius = 1500,
+}: SmartSearchParams): Promise<SmartSearchResult> {
+  if (typeof window === "undefined" || !window.kakao) {
+    throw new Error("카카오 지도 SDK가 로드되지 않았습니다.");
+  }
+
+  const ps = new kakao.maps.services.Places();
+
+  // 한 번 검색하는 헬퍼
+  const once = (r: number): Promise<SmartSearchResult> =>
+    new Promise((resolve) => {
+      const options = {
+        location: center,
+        radius: r,
+      };
+
+      ps.keywordSearch(
+        text,
+        (data: any, status: any) => {
+          resolve({ data, status });
+        },
+        options
+      );
     });
 
+  // 1차 검색
   let { data, status } = await once(radius);
+
   if (status === kakao.maps.services.Status.OK && data.length > 0) {
     return { data, status };
   }
+
+  // 1차에 결과 없으면 반경 늘려서 한 번 더
   const r2 = Math.min(radius < 3000 ? radius + 1000 : radius + 3000, 10000);
   ({ data, status } = await once(r2));
+
   return { data, status };
 }
-// ====== 헬퍼 끝 ======
+// ===== 헬퍼 끝 =====
 
 
-// ✅ 여기 **반드시** 리액트 컴포넌트를 기본 내보내기!
+// ✅ 리액트 컴포넌트 (HamaPage)
 export default function HamaPage() {
-  // 기존에 쓰던 상태/refs/이벤트 등 유지
-  // const mapRef = useRef<HTMLDivElement>(null);
-  // useEffect(()=>{ ... },[]);
+  // 예시: 기존에 쓰던 상태/refs 그대로 다시 채워 넣어
+  // const mapRef = useRef<HTMLDivElement | null>(null);
+  // const [center, setCenter] = useState<any>(null);
+
+  // useEffect(() => {
+  //   // loadKakaoSdk 로드하고 지도 띄우는 로직 …
+  // }, []);
 
   return (
     <div style={{ width: "100%", height: "100vh" }}>
-      {/* 네가 사용하던 지도/마이크 버튼/빠른예약 컴포넌트 그대로 */}
+      {/* 여기 안에 네가 원래 쓰던 지도 / 검색 UI / MicButton 등 다시 넣어주면 됨 */}
+
+      {/* 예시 */}
       {/* <div ref={mapRef} style={{ width: "100%", height: "100%" }} /> */}
-      {/* <MicButton onSpeech={(text)=>{ ... smartSearch(text, center) }} /> */}
+      {/* <MicButton onResult={(text) => smartSearch({ text, center })} /> */}
     </div>
   );
 }

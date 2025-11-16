@@ -1,24 +1,27 @@
 // app/layout.tsx
-import type { Metadata } from "next";
-import Script from "next/script";
-import "./globals.css";
+import './globals.css';
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: "FreeReserve",
-  description: "Hama UX (Beta) + 관리자 예약내역",
+  title: '하마 로컬 검색',
+  description: '하마와 함께 로컬 매장을 찾는 서비스',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="ko">
-      <body>
-        {/* autoload=false 로 두고, 화면에서 kakao.maps.load(...)로 초기화 */}
-        <Script
-          src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_APPKEY}&autoload=false&libraries=services,clusterer`}
-          strategy="afterInteractive"
+      <head>
+        {/* ✅ 스마트폰에서 화면 크기 제대로 맞추기 */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1"
         />
-        {children}
-      </body>
+      </head>
+      <body>{children}</body>
     </html>
   );
 }

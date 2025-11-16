@@ -1,26 +1,36 @@
+// app/api/search/route.ts
 import { NextResponse } from "next/server";
-import { PLACES } from "@/data/places";
 
 export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const q = (searchParams.get("q") ?? "").trim().toLowerCase();
+  const { searchParams } = new URL(req.url);
+  const q = searchParams.get("q") ?? "";
 
-    // 쿼리 없으면 빈 결과
-    if (!q) return NextResponse.json({ ok: true, results: [] });
+  if (!q.trim()) {
+    return NextResponse.json({ documents: [] }, { status: 200 });
+  }
 
-    // 이름/카테고리/주소 간단 필터
-    const results = PLACES.filter((p) => {
-      const hay = `${p.name} ${p.category} ${p.address ?? ""}`.toLowerCase();
-      return hay.includes(q);
-    }).slice(0, 20);
+  const KEY =
+    process.env.KAKAO_REST_API_KEY ??
+    process.env.NEXT_PUBLIC_KAKAO_REST_API_KEY ??
+    "";
 
-    return NextResponse.json({ ok: true, results });
-  } catch (err) {
-    console.error("[GET /api/search] error:", err);
+  const url =
+    "https://dapi.kakao.com/v2/local/search/keyword.json?query=" +
+    encodeURIComponent(q);
+
+  const res = await fetch(url, {
+    headers: { Authorization: `KakaoAK ${KEY}` },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
     return NextResponse.json(
-      { ok: false, code: "SERVER_ERROR" },
+      { error: "Kakao REST error", status: res.status, body: text },
       { status: 500 }
     );
   }
+
+  const json = await res.json();
+  return NextResponse.json(json);
 }
