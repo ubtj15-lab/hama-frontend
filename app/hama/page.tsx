@@ -1,15 +1,22 @@
-// app/hama/page.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-// 실제 프로젝트에 맞게 주석 풀고 경로 맞춰줘!
-// import { loadKakaoSdk } from "@/lib/kakao";
-// import MicButton from "@/components/MicButton";
-// import QuickReserve from "@/components/QuickReserve";
+import React, { useState } from "react";
+import stores from "../../data/stores.json";
 
-declare const kakao: any;
+// 매장 타입
+type Store = {
+  id: string;
+  name: string;
+  category: "cafe" | "restaurant" | "beauty";
+  lat: number;
+  lng: number;
+  image: string;
+  intro: string;
+  rating: number;
+  address: string;
+};
 
-// ===== 카테고리 매핑 (원래 쓰던 거 그대로) =====
+// ====== (예전에 쓰던 카테고리 맵/헬퍼들, 필요하면 이어서 쓸 수 있게 남겨둠) ======
 const CATEGORY_MAP: Record<string, string> = {
   카페: "CE7",
   편의점: "CS2",
@@ -29,79 +36,150 @@ function inferCategory(text: string): string | undefined {
   return undefined;
 }
 
-// ===== 스마트 검색 헬퍼 =====
-type SmartSearchParams = {
-  text: string;
-  center: any;      // 타입 귀찮으면 any 로 완화
-  radius?: number;
-};
+// kakao SDK 쓰던 부분 계속 쓸 수 있게 선언만 남겨둠 (안 쓰면 그냥 무시됨)
+declare const kakao: any;
 
-type SmartSearchResult = {
-  data: any;
-  status: any;
-};
-
-async function smartSearch({
-  text,
-  center,
-  radius = 1500,
-}: SmartSearchParams): Promise<SmartSearchResult> {
-  if (typeof window === "undefined" || !window.kakao) {
-    throw new Error("카카오 지도 SDK가 로드되지 않았습니다.");
-  }
-
-  const ps = new kakao.maps.services.Places();
-
-  // 한 번 검색하는 헬퍼
-  const once = (r: number): Promise<SmartSearchResult> =>
-    new Promise((resolve) => {
-      const options = {
-        location: center,
-        radius: r,
-      };
-
-      ps.keywordSearch(
-        text,
-        (data: any, status: any) => {
-          resolve({ data, status });
-        },
-        options
-      );
-    });
-
-  // 1차 검색
-  let { data, status } = await once(radius);
-
-  if (status === kakao.maps.services.Status.OK && data.length > 0) {
-    return { data, status };
-  }
-
-  // 1차에 결과 없으면 반경 늘려서 한 번 더
-  const r2 = Math.min(radius < 3000 ? radius + 1000 : radius + 3000, 10000);
-  ({ data, status } = await once(r2));
-
-  return { data, status };
-}
-// ===== 헬퍼 끝 =====
-
-
-// ✅ 리액트 컴포넌트 (HamaPage)
+// ==================== 메인 컴포넌트 ====================
 export default function HamaPage() {
-  // 예시: 기존에 쓰던 상태/refs 그대로 다시 채워 넣어
-  // const mapRef = useRef<HTMLDivElement | null>(null);
-  // const [center, setCenter] = useState<any>(null);
+  const allStores = stores as Store[];
 
-  // useEffect(() => {
-  //   // loadKakaoSdk 로드하고 지도 띄우는 로직 …
-  // }, []);
+  // 카테고리별 배열
+  const cafes = allStores.filter((s) => s.category === "cafe");
+  const restaurants = allStores.filter((s) => s.category === "restaurant");
+  const beauties = allStores.filter((s) => s.category === "beauty");
+
+  const [selectedStore, setSelectedStore] = useState<Store | null>(null);
 
   return (
-    <div style={{ width: "100%", height: "100vh" }}>
-      {/* 여기 안에 네가 원래 쓰던 지도 / 검색 UI / MicButton 등 다시 넣어주면 됨 */}
+    <main className="min-h-screen bg-sky-50 px-4 py-6">
+      {/* 상단 헤더 / 타이틀 */}
+      <header className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">HAMA 베타</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            오산 근처 카페 · 식당 · 미용실을 하마가 추천해 드려요.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span className="px-2 py-1 rounded-full bg-white shadow">
+            베타 테스트 v0.9
+          </span>
+        </div>
+      </header>
 
-      {/* 예시 */}
-      {/* <div ref={mapRef} style={{ width: "100%", height: "100%" }} /> */}
-      {/* <MicButton onResult={(text) => smartSearch({ text, center })} /> */}
-    </div>
+      {/* (나중에 음성 검색/하마 캐릭터 영역 넣을 자리) */}
+      <section className="mb-6">
+        <div className="w-full rounded-3xl bg-white shadow p-4 flex items-center justify-between">
+          <div>
+            <div className="text-sm text-slate-500 mb-1">음성/텍스트 검색</div>
+            <div className="text-base font-semibold text-slate-800">
+              “근처 카페 추천해줘”, “애랑 갈만한 식당 있어?”
+            </div>
+          </div>
+          <button className="rounded-full px-4 py-2 text-sm font-semibold bg-sky-500 text-white shadow">
+            마이크 (준비 중)
+          </button>
+        </div>
+      </section>
+
+      {/* 카테고리별 섹션 */}
+      <section className="space-y-8">
+        <CategorySection
+          title="카페"
+          subtitle="브런치 · 디저트 · 분위기 좋은 카페"
+          items={cafes}
+          onSelect={setSelectedStore}
+        />
+        <CategorySection
+          title="미용실"
+          subtitle="커트 · 펌 · 염색 예약 가능 미용실"
+          items={beauties}
+          onSelect={setSelectedStore}
+        />
+        <CategorySection
+          title="식당"
+          subtitle="가족 외식 · 점심 식사 · 술자리"
+          items={restaurants}
+          onSelect={setSelectedStore}
+        />
+      </section>
+
+      {/* (선택된 매장 있는 경우) 디테일 플로우 자리 - 지금은 베타라 간단 안내만 */}
+      {selectedStore && (
+        <section className="mt-8">
+          <div className="rounded-3xl bg-white shadow p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-semibold">
+                {selectedStore.name} 상세 (베타)
+              </h2>
+              <button
+                className="text-xs text-slate-500 underline"
+                onClick={() => setSelectedStore(null)}
+              >
+                닫기
+              </button>
+            </div>
+            <p className="text-sm text-slate-700 mb-2">
+              {selectedStore.intro}
+            </p>
+            <p className="text-xs text-slate-500 mb-1">
+              주소: {selectedStore.address}
+            </p>
+            <p className="text-xs text-slate-500 mb-3">
+              위도/경도: {selectedStore.lat}, {selectedStore.lng}
+            </p>
+            <button className="mt-1 w-full rounded-xl bg-sky-500 text-white text-sm py-2 font-semibold">
+              예약하기 (베타에서는 동선 테스트용 더미 버튼)
+            </button>
+          </div>
+        </section>
+      )}
+    </main>
+  );
+}
+
+// ==================== 서브 컴포넌트들 ====================
+
+type CategorySectionProps = {
+  title: string;
+  subtitle?: string;
+  items: Store[];
+  onSelect: (store: Store) => void;
+};
+
+function CategorySection({ title, subtitle, items, onSelect }: CategorySectionProps) {
+  return (
+    <section>
+      <div className="mb-3">
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        {subtitle && (
+          <p className="text-xs text-slate-500 mt-1">{subtitle}</p>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-12">
+        {items.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onSelect(s)}
+            className="relative w-[260px] h-[200px] rounded-3xl overflow-hidden shadow-lg bg-slate-200 text-left"
+          >
+            <img
+              src={s.image}
+              alt={s.name}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
+            <div className="absolute bottom-3 left-4 right-4 text-white text-sm">
+              <div className="font-semibold">{s.name}</div>
+              <div className="text-xs text-slate-200 mt-0.5 line-clamp-1">
+                {title} · {s.intro}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }

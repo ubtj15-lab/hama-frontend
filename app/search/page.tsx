@@ -3,33 +3,107 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PLACES, Place } from "../data/places";
+import storesData from "../../data/stores.json";
 
-type CardInfo = Place;
+/** 매장 타입 (stores.json 구조 그대로) */
+type Store = {
+  id: string;
+  name: string;
+  category: "cafe" | "restaurant" | "beauty";
+  lat: number;
+  lng: number;
+  image: string;
+  intro: string;
+  rating: number;
+  address: string;
+};
+
+type CardInfo = Store;
 
 export default function SearchPage() {
   const router = useRouter();
   const params = useSearchParams();
   const query = params.get("query") || "";
 
-  // 베타용: 검색 결과 카드 3개만 사용
-  const cards: CardInfo[] = [PLACES[0], PLACES[1], PLACES[2]];
+  /** 1) 검색어로 카테고리 추론 */
+  const stores = storesData as Store[];
 
-  const [selectedId, setSelectedId] = useState<string>(cards[0].id);
+  const inferCategory = (q: string): Store["category"] => {
+    const t = q.toLowerCase();
 
-  // overlayVisible: 오버레이 DOM 존재 여부
-  // expanded: 오버레이 안 요소들이 펼쳐진 상태
+    if (t.includes("미용") || t.includes("헤어") || t.includes("뷰티")) {
+      return "beauty";
+    }
+
+    if (
+      t.includes("식당") ||
+      t.includes("밥") ||
+      t.includes("한식") ||
+      t.includes("레스토랑")
+    ) {
+      return "restaurant";
+    }
+
+    // 기본값: 카페
+    return "cafe";
+  };
+
+  const activeCategory = inferCategory(query);
+
+  /** 2) 선택된 카테고리 매장만 모으기 */
+  const categoryStores = stores.filter(
+    (s) => s.category === activeCategory
+  );
+
+  /** 3) 카테고리 안에서 3개씩 3페이지 (최대 9개) */
+  const pages: CardInfo[][] = [
+    categoryStores.slice(0, 3), // 1페이지
+    categoryStores.slice(3, 6), // 2페이지
+    categoryStores.slice(6, 9), // 3페이지
+  ];
+
+  /** 4) 페이지 인덱스 */
+  const [pageIndex, setPageIndex] = useState(0);
+
+  /** 현재 페이지 카드 목록 */
+  const currentCards = pages[pageIndex] ?? [];
+
+  /** 선택된 카드 ID */
+  const [selectedId, setSelectedId] = useState<string>(
+    currentCards[0]?.id ?? pages[0]?.[0]?.id
+  );
+
+  /** 오버레이 / 확대 상태 */
   const [overlayVisible, setOverlayVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
-  // 상세 정보 패널 열림 여부
+  /** 상세(메뉴/시술) 패널 열림 여부 */
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const selected =
-    cards.find((c) => c.id === selectedId) ?? cards[0];
-  const others = cards.filter((c) => c.id !== selected.id);
+  /** 예약 플로우 상태 */
+  const [reserveStep, setReserveStep] = useState<0 | 1 | 2>(0);
+  const [reserveDate, setReserveDate] = useState<string | null>(null);
+  const [reserveTime, setReserveTime] = useState<string | null>(null);
 
-  const detail = PLACE_DETAILS[selected.id];
+  const selected =
+    currentCards.find((c) => c.id === selectedId) ?? currentCards[0];
+  const others = currentCards.filter((c) => c.id !== selected?.id);
+
+  const detail = selected ? STORE_DETAILS[selected.id] : undefined;
+
+  /** 페이지 점 클릭 */
+  const goToPage = (index: number) => {
+    if (index < 0 || index >= pages.length) return;
+    const nextCards = pages[index];
+    if (!nextCards.length) return;
+
+    setPageIndex(index);
+    setSelectedId(nextCards[0].id);
+    setOverlayVisible(false);
+    setExpanded(false);
+    setDetailOpen(false);
+    resetReserve();
+  };
 
   const goToMap = (card: CardInfo) => {
     router.push(
@@ -37,48 +111,83 @@ export default function SearchPage() {
     );
   };
 
-  const handleReserve = () => {
-    alert("예약 기능은 베타 버전에서 준비 중이에요 🙂");
+  /** 예약 버튼 눌렀을 때 */
+  const handleReserveClick = () => {
+    // 상세 패널은 닫고 예약만 사용
+    setDetailOpen(false);
+
+    // 처음 누를 때 → 1단계 패널 열기
+    if (reserveStep === 0) {
+      setReserveStep(1);
+      return;
+    }
+    // 1단계에서 날짜/시간 안 고르고 확정 누른 경우
+    if (reserveStep === 1) {
+      if (!reserveDate || !reserveTime) {
+        alert("날짜와 시간을 먼저 선택해 주세요 🙂");
+        return;
+      }
+      // 2단계: 완료 화면으로
+      setReserveStep(2);
+      return;
+    }
+    // 2단계(완료 화면)에서 버튼 누르면 초기화
+    if (reserveStep === 2) {
+      resetReserve();
+    }
   };
 
   const handleRate = () => {
     alert("평점 기능은 추후 버전에서 제공될 예정입니다!");
   };
 
-  // 🔹 상세 패널 열고 닫기
-  const handleDetail = () => {
+  /** 메뉴 / 시술 버튼 */
+  const handleDetailClick = () => {
+    // 예약 패널은 닫기
+    resetReserve();
     setDetailOpen((prev) => !prev);
   };
 
   const detailLabel = getDetailButtonLabel(selected);
 
-  // 🔹 카드 클릭 → 확대 모드 애니메이션 시작
+  /** 카드 클릭 → 확대 모드 */
   const openExpanded = (id: string) => {
     setSelectedId(id);
-    setDetailOpen(false); // 새 카드 열 때는 상세 닫기
+    setDetailOpen(false);
+    resetReserve();
     setExpanded(false);
     setOverlayVisible(true);
-    // 살짝 딜레이 주고 expanded 켜서 transition 발동
-    setTimeout(() => {
-      setExpanded(true);
-    }, 10);
+    setTimeout(() => setExpanded(true), 10);
   };
 
-  // 🔹 닫기 → 접히는 애니메이션 후 오버레이 제거
   const closeExpanded = () => {
     setExpanded(false);
     setDetailOpen(false);
-    setTimeout(() => {
-      setOverlayVisible(false);
-    }, 280);
+    resetReserve();
+    setTimeout(() => setOverlayVisible(false), 280);
   };
 
+  /** 스크롤로 닫기 (패널 열려 있으면 안 닫힘) */
   const handleOverlayScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    // 상세가 열려 있을 땐 스크롤로 닫히지 않게
-    if (!detailOpen && e.currentTarget.scrollTop > 40) {
+    if (!detailOpen && reserveStep === 0 && e.currentTarget.scrollTop > 40) {
       closeExpanded();
     }
   };
+
+  const resetReserve = () => {
+    setReserveStep(0);
+    setReserveDate(null);
+    setReserveTime(null);
+  };
+
+  /** 날짜/시간 더미 옵션 */
+  const dateOptions = [
+    { label: "오늘", value: "오늘" },
+    { label: "내일", value: "내일" },
+    { label: "모레", value: "모레" },
+  ];
+
+  const timeOptions = ["11:00", "13:00", "15:00", "17:00", "19:00"];
 
   return (
     <main
@@ -92,62 +201,63 @@ export default function SearchPage() {
         gap: 18,
       }}
     >
-      {/* 상단 바 */}
-      <div
-  style={{
-    width: "100%",
-    maxWidth: 430,
-    marginTop: detailOpen ? 40 : 0,  // ⬅ 여백 크게 조정
-maxHeight: detailOpen ? 260 : 0,
-opacity: detailOpen ? 1 : 0,
-transform: detailOpen ? "translateY(0)" : "translateY(20px)",
-transition:
-  "opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease, margin-top 0.3s ease",
-overflow: "hidden",
+      {/* 상단 바 (검색 결과 표시용) - 확대 모드일 땐 숨김 */}
+{!overlayVisible && (
+  <div
+    style={{
+      width: "100%",
+      maxWidth: 430,
+      marginTop: 0,
+      maxHeight: 60,
+      opacity: 1,
+      transform: "translateY(0)",
+      transition:
+        "opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease, margin-top 0.3s ease",
+      overflow: "hidden",
+      display: "flex",
+      alignItems: "center",
+    }}
+  >
+    <button
+      onClick={() => router.push("/")}
+      style={{
+        border: "none",
+        background: "#ffffff",
+        borderRadius: 12,
+        padding: "8px 10px",
+        boxShadow: "0 4px 10px rgba(0, 0, 0, 0.08)",
+        cursor: "pointer",
+      }}
+    >
+      ⬅️
+    </button>
 
-  }}
->
+    <div
+      style={{
+        flex: 1,
+        marginLeft: 8,
+        padding: "8px 12px",
+        borderRadius: 9999,
+        background: "#ffffff",
+        boxShadow: "0 4px 10px rgba(0, 0, 0, 0.08)",
+        fontSize: 13,
+        color: "#4b5563",
+        fontFamily: "Noto Sans KR, system-ui, sans-serif",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {query ? `“${query}” 검색 결과` : "하마 추천 장소"}
+    </div>
+  </div>
+)}
 
-        <button
-          onClick={() => router.push("/")}
-          style={{
-            border: "none",
-            background: "#ffffff",
-            borderRadius: 12,
-            padding: "8px 10px",
-            boxShadow: "0 4px 10px rgba(0, 0, 0, 0.08)",
-            cursor: "pointer",
-          }}
-        >
-          ⬅️
-        </button>
 
-        <div
-          style={{
-            flex: 1,
-            marginLeft: 8,
-            padding: "8px 12px",
-            borderRadius: 9999,
-            background: "#ffffff",
-            boxShadow: "0 4px 10px rgba(0, 0, 0, 0.08)",
-            fontSize: 13,
-            color: "#4b5563",
-            fontFamily: "Noto Sans KR, system-ui, sans-serif",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {query ? `“${query}” 검색 결과` : "하마 추천 장소"}
-        </div>
-
-        <div style={{ width: 32 }} />
-      </div>
-
-      {/* 기본 화면 (검색 카드) – 오버레이가 떠 있을 땐 숨김 */}
-      {!overlayVisible && (
+      {/* 기본 화면: 큰 카드 + 작은 카드 2개 (페이지 별) */}
+      {!overlayVisible && selected && (
         <>
-          {/* 위: 큰 카드 */}
+          {/* 큰 카드 */}
           <div
             onClick={() => openExpanded(selected.id)}
             style={{
@@ -180,11 +290,11 @@ overflow: "hidden",
                 fontFamily: "Noto Sans KR, system-ui, sans-serif",
               }}
             >
-              {selected.name} · {selected.category}
+              {selected.name} · {labelOfCategory(selected.category)}
             </div>
           </div>
 
-          {/* 아래: 작은 카드 2개 */}
+          {/* 작은 카드 2개 */}
           <div
             style={{
               display: "flex",
@@ -231,11 +341,47 @@ overflow: "hidden",
               </div>
             ))}
           </div>
+
+          {/* 페이지 점 3개 */}
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            {[0, 1, 2].map((i) => (
+              <button
+                key={i}
+                onClick={() => goToPage(i)}
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  border: "none",
+                  cursor: pages[i].length ? "pointer" : "default",
+                  background: pages[i].length
+                    ? i === pageIndex
+                      ? "#2563eb"
+                      : "rgba(148,163,184,0.7)"
+                    : "rgba(209,213,219,0.8)",
+                  transform:
+                    i === pageIndex && pages[i].length
+                      ? "scale(1.2)"
+                      : "scale(1)",
+                  transition:
+                    "background 0.2s ease, transform 0.2s ease",
+                }}
+                aria-label={`페이지 ${i + 1}`}
+              />
+            ))}
+          </div>
         </>
       )}
 
       {/* 🔥 확대 모드 + 애니메이션 */}
-      {overlayVisible && (
+      {overlayVisible && selected && (
         <div
           onScroll={handleOverlayScroll}
           style={{
@@ -249,7 +395,7 @@ overflow: "hidden",
             transition: "opacity 0.28s ease",
           }}
         >
-          {/* 흐릿한 아래 카드 두 장 – 중앙 아래 레이어 */}
+          {/* 흐릿한 아래 카드 두 장 */}
           <div
             style={{
               position: "absolute",
@@ -314,7 +460,7 @@ overflow: "hidden",
               position: "relative",
             }}
           >
-            {/* 메인 큰 카드 – 슬라이드 + 줌 + 페이드 */}
+            {/* 메인 큰 카드 */}
             <div
               style={{
                 width: "100%",
@@ -341,7 +487,7 @@ overflow: "hidden",
                 style={{ objectFit: "cover" }}
               />
 
-              {/* 안쪽 뒤로가기 버튼 */}
+              {/* 뒤로가기 버튼 */}
               <button
                 onClick={closeExpanded}
                 style={{
@@ -364,7 +510,6 @@ overflow: "hidden",
                 ←
               </button>
 
-              {/* 매장 이름/카테고리 라벨 */}
               <div
                 style={{
                   position: "absolute",
@@ -378,11 +523,11 @@ overflow: "hidden",
                   fontFamily: "Noto Sans KR, system-ui, sans-serif",
                 }}
               >
-                {selected.name} · {selected.category}
+                {selected.name} · {labelOfCategory(selected.category)}
               </div>
             </div>
 
-            {/* 버튼 4개 – 아래에서 위로 슬라이드 인 */}
+            {/* 버튼 4개 */}
             <div
               style={{
                 width: "100%",
@@ -400,10 +545,18 @@ overflow: "hidden",
               }}
             >
               {[
-                { label: "예약", onClick: handleReserve },
+                {
+                  label:
+                    reserveStep === 0
+                      ? "예약"
+                      : reserveStep === 1
+                      ? "예약 확정"
+                      : "다른 시간 예약",
+                  onClick: handleReserveClick,
+                },
                 { label: "길안내", onClick: () => goToMap(selected) },
                 { label: "평점", onClick: handleRate },
-                { label: detailLabel, onClick: handleDetail },
+                { label: detailLabel, onClick: handleDetailClick },
               ].map((btn) => (
                 <button
                   key={btn.label}
@@ -425,32 +578,228 @@ overflow: "hidden",
               ))}
             </div>
 
-            {/* 🔻 상세 정보 패널 (메뉴 / 시술 / 코스 / 정보) */}
-            {detail && (
+            {/* ✅ 예약 패널 (1단계/2단계) – 사진 위로 오버레이 */}
+            {overlayVisible && reserveStep > 0 && (
               <div
                 style={{
-                  width: "100%",
-                  maxWidth: 430,
-                  marginTop: detailOpen ? 16 : 0,
-                  maxHeight: detailOpen ? 260 : 0,
-                  opacity: detailOpen ? 1 : 0,
-                  transform: detailOpen
-                    ? "translateY(0)"
-                    : "translateY(20px)",
-                  transition:
-                    "opacity 0.3s ease, transform 0.3s ease, maxHeight 0.3s ease, marginTop 0.3s ease",
-                  overflow: "hidden",
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 126,
+                  display: "flex",
+                  justifyContent: "center",
+                  pointerEvents: "auto",
                 }}
               >
                 <div
                   style={{
+                    width: "100%",
+                    maxWidth: 430,
                     borderRadius: 24,
                     background: "#f9fafb",
-                    boxShadow: "0 10px 28px rgba(15,23,42,0.28)",
+                    boxShadow: "0 10px 28px rgba(15,23,42,0.45)",
                     padding: "14px 16px 16px",
                     fontFamily: "Noto Sans KR, system-ui, sans-serif",
                     fontSize: 13,
                     color: "#111827",
+                    transform:
+                      reserveStep > 0
+                        ? "translateY(0)"
+                        : "translateY(120%)",
+                    transition: "transform 0.28s ease",
+                  }}
+                >
+                  {reserveStep === 1 && (
+                    <>
+                      <div
+                        style={{
+                          marginBottom: 8,
+                          fontWeight: 600,
+                          fontSize: 14,
+                        }}
+                      >
+                        {selected.name} 예약하기
+                      </div>
+                      <div
+                        style={{
+                          marginBottom: 12,
+                          color: "#4b5563",
+                          fontSize: 12,
+                        }}
+                      >
+                        날짜와 시간을 선택해 주세요. (실제 예약이 아닌
+                        베타 테스트 화면입니다.)
+                      </div>
+
+                      {/* 날짜 선택 */}
+                      <div
+                        style={{
+                          marginBottom: 10,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            marginBottom: 6,
+                            color: "#6b7280",
+                          }}
+                        >
+                          날짜 선택
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                          }}
+                        >
+                          {dateOptions.map((d) => (
+                            <button
+                              key={d.value}
+                              type="button"
+                              onClick={() => setReserveDate(d.value)}
+                              style={{
+                                flex: 1,
+                                borderRadius: 9999,
+                                border: "none",
+                                padding: "6px 0",
+                                fontSize: 12,
+                                cursor: "pointer",
+                                background:
+                                  reserveDate === d.value
+                                    ? "#2563eb"
+                                    : "#e5e7eb",
+                                color:
+                                  reserveDate === d.value
+                                    ? "#ffffff"
+                                    : "#111827",
+                              }}
+                            >
+                              {d.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 시간 선택 */}
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            marginBottom: 6,
+                            color: "#6b7280",
+                          }}
+                        >
+                          시간 선택
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: 8,
+                          }}
+                        >
+                          {timeOptions.map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setReserveTime(t)}
+                              style={{
+                                flexBasis: "30%",
+                                borderRadius: 9999,
+                                border: "none",
+                                padding: "6px 0",
+                                fontSize: 12,
+                                cursor: "pointer",
+                                background:
+                                  reserveTime === t ? "#2563eb" : "#e5e7eb",
+                                color:
+                                  reserveTime === t
+                                    ? "#ffffff"
+                                    : "#111827",
+                                textAlign: "center",
+                              }}
+                            >
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {reserveStep === 2 && (
+                    <>
+                      <div
+                        style={{
+                          marginBottom: 8,
+                          fontWeight: 600,
+                          fontSize: 14,
+                        }}
+                      >
+                        예약이 완료된 것처럼 보여주는 화면입니다 😊
+                      </div>
+                      <div
+                        style={{
+                          marginBottom: 10,
+                          color: "#4b5563",
+                          fontSize: 12,
+                        }}
+                      >
+                        실제 예약이 잡히지는 않지만{" "}
+                        <span style={{ fontWeight: 600 }}>
+                          베타 테스트용으로 {reserveDate} {reserveTime}
+                        </span>
+                        에 예약한 것처럼 동선을 확인할 수 있어요.
+                      </div>
+                      <div
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 12,
+                          background: "#e5f2ff",
+                          fontSize: 12,
+                          color: "#1f2937",
+                        }}
+                      >
+                        • 매장: {selected.name}
+                        <br />
+                        • 날짜: {reserveDate}
+                        <br />
+                        • 시간: {reserveTime}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 🔻 상세 정보 패널 (메뉴 / 시술) – 사진 위 오버레이 */}
+            {overlayVisible && detailOpen && detail && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 126,
+                  display: "flex",
+                  justifyContent: "center",
+                  pointerEvents: "auto",
+                }}
+              >
+                <div
+                  style={{
+                    width: "100%",
+                    maxWidth: 430,
+                    borderRadius: 24,
+                    background: "#f9fafb",
+                    boxShadow: "0 10px 28px rgba(15,23,42,0.45)",
+                    padding: "14px 16px 16px",
+                    fontFamily: "Noto Sans KR, system-ui, sans-serif",
+                    fontSize: 13,
+                    color: "#111827",
+                    transform: detailOpen
+                      ? "translateY(0)"
+                      : "translateY(120%)",
+                    transition: "transform 0.28s ease",
                   }}
                 >
                   <div
@@ -525,33 +874,25 @@ overflow: "hidden",
   );
 }
 
-/**
- * 매장 종류에 따라 마지막 버튼 라벨 결정
- */
-function getDetailButtonLabel(place: CardInfo): string {
-  const cat = place.category;
-  if (
-    cat.includes("카페") ||
-    cat.includes("식당") ||
-    cat.includes("레스토랑") ||
-    cat.includes("디저트") ||
-    cat.includes("한식")              // ⭐ 이 줄 추가!
-  ) {
+/** 카테고리 → 한글 라벨 */
+function labelOfCategory(category: Store["category"]): string {
+  if (category === "cafe") return "카페";
+  if (category === "restaurant") return "식당";
+  if (category === "beauty") return "미용실";
+  return category;
+}
+
+/** 버튼 라벨 결정 */
+function getDetailButtonLabel(place: CardInfo | null): string {
+  if (!place) return "정보";
+  if (place.category === "beauty") return "시술";
+  if (place.category === "cafe" || place.category === "restaurant")
     return "메뉴";
-  }
-  if (cat.includes("미용") || cat.includes("헤어")) {
-    return "시술";
-  }
-  if (cat.includes("공원") || cat.includes("놀이터")) {
-    return "코스";
-  }
   return "정보";
 }
 
-
-/** 🔽 매장별 상세 정보 (데모용) */
-
-type PlaceDetail = {
+/** 매장별 상세 정보 (데모용) */
+type StoreDetail = {
   title: string;
   tagline: string;
   hours: string;
@@ -559,41 +900,105 @@ type PlaceDetail = {
   menu: { name: string; note?: string }[];
 };
 
-const PLACE_DETAILS: Record<string, PlaceDetail> = {
-  // 1: 블루문 카페
-  "1": {
-    title: "블루문 카페 · 시그니처 메뉴",
-    tagline: "로컬 원두로 내린 브루잉 커피와 브런치를 즐길 수 있는 분위기 좋은 카페예요.",
+const STORE_DETAILS: Record<string, StoreDetail> = {
+  cafe_01: {
+    title: "블루문 커피랩 · 시그니처 메뉴",
+    tagline:
+      "원두 향 좋은 분위기 좋은 카페로, 브루잉 커피와 디저트를 즐길 수 있어요.",
     hours: "매일 09:00 ~ 21:00",
-    highlight: "에스프레소 바 + 브런치 세트 인기",
+    highlight: "로컬 원두 브루잉 + 브런치 세트 인기",
     menu: [
       { name: "블루문 라떼", note: "시그니처" },
-      { name: "크루아상 플레이트", note: "브런치" },
-      { name: "콜드브루", note: "테이크아웃 인기" },
+      { name: "브루잉 커피", note: "핸드드립" },
+      { name: "오늘의 케이크", note: "매일 변경" },
     ],
   },
-  // 2: 솔향 미용실
-  "2": {
-    title: "솔향 미용실 · 시술 메뉴",
-    tagline: "잔잔한 음악과 함께 편안하게 헤어 관리를 받을 수 있는 동네 단골 미용실.",
+  cafe_02: {
+    title: "라운지 83 · 브런치 & 디저트",
+    tagline: "브런치와 디저트가 맛있는 라운지형 카페입니다.",
+    hours: "매일 10:00 ~ 22:00",
+    highlight: "주말 브런치 예약 많음",
+    menu: [
+      { name: "에그 베네딕트", note: "브런치 인기" },
+      { name: "수제 티라미수", note: "디저트 추천" },
+      { name: "플랫 화이트", note: "라떼 계열" },
+    ],
+  },
+  cafe_03: {
+    title: "하마커피 스테이션 · 조용한 작업 카페",
+    tagline: "조용히 책 읽거나 노트북 작업하기 좋은 공간입니다.",
+    hours: "평일 08:30 ~ 21:30, 주말 09:00 ~ 21:00",
+    highlight: "콘센트 좌석 + 와이파이",
+    menu: [
+      { name: "아메리카노", note: "리필 할인" },
+      { name: "카페라떼", note: "우유 선택 가능" },
+      { name: "하마 굿즈 세트", note: "머그컵 포함" },
+    ],
+  },
+  food_01: {
+    title: "오산담백식당 · 한식 정찬",
+    tagline: "정갈한 한식 전문, 가족 방문이 많은 식당입니다.",
+    hours: "매일 11:00 ~ 22:00",
+    highlight: "점심 정식 인기",
+    menu: [
+      { name: "담백 한정식", note: "2인 이상 주문" },
+      { name: "제육볶음 정식", note: "매운맛 조절 가능" },
+      { name: "청국장 정식", note: "웰빙 메뉴" },
+    ],
+  },
+  food_02: {
+    title: "육통령 오산본점 · 고기 맛집",
+    tagline: "고기 맛집으로 유명한 곳, 회식/모임 장소로 좋습니다.",
+    hours: "매일 16:00 ~ 24:00",
+    highlight: "숙성 삼겹살 + 소고기",
+    menu: [
+      { name: "숙성 삼겹살", note: "대표 메뉴" },
+      { name: "꽃등심", note: "프리미엄" },
+      { name: "냉면", note: "식사 마무리" },
+    ],
+  },
+  food_03: {
+    title: "스시하나 · 합리적인 스시 오마카세",
+    tagline: "합리적인 가격으로 즐기는 스시 오마카세 전문점입니다.",
+    hours: "매일 12:00 ~ 22:00 (브레이크 15:00 ~ 17:00)",
+    highlight: "런치 오마카세 가성비",
+    menu: [
+      { name: "런치 오마카세", note: "예약 권장" },
+      { name: "디너 오마카세", note: "프리미엄" },
+      { name: "모둠 사시미", note: "추가 주문" },
+    ],
+  },
+  beauty_01: {
+    title: "하마살롱 · 동네 단골 미용실",
+    tagline: "커트 잘하는 동네 미용실, 가족 단위 고객이 많아요.",
     hours: "화~일 10:00 ~ 20:00 (월 휴무)",
-    highlight: "컷 + 펌 세트 만족도 높음",
+    highlight: "어린이 커트 + 성인 커트 인기",
     menu: [
       { name: "디자인 커트", note: "남·여 공통" },
-      { name: "셋팅 펌", note: "손질 쉬운 스타일" },
+      { name: "열펌", note: "손질 쉬운 스타일" },
       { name: "두피 케어", note: "예약제" },
     ],
   },
-  // 3: 도란도란 식당
-  "3": {
-    title: "도란도란 식당 · 오늘의 추천 메뉴",
-    tagline: "가족·지인과 편하게 한 끼 식사하기 좋은 한식 메뉴 전문 식당입니다.",
-    hours: "매일 11:00 ~ 22:00 (브레이크 15:00 ~ 17:00)",
-    highlight: "주말 저녁 가족 단위 방문 많음",
+  beauty_02: {
+    title: "살롱 드 루체 · 염색 전문",
+    tagline: "염색 전문 디자이너 샵, 트렌디한 컬러 연출이 가능해요.",
+    hours: "매일 11:00 ~ 21:00",
+    highlight: "컬러 체인지 고객 많음",
     menu: [
-      { name: "도란도란 정식", note: "2인 이상 주문" },
-      { name: "수제 제육볶음", note: "매운맛 조절 가능" },
-      { name: "된장찌개 · 김치찌개", note: "점심 인기" },
+      { name: "전체 염색", note: "톤업/톤다운" },
+      { name: "하이라이트", note: "포인트 컬러" },
+      { name: "클리닉 패키지", note: "염색 + 케어" },
+    ],
+  },
+  beauty_03: {
+    title: "오산 뷰티하우스 · 펌/클리닉 전문",
+    tagline: "펌과 클리닉 전문, 모발 관리에 특화된 샵입니다.",
+    hours: "화~일 10:00 ~ 21:00 (월 휴무)",
+    highlight: "손상 모발 케어",
+    menu: [
+      { name: "셋팅 펌", note: "C컬/S컬" },
+      { name: "볼륨 매직", note: "뿌리 볼륨" },
+      { name: "집중 클리닉", note: "3단계 케어" },
     ],
   },
 };
