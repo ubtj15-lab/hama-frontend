@@ -4,6 +4,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
+// 🔹 피드백 FAB
+import FeedbackFab from "@/components/FeedbackFab";
+
 // ---- Web Speech API 타입 선언 (빌드 에러 방지) ----
 declare global {
   interface Window {
@@ -12,22 +15,133 @@ declare global {
   }
 }
 
+// ======================
+// 🗂 카테고리 매핑 & 인식
+// ======================
+const CATEGORY_MAP: Record<string, string> = {
+  카페: "CE7",
+  커피: "CE7",
+  식당: "FD6",
+  음식점: "FD6",
+  밥집: "FD6",
+  미용실: "BK9",
+  헤어: "BK9",
+  이발소: "BK9",
+  편의점: "CS2",
+  약국: "PM9",
+  병원: "HP8",
+  주차장: "PK6",
+  마트: "MT1",
+};
+
+function inferCategory(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const key of Object.keys(CATEGORY_MAP)) {
+    if (lower.includes(key)) {
+      return CATEGORY_MAP[key];
+    }
+  }
+  return null;
+}
+
+// ======================
+// 🧩 포인트 / 로그 저장 구조
+// ======================
+interface HamaUser {
+  nickname: string;
+  points: number;
+}
+
+interface PointLog {
+  id: string;
+  amount: number;
+  reason: string;
+  createdAt: string;
+}
+
+const USER_KEY = "hamaUser";
+const LOG_KEY = "hamaPointLogs";
+
+function loadUserFromStorage(): HamaUser {
+  if (typeof window === "undefined") {
+    return { nickname: "게스트", points: 0 };
+  }
+  try {
+    const raw = window.localStorage.getItem(USER_KEY);
+    if (!raw) return { nickname: "게스트", points: 0 };
+    const parsed = JSON.parse(raw);
+    return {
+      nickname: parsed.nickname ?? "게스트",
+      points: typeof parsed.points === "number" ? parsed.points : 0,
+    };
+  } catch {
+    return { nickname: "게스트", points: 0 };
+  }
+}
+
+function saveUserToStorage(user: HamaUser) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    // ignore
+  }
+}
+
+function appendPointLog(amount: number, reason: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(LOG_KEY);
+    const prev: PointLog[] = raw ? JSON.parse(raw) : [];
+    const now = new Date();
+    const log: PointLog = {
+      id: `${now.getTime()}-${Math.random().toString(16).slice(2, 8)}`,
+      amount,
+      reason,
+      createdAt: now.toISOString(),
+    };
+    const next = [log, ...prev].slice(0, 100);
+    window.localStorage.setItem(LOG_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
 export default function HomePage() {
   const router = useRouter();
 
   const [query, setQuery] = useState("");
   const [isListening, setIsListening] = useState(false);
-
   const recognitionRef = useRef<any | null>(null);
 
-  // 🔹 햄버거 메뉴 열림 상태
+  // 🔹 메뉴 관련
   const [menuOpen, setMenuOpen] = useState(false);
-
-  // 🔹 메뉴 위치 (삼선 버튼 기준)
   const [menuPos, setMenuPos] = useState({ top: 60, left: 10 });
-
-  // 🔹 삼선 버튼 ref
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // 🔹 유저 (닉네임 + 포인트)
+  const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
+
+  // ======================
+  // 🧩 초기 유저 정보 로드
+  // ======================
+  useEffect(() => {
+    const loaded = loadUserFromStorage();
+    setUser(loaded);
+  }, []);
+
+  // ======================
+  // 💰 포인트 적립 함수
+  // ======================
+  const addPoints = (amount: number, reason: string) => {
+    setUser((prev) => {
+      const updated = { ...prev, points: prev.points + amount };
+      saveUserToStorage(updated);
+      appendPointLog(amount, reason);
+      console.log("포인트 적립:", amount, reason);
+      return updated;
+    });
+  };
 
   // ======================
   // 🔊 음성 인식 초기 세팅
@@ -55,7 +169,8 @@ export default function HomePage() {
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript.trim();
       setQuery(transcript);
-      handleSearch(transcript);
+      handleSearch(transcript); // 음성 결과로 바로 검색
+      addPoints(10, "음성 검색");
     };
 
     recognitionRef.current = recognition;
@@ -67,41 +182,25 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🔍 검색 실행
+  // 🔍 검색 실행 (텍스트/음성 공통)
   const handleSearch = (text?: string) => {
-    const keyword = (text ?? query).trim();
-    if (!keyword) return;
-    router.push(`/search?query=${encodeURIComponent(keyword)}`);
-  };
+  const keyword = (text ?? query).trim();
+  if (!keyword) return;
 
-  // ======================
-  // 🔥 메뉴 버튼 위치 → 메뉴 카드 위치 계산
-  // ======================
-  const updateMenuPosition = () => {
-    if (!menuButtonRef.current) return;
-    const rect = menuButtonRef.current.getBoundingClientRect();
+  // 🔍 카테고리 감지
+  const detectedCategory = inferCategory(keyword);
 
-    setMenuPos({
-      top: rect.bottom + 8, // 버튼 바로 아래 8px
-      left: rect.left, // 버튼과 같은 X 좌표
-    });
-  };
+  if (detectedCategory) {
+    addPoints(5, "카테고리 검색");
+    router.push(`/search?category=${detectedCategory}`);
+    return;
+  }
 
-  // 메뉴 열릴 때 위치 계산
-  useEffect(() => {
-    if (menuOpen) {
-      updateMenuPosition();
-    }
-  }, [menuOpen]);
+  // 🔍 일반 검색
+  addPoints(5, "검색");
+  router.push(`/search?query=${encodeURIComponent(keyword)}`);
+};
 
-  // 리사이즈 시에도 위치 보정
-  useEffect(() => {
-    const handler = () => {
-      if (menuOpen) updateMenuPosition();
-    };
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, [menuOpen]);
 
   // 🎙 마이크 클릭
   const handleMicClick = () => {
@@ -127,6 +226,59 @@ export default function HomePage() {
     setMenuOpen((prev) => !prev);
   };
 
+  // 메뉴 위치 업데이트
+  const updateMenuPosition = () => {
+    if (!menuButtonRef.current) return;
+    const rect = menuButtonRef.current.getBoundingClientRect();
+
+    setMenuPos({
+      top: rect.bottom + 8,
+      left: rect.left,
+    });
+  };
+
+  useEffect(() => {
+    if (menuOpen) {
+      updateMenuPosition();
+    }
+  }, [menuOpen]);
+
+  useEffect(() => {
+    const handler = () => {
+      if (menuOpen) updateMenuPosition();
+    };
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [menuOpen]);
+
+  // 🟡 카카오 로그인 (백엔드 연동)
+  const handleKakaoLogin = () => {
+    const backendBaseUrl =
+      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
+    const loginUrl = `${backendBaseUrl}/auth/kakao/login`;
+    window.location.href = loginUrl;
+  };
+
+  const goToPointHistory = () => {
+    setMenuOpen(false);
+    router.push("/mypage/points");
+  };
+
+  const goToRecentStores = () => {
+    alert("최근 본 매장은 다음 버전에서 열릴 예정이에요!");
+    setMenuOpen(false);
+  };
+
+  const goToMyReservations = () => {
+    alert("내 예약 보기 기능은 베타에서 준비 중이에요 🙂");
+    setMenuOpen(false);
+  };
+
+  const goToSettings = () => {
+    alert("설정 화면도 곧 붙일 거예요 🔧");
+    setMenuOpen(false);
+  };
+
   return (
     <main
       style={{
@@ -150,7 +302,7 @@ export default function HomePage() {
         {/* ===================== 메뉴 오버레이 ===================== */}
         {menuOpen && (
           <>
-            {/* 바깥 클릭 시 닫힘 영역 */}
+            {/* 바깥 클릭 시 닫힘 */}
             <div
               onClick={() => setMenuOpen(false)}
               style={{
@@ -160,104 +312,186 @@ export default function HomePage() {
               }}
             />
 
-            {/* 메뉴 카드 (삼선 버튼 기준 위치) */}
+            {/* 메뉴 카드 */}
             <div
               style={{
                 position: "fixed",
                 top: menuPos.top,
                 left: menuPos.left,
-                width: 200,
+                width: 240,
                 borderRadius: 20,
                 background: "#ffffff",
-                boxShadow: "0 12px 30px rgba(15,23,42,0.25)",
-                padding: "10px 12px",
-                zIndex: 2000,
+                boxShadow:
+                  "0 10px 25px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(148, 163, 184, 0.3)",
+                padding: 16,
+                zIndex: 1600,
                 fontSize: 13,
               }}
             >
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>하마 메뉴</div>
-
-              {/* 🔥 오늘의 추천 보기 버튼 */}
-              <button
-                type="button"
+              {/* 프로필/포인트 영역 */}
+              <div
                 style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "6px 10px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#2563eb",
-                  color: "#ffffff",
-                  cursor: "pointer",
-                  marginBottom: 8,
-                  fontWeight: 600,
-                }}
-                onClick={() => {
-                  setMenuOpen(false);
-                  router.push("/recommend");
+                  marginBottom: 16,
+                  paddingBottom: 10,
+                  borderBottom: "1px solid #E5E7EB",
                 }}
               >
-                오늘의 추천 보기
-              </button>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "#6B7280",
+                    marginBottom: 4,
+                  }}
+                >
+                  안녕하세요 👋
+                </div>
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 700,
+                    color: "#111827",
+                    marginBottom: 6,
+                  }}
+                >
+                  {user.nickname || "게스트"} 님
+                </div>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    background: "#EEF2FF",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      color: "#4F46E5",
+                      fontWeight: 600,
+                    }}
+                  >
+                    포인트
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: "#111827",
+                    }}
+                  >
+                    {user.points.toLocaleString()} P
+                  </span>
+                </div>
+              </div>
 
-              <button
-                type="button"
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "6px 10px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#f3f4f6",
-                  cursor: "pointer",
-                  marginBottom: 6,
-                }}
-                onClick={() => {
-                  alert("내 예약 보기 기능은 베타에서 준비 중이에요 🙂");
-                  setMenuOpen(false);
-                }}
+              {/* 카카오 로그인 / 메뉴 버튼들 */}
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 8 }}
               >
-                내 예약 (준비중)
-              </button>
+                <button
+                  onClick={handleKakaoLogin}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 999,
+                    border: "none",
+                    background: "#FEE500",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#2D2D2D",
+                    cursor: "pointer",
+                  }}
+                >
+                  카카오로 로그인
+                </button>
 
-              <button
-                type="button"
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "6px 10px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#f3f4f6",
-                  cursor: "pointer",
-                  marginBottom: 6,
-                }}
-                onClick={() => {
-                  alert("최근 본 매장은 다음 버전에서 열릴 예정이에요!");
-                  setMenuOpen(false);
-                }}
-              >
-                최근 본 매장
-              </button>
+                <button
+                  onClick={goToPointHistory}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #E5E7EB",
+                    background: "#ffffff",
+                    fontSize: 14,
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  📌 포인트 히스토리
+                </button>
 
-              <button
-                type="button"
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "6px 10px",
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#f3f4f6",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  alert("설정 화면도 곧 붙일 거예요 🔧");
-                  setMenuOpen(false);
-                }}
-              >
-                설정 (준비중)
-              </button>
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push("/recommend");
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "none",
+                    background: "#2563EB",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#ffffff",
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  오늘의 추천 보기
+                </button>
+
+                <button
+                  onClick={goToMyReservations}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #E5E7EB",
+                    background: "#f3f4f6",
+                    fontSize: 14,
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  내 예약 (준비중)
+                </button>
+
+                <button
+                  onClick={goToRecentStores}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #E5E7EB",
+                    background: "#f3f4f6",
+                    fontSize: 14,
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  최근 본 매장
+                </button>
+
+                <button
+                  onClick={goToSettings}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #E5E7EB",
+                    background: "#f3f4f6",
+                    fontSize: 14,
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  설정 (준비중)
+                </button>
+              </div>
             </div>
           </>
         )}
@@ -336,8 +570,7 @@ export default function HomePage() {
                 padding: "0 18px",
                 height: 36,
                 marginRight: 4,
-                background:
-                  "linear-gradient(135deg, #2563eb, #4f46e5)",
+                background: "linear-gradient(135deg, #2563eb, #4f46e5)",
                 color: "#ffffff",
                 fontSize: 13,
                 fontWeight: 700,
@@ -371,8 +604,7 @@ export default function HomePage() {
               height: 220,
               borderRadius: 30,
               overflow: "hidden",
-              background:
-                "radial-gradient(circle at top, #ffe082, #ffb74d)",
+              background: "radial-gradient(circle at top, #ffe082, #ffb74d)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -406,12 +638,12 @@ export default function HomePage() {
             onClick={handleMicClick}
             aria-label="음성 검색 시작"
             style={{
-              width: 96,
-              height: 96,
+              width: 72,
+              height: 72,
               borderRadius: "50%",
               border: "none",
               background: isListening ? "#1d4ed8" : "#ffffff",
-              boxShadow: "0 14px 26px rgba(15,23,42,0.2)",
+              boxShadow: "0 10px 20px rgba(15,23,42,0.18)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -422,7 +654,7 @@ export default function HomePage() {
           >
             <span
               style={{
-                fontSize: 32,
+                fontSize: 24,
                 color: isListening ? "#ffffff" : "#2563eb",
               }}
             >
@@ -441,6 +673,9 @@ export default function HomePage() {
             “카페 찾아줘 / 식당 찾아줘 / 미용실 찾아줘” 처럼 말해보세요!
           </p>
         </section>
+
+        {/* 🔹 우측 하단 피드백 버튼 */}
+        <FeedbackFab />
       </div>
     </main>
   );

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import storesData from "../../data/stores.json";
+import storesData from "../../data/stores";
 
 /** 매장 타입 (stores.json 구조 그대로) */
 type Store = {
@@ -20,15 +20,39 @@ type Store = {
 
 type CardInfo = Store;
 
+/** 🔹 URL의 category 값을 Store.category로 변환 */
+function mapUrlCategoryToStoreCategory(
+  c: string | null
+): Store["category"] | null {
+  if (!c) return null;
+
+  // 이미 내부 카테고리 형태로 들어온 경우
+  if (c === "cafe" || c === "restaurant" || c === "beauty") return c;
+
+  // 카카오 카테고리 코드 → 내부 카테고리 매핑
+  switch (c) {
+    case "CE7": // 카페
+      return "cafe";
+    case "FD6": // 음식점
+      return "restaurant";
+    case "BK9": // 미용실/뷰티
+      return "beauty";
+    default:
+      return null;
+  }
+}
+
 export default function SearchPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const query = params.get("query") || "";
 
-  /** 1) 검색어로 카테고리 추론 */
+  const query = params.get("query") || "";
+  const rawCategory = params.get("category"); // ← 홈에서 넘어오는 category
+
+  /** 1) 검색어/URL로 카테고리 추론 */
   const stores = storesData as Store[];
 
-  const inferCategory = (q: string): Store["category"] => {
+  const inferCategoryFromQuery = (q: string): Store["category"] => {
     const t = q.toLowerCase();
 
     if (t.includes("미용") || t.includes("헤어") || t.includes("뷰티")) {
@@ -48,12 +72,13 @@ export default function SearchPage() {
     return "cafe";
   };
 
-  const activeCategory = inferCategory(query);
+  // 🔥 우선순위: URL category > 검색어로 추론
+  const paramCategory = mapUrlCategoryToStoreCategory(rawCategory);
+  const activeCategory: Store["category"] =
+    paramCategory ?? inferCategoryFromQuery(query);
 
   /** 2) 선택된 카테고리 매장만 모으기 */
-  const categoryStores = stores.filter(
-    (s) => s.category === activeCategory
-  );
+  const categoryStores = stores.filter((s) => s.category === activeCategory);
 
   /** 3) 카테고리 안에서 3개씩 3페이지 (최대 9개) */
   const pages: CardInfo[][] = [
@@ -105,7 +130,13 @@ export default function SearchPage() {
     resetReserve();
   };
 
+  /** 길안내 페이지로 이동 (+ 확대 상태 기억) */
   const goToMap = (card: CardInfo) => {
+    // ▶ 세션스토리지에 방금 보고 있던 카드 ID 저장
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem("hama_search_last_id", card.id);
+    }
+
     router.push(
       `/map?q=${encodeURIComponent(card.name)}&lat=${card.lat}&lng=${card.lng}`
     );
@@ -189,6 +220,34 @@ export default function SearchPage() {
 
   const timeOptions = ["11:00", "13:00", "15:00", "17:00", "19:00"];
 
+  /** 🔙 길안내에서 돌아왔을 때 확대 상태 복구 */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const savedId = window.sessionStorage.getItem("hama_search_last_id");
+    if (!savedId) return;
+
+    // savedId 가 어떤 페이지에 있는지 찾기
+    const foundIndex = pages.findIndex((page) =>
+      page.some((c) => c.id === savedId)
+    );
+    if (foundIndex === -1) {
+      window.sessionStorage.removeItem("hama_search_last_id");
+      return;
+    }
+
+    setPageIndex(foundIndex);
+    setSelectedId(savedId);
+    setOverlayVisible(true);
+    setExpanded(false);
+    setDetailOpen(false);
+    resetReserve();
+
+    setTimeout(() => setExpanded(true), 10);
+
+    window.sessionStorage.removeItem("hama_search_last_id");
+  }, [query, activeCategory]); // 검색어나 카테고리가 바뀔 때만 체크
+
   return (
     <main
       style={{
@@ -202,57 +261,56 @@ export default function SearchPage() {
       }}
     >
       {/* 상단 바 (검색 결과 표시용) - 확대 모드일 땐 숨김 */}
-{!overlayVisible && (
-  <div
-    style={{
-      width: "100%",
-      maxWidth: 430,
-      marginTop: 0,
-      maxHeight: 60,
-      opacity: 1,
-      transform: "translateY(0)",
-      transition:
-        "opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease, margin-top 0.3s ease",
-      overflow: "hidden",
-      display: "flex",
-      alignItems: "center",
-    }}
-  >
-    <button
-      onClick={() => router.push("/")}
-      style={{
-        border: "none",
-        background: "#ffffff",
-        borderRadius: 12,
-        padding: "8px 10px",
-        boxShadow: "0 4px 10px rgba(0, 0, 0, 0.08)",
-        cursor: "pointer",
-      }}
-    >
-      ⬅️
-    </button>
+      {!overlayVisible && (
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 430,
+            marginTop: 0,
+            maxHeight: 60,
+            opacity: 1,
+            transform: "translateY(0)",
+            transition:
+              "opacity 0.3s ease, transform 0.3s ease, max-height 0.3s ease, margin-top 0.3s ease",
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <button
+            onClick={() => router.push("/")}
+            style={{
+              border: "none",
+              background: "#ffffff",
+              borderRadius: 12,
+              padding: "8px 10px",
+              boxShadow: "0 4px 10px rgba(0, 0, 0, 0.08)",
+              cursor: "pointer",
+            }}
+          >
+            ⬅️
+          </button>
 
-    <div
-      style={{
-        flex: 1,
-        marginLeft: 8,
-        padding: "8px 12px",
-        borderRadius: 9999,
-        background: "#ffffff",
-        boxShadow: "0 4px 10px rgba(0, 0, 0, 0.08)",
-        fontSize: 13,
-        color: "#4b5563",
-        fontFamily: "Noto Sans KR, system-ui, sans-serif",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {query ? `“${query}” 검색 결과` : "하마 추천 장소"}
-    </div>
-  </div>
-)}
-
+          <div
+            style={{
+              flex: 1,
+              marginLeft: 8,
+              padding: "8px 12px",
+              borderRadius: 9999,
+              background: "#ffffff",
+              boxShadow: "0 4px 10px rgba(0, 0, 0, 0.08)",
+              fontSize: 13,
+              color: "#4b5563",
+              fontFamily: "Noto Sans KR, system-ui, sans-serif",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {query ? `“${query}” 검색 결과` : "하마 추천 장소"}
+          </div>
+        </div>
+      )}
 
       {/* 기본 화면: 큰 카드 + 작은 카드 2개 (페이지 별) */}
       {!overlayVisible && selected && (
@@ -578,7 +636,7 @@ export default function SearchPage() {
               ))}
             </div>
 
-            {/* ✅ 예약 패널 (1단계/2단계) – 사진 위로 오버레이 */}
+            {/* ✅ 예약 패널 */}
             {overlayVisible && reserveStep > 0 && (
               <div
                 style={{
@@ -772,7 +830,7 @@ export default function SearchPage() {
               </div>
             )}
 
-            {/* 🔻 상세 정보 패널 (메뉴 / 시술) – 사진 위 오버레이 */}
+            {/* 🔻 상세 정보 패널 (메뉴 / 시술) */}
             {overlayVisible && detailOpen && detail && (
               <div
                 style={{
@@ -901,104 +959,5 @@ type StoreDetail = {
 };
 
 const STORE_DETAILS: Record<string, StoreDetail> = {
-  cafe_01: {
-    title: "블루문 커피랩 · 시그니처 메뉴",
-    tagline:
-      "원두 향 좋은 분위기 좋은 카페로, 브루잉 커피와 디저트를 즐길 수 있어요.",
-    hours: "매일 09:00 ~ 21:00",
-    highlight: "로컬 원두 브루잉 + 브런치 세트 인기",
-    menu: [
-      { name: "블루문 라떼", note: "시그니처" },
-      { name: "브루잉 커피", note: "핸드드립" },
-      { name: "오늘의 케이크", note: "매일 변경" },
-    ],
-  },
-  cafe_02: {
-    title: "라운지 83 · 브런치 & 디저트",
-    tagline: "브런치와 디저트가 맛있는 라운지형 카페입니다.",
-    hours: "매일 10:00 ~ 22:00",
-    highlight: "주말 브런치 예약 많음",
-    menu: [
-      { name: "에그 베네딕트", note: "브런치 인기" },
-      { name: "수제 티라미수", note: "디저트 추천" },
-      { name: "플랫 화이트", note: "라떼 계열" },
-    ],
-  },
-  cafe_03: {
-    title: "하마커피 스테이션 · 조용한 작업 카페",
-    tagline: "조용히 책 읽거나 노트북 작업하기 좋은 공간입니다.",
-    hours: "평일 08:30 ~ 21:30, 주말 09:00 ~ 21:00",
-    highlight: "콘센트 좌석 + 와이파이",
-    menu: [
-      { name: "아메리카노", note: "리필 할인" },
-      { name: "카페라떼", note: "우유 선택 가능" },
-      { name: "하마 굿즈 세트", note: "머그컵 포함" },
-    ],
-  },
-  food_01: {
-    title: "오산담백식당 · 한식 정찬",
-    tagline: "정갈한 한식 전문, 가족 방문이 많은 식당입니다.",
-    hours: "매일 11:00 ~ 22:00",
-    highlight: "점심 정식 인기",
-    menu: [
-      { name: "담백 한정식", note: "2인 이상 주문" },
-      { name: "제육볶음 정식", note: "매운맛 조절 가능" },
-      { name: "청국장 정식", note: "웰빙 메뉴" },
-    ],
-  },
-  food_02: {
-    title: "육통령 오산본점 · 고기 맛집",
-    tagline: "고기 맛집으로 유명한 곳, 회식/모임 장소로 좋습니다.",
-    hours: "매일 16:00 ~ 24:00",
-    highlight: "숙성 삼겹살 + 소고기",
-    menu: [
-      { name: "숙성 삼겹살", note: "대표 메뉴" },
-      { name: "꽃등심", note: "프리미엄" },
-      { name: "냉면", note: "식사 마무리" },
-    ],
-  },
-  food_03: {
-    title: "스시하나 · 합리적인 스시 오마카세",
-    tagline: "합리적인 가격으로 즐기는 스시 오마카세 전문점입니다.",
-    hours: "매일 12:00 ~ 22:00 (브레이크 15:00 ~ 17:00)",
-    highlight: "런치 오마카세 가성비",
-    menu: [
-      { name: "런치 오마카세", note: "예약 권장" },
-      { name: "디너 오마카세", note: "프리미엄" },
-      { name: "모둠 사시미", note: "추가 주문" },
-    ],
-  },
-  beauty_01: {
-    title: "하마살롱 · 동네 단골 미용실",
-    tagline: "커트 잘하는 동네 미용실, 가족 단위 고객이 많아요.",
-    hours: "화~일 10:00 ~ 20:00 (월 휴무)",
-    highlight: "어린이 커트 + 성인 커트 인기",
-    menu: [
-      { name: "디자인 커트", note: "남·여 공통" },
-      { name: "열펌", note: "손질 쉬운 스타일" },
-      { name: "두피 케어", note: "예약제" },
-    ],
-  },
-  beauty_02: {
-    title: "살롱 드 루체 · 염색 전문",
-    tagline: "염색 전문 디자이너 샵, 트렌디한 컬러 연출이 가능해요.",
-    hours: "매일 11:00 ~ 21:00",
-    highlight: "컬러 체인지 고객 많음",
-    menu: [
-      { name: "전체 염색", note: "톤업/톤다운" },
-      { name: "하이라이트", note: "포인트 컬러" },
-      { name: "클리닉 패키지", note: "염색 + 케어" },
-    ],
-  },
-  beauty_03: {
-    title: "오산 뷰티하우스 · 펌/클리닉 전문",
-    tagline: "펌과 클리닉 전문, 모발 관리에 특화된 샵입니다.",
-    hours: "화~일 10:00 ~ 21:00 (월 휴무)",
-    highlight: "손상 모발 케어",
-    menu: [
-      { name: "셋팅 펌", note: "C컬/S컬" },
-      { name: "볼륨 매직", note: "뿌리 볼륨" },
-      { name: "집중 클리닉", note: "3단계 케어" },
-    ],
-  },
+  // 👉 여기에는 너가 쓰던 기존 상세 정보 그대로 두면 돼.
 };
