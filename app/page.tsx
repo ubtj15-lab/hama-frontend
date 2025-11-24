@@ -184,23 +184,28 @@ export default function HomePage() {
 
   // 🔍 검색 실행 (텍스트/음성 공통)
   const handleSearch = (text?: string) => {
-  const keyword = (text ?? query).trim();
-  if (!keyword) return;
+    const keyword = (text ?? query).trim();
+    if (!keyword) return;
 
-  // 🔍 카테고리 감지
-  const detectedCategory = inferCategory(keyword);
+    // 🔍 카테고리 감지
+    const detectedCategory = inferCategory(keyword);
 
-  if (detectedCategory) {
-    addPoints(5, "카테고리 검색");
-    router.push(`/search?category=${detectedCategory}`);
-    return;
-  }
+    if (detectedCategory) {
+      addPoints(5, "카테고리 검색");
+      router.push(`/search?category=${detectedCategory}`);
+      return;
+    }
 
-  // 🔍 일반 검색
-  addPoints(5, "검색");
-  router.push(`/search?query=${encodeURIComponent(keyword)}`);
-};
+    // 🔍 일반 검색
+    addPoints(5, "검색");
+    router.push(`/search?query=${encodeURIComponent(keyword)}`);
+  };
 
+  // ⌨️ 엔터(이동) 누를 때도 검색 실행
+  const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); // 새로고침 막기
+    handleSearch();
+  };
 
   // 🎙 마이크 클릭
   const handleMicClick = () => {
@@ -536,8 +541,9 @@ export default function HomePage() {
             />
           </button>
 
-          {/* 검색 인풋 */}
-          <div
+          {/* 검색 인풋 (Enter / 이동 키로도 검색) */}
+          <form
+            onSubmit={handleSearchSubmit}
             style={{
               flex: 1,
               display: "flex",
@@ -562,8 +568,7 @@ export default function HomePage() {
               }}
             />
             <button
-              type="button"
-              onClick={() => handleSearch()}
+              type="submit"
               style={{
                 border: "none",
                 borderRadius: 999,
@@ -580,7 +585,7 @@ export default function HomePage() {
             >
               검색
             </button>
-          </div>
+          </form>
         </header>
 
         {/* ===================== 하마 메인 카드 ===================== */}
@@ -634,29 +639,26 @@ export default function HomePage() {
           }}
         >
           <button
-  type="button"
-  onClick={handleMicClick}
-  aria-label="음성 검색 시작"
-  style={{
-    width: 72,
-    height: 72,
-    borderRadius: "50%",
-    border: "none",
-    background: isListening ? "#1d4ed8" : "#ffffff",
-    boxShadow: "0 10px 20px rgba(15,23,42,0.18)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    transition: "background 0.2s ease, transform 0.1s ease",
-    transform: isListening ? "scale(1.04)" : "scale(1)",
-
-    /** 🔥 피드백 버튼과 절대 겹치지 않기 */
-    marginBottom: 110,
-  }}
->
-
-
+            type="button"
+            onClick={handleMicClick}
+            aria-label="음성 검색 시작"
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: "50%",
+              border: "none",
+              background: isListening ? "#1d4ed8" : "#ffffff",
+              boxShadow: "0 10px 20px rgba(15,23,42,0.18)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "background 0.2s ease, transform 0.1s ease",
+              transform: isListening ? "scale(1.04)" : "scale(1)",
+              /** 🔥 피드백 버튼과 겹치지 않게 여백 확보 */
+              marginBottom: 110,
+            }}
+          >
             <span
               style={{
                 fontSize: 24,
