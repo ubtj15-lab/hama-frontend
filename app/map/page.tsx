@@ -1,16 +1,9 @@
 // app/map/page.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import Script from "next/script";
+import React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import MicButton from "../components/MicButton";
-
-declare global {
-  interface Window {
-    kakao: any;
-  }
-}
 
 export default function MapPage() {
   const router = useRouter();
@@ -20,70 +13,12 @@ export default function MapPage() {
   const lat = Number(params.get("lat") ?? 37.566535);
   const lng = Number(params.get("lng") ?? 126.9779692);
 
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any | null>(null);
-  const [sdkReady, setSdkReady] = useState(false);
+  /** 카카오맵 링크 (웹 페이지) */
+  const mapUrl = `https://map.kakao.com/link/map/${encodeURIComponent(
+    name
+  )},${lat},${lng}`;
 
-  /** Kakao SDK 로드 후 지도 생성 */
-  useEffect(() => {
-    if (!sdkReady) return;
-    if (typeof window === "undefined") return;
-    if (!window.kakao || !window.kakao.maps) return;
-    if (!mapRef.current) return;
-
-    const container = mapRef.current;
-
-    // 이미 만들어진 맵 있으면 제거 후 재생성
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current = null;
-      container.innerHTML = "";
-    }
-
-    const { kakao } = window;
-    const center = new kakao.maps.LatLng(lat, lng);
-
-    const map = new kakao.maps.Map(container, {
-      center,
-      level: 3,
-    });
-
-    const marker = new kakao.maps.Marker({ position: center });
-    marker.setMap(map);
-
-    const infoWindow = new kakao.maps.InfoWindow({
-      content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
-    });
-    infoWindow.open(map, marker);
-
-    mapInstanceRef.current = map;
-
-    // 모바일에서 레이아웃 확정 후 한 번 더 리레이아웃
-    setTimeout(() => {
-      map.relayout();
-      map.setCenter(center);
-    }, 200);
-  }, [sdkReady, lat, lng, name]);
-
-  /** 화면 리사이즈/회전 시 리레이아웃 */
-  useEffect(() => {
-    const handler = () => {
-      const map = mapInstanceRef.current;
-      if (!map) return;
-      const { kakao } = window;
-      const center = new kakao.maps.LatLng(lat, lng);
-      map.relayout();
-      map.setCenter(center);
-    };
-
-    window.addEventListener("resize", handler);
-    window.addEventListener("orientationchange", handler);
-    return () => {
-      window.removeEventListener("resize", handler);
-      window.removeEventListener("orientationchange", handler);
-    };
-  }, [lat, lng]);
-
-  /** 길안내 (카카오맵 링크) */
+  /** 길안내 버튼 → 카카오맵 길안내 페이지 */
   const handleNavigate = () => {
     const url = `https://map.kakao.com/link/to/${encodeURIComponent(
       name
@@ -91,7 +26,7 @@ export default function MapPage() {
     window.open(url, "_blank");
   };
 
-  /** 예약 페이지 이동 */
+  /** 예약 페이지로 이동 */
   const handleReserve = () => {
     router.push(`/reserve?q=${encodeURIComponent(name)}`);
   };
@@ -174,20 +109,29 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* 지도 컨테이너 */}
+      {/* 카카오맵 iframe */}
       <div
-        ref={mapRef}
         style={{
           width: "100%",
           maxWidth: 420,
-          height: 520, // 모바일에서도 고정 높이
+          height: 520,
           borderRadius: 18,
           overflow: "hidden",
           boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
           background: "#cfe6ff",
-          position: "relative",
         }}
-      />
+      >
+        <iframe
+          title="kakao-map"
+          src={mapUrl}
+          style={{
+            width: "100%",
+            height: "100%",
+            border: "0",
+          }}
+          loading="lazy"
+        />
+      </div>
 
       {/* 버튼들 */}
       <div
@@ -237,14 +181,6 @@ export default function MapPage() {
           “길안내 시작” 또는 “예약해줘” 라고 말해보세요
         </div>
       </div>
-
-      {/* Kakao Maps SDK: autoload 기본값(true) 사용 */}
-      <Script
-        id="kakao-map-sdk"
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_APP_KEY}`}
-        strategy="afterInteractive"
-        onLoad={() => setSdkReady(true)}
-      />
     </main>
   );
 }
