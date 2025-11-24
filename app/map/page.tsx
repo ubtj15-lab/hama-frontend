@@ -29,12 +29,17 @@ export default function MapPage() {
     if (!sdkReady || !mapRef.current) return;
     if (!window.kakao?.maps) return;
 
+    let map: any = null;
+    let relayout: (() => void) | null = null;
+
     window.kakao.maps.load(() => {
       const center = new window.kakao.maps.LatLng(lat, lng);
-      const map = new window.kakao.maps.Map(mapRef.current!, {
+
+      map = new window.kakao.maps.Map(mapRef.current!, {
         center,
         level: 3,
       });
+
       const marker = new window.kakao.maps.Marker({ position: center });
       marker.setMap(map);
 
@@ -42,7 +47,27 @@ export default function MapPage() {
         content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
       });
       iw.open(map, marker);
+
+      // 🔥 모바일에서 처음 로딩 시 레이아웃이 안 맞는 경우를 위한 보정
+      relayout = () => {
+        if (!map) return;
+        map.relayout();
+        map.setCenter(center);
+      };
+
+      // 살짝 딜레이 후 한 번 더 레이아웃 계산
+      setTimeout(relayout, 120);
+
+      // 화면 회전/리사이즈에도 다시 맞춰주기
+      window.addEventListener("resize", relayout);
     });
+
+    // cleanup
+    return () => {
+      if (relayout) {
+        window.removeEventListener("resize", relayout);
+      }
+    };
   }, [sdkReady, lat, lng, name]);
 
   /** 길안내(카카오맵 링크) */
@@ -145,7 +170,7 @@ export default function MapPage() {
         style={{
           width: "100%",
           maxWidth: 420,
-          height: 520,
+          height: 520, // 고정 높이 (모바일에서도 안전)
           borderRadius: 18,
           overflow: "hidden",
           boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
@@ -231,7 +256,7 @@ const primaryBtn: React.CSSProperties = {
   color: "#fff",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 8px 18px rgba(37,99,235,.35)",
+  boxShadow: "0 8px 18px rgba(37,99,235,.35)`,
 };
 
 const ghostBtn: React.CSSProperties = {
