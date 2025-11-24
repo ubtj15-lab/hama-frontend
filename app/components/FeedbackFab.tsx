@@ -2,251 +2,265 @@
 
 import React, { useState } from "react";
 
-type FeedbackKind = "error" | "idea" | "ux";
+type FeedbackType = "bug" | "idea" | "etc";
 
-type FeedbackFabProps = {
-  /** 피드백을 성공적으로 보냈을 때 호출 (포인트 적립용) */
-  onFeedbackSubmitted?: (kind: FeedbackKind) => void;
-};
+interface FeedbackItem {
+  id: string;
+  type: FeedbackType;
+  message: string;
+  createdAt: string;
+}
 
-export default function FeedbackFab({ onFeedbackSubmitted }: FeedbackFabProps) {
+const STORAGE_KEY = "hamaFeedbacks";
+
+/** 로컬스토리지에 피드백 저장 */
+function saveFeedbackToStorage(item: FeedbackItem) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const prev: FeedbackItem[] = raw ? JSON.parse(raw) : [];
+    const next = [item, ...prev].slice(0, 100); // 최근 100개만 보관
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // 실패해도 서비스 흐름 끊기지 않게 무시
+  }
+}
+
+export default function FeedbackFab() {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<FeedbackKind>("error");
-  const [text, setText] = useState("");
-  const [email, setEmail] = useState("");
+  const [type, setType] = useState<FeedbackType>("bug");
+  const [message, setMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (!text.trim()) {
-      alert("피드백 내용을 먼저 입력해 주세요 🙂");
+  const handleSubmit = async () => {
+    const trimmed = message.trim();
+    if (!trimmed) {
+      alert("간단하게라도 내용을 입력해 주세요 🙂");
       return;
     }
 
-    // 🔹 실제론 백엔드에 전송해야 하지만, 지금은 데모 알림만
-    alert("피드백이 접수된 것처럼 동작하는 데모입니다. 고마워요! 💙");
+    setSubmitting(true);
+    const now = new Date();
 
-    // 🔹 포인트 적립 콜백 호출
-    if (onFeedbackSubmitted) {
-      onFeedbackSubmitted(tab);
-    }
+    const item: FeedbackItem = {
+      id: `${now.getTime()}-${Math.random().toString(16).slice(2, 8)}`,
+      type,
+      message: trimmed,
+      createdAt: now.toISOString(),
+    };
 
-    // 폼 리셋
-    setText("");
-    setEmail("");
-    setTab("error");
+    // 지금은 로컬스토리지 + console.log 로만 저장
+    saveFeedbackToStorage(item);
+    console.log("하마 피드백:", item);
+
+    setSubmitting(false);
+    setMessage("");
+    setType("bug");
     setOpen(false);
+    alert("피드백이 저장되었어요! 하마가 잘 참고할게요 🦛✨");
   };
 
   return (
     <>
-      {/* 오른쪽 아래 둥둥 떠 있는 버튼 */}
+      {/* 오버레이 (배경 클릭하면 닫힘) */}
+      {open && (
+        <div
+          onClick={() => !submitting && setOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "transparent",
+            zIndex: 2100,
+          }}
+        />
+      )}
+
+      {/* 우측 하단 플로팅 버튼 */}
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => !submitting && setOpen((prev) => !prev)}
+        aria-label="피드백 보내기"
         style={{
           position: "fixed",
-          top: "425px", // 네가 맞춰둔 위치 그대로
-          right: "40vw",
-          width: 54,
-          height: 54,
-          borderRadius: "9999px",
+          right: 20,
+          bottom: 26, // 마이크 버튼과 겹치지 않게 여백
+          width: 64,
+          height: 64,
+          borderRadius: "50%",
           border: "none",
-          background: "#2563eb",
-          boxShadow: "0 10px 22px rgba(15,23,42,0.35)",
+          background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+          boxShadow: "0 10px 24px rgba(15,23,42,0.35)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",
-          zIndex: 2100,
-          color: "#fff",
-          fontSize: 12,
-          fontWeight: 600,
+          zIndex: 2200,
         }}
       >
-        피드백
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#ffffff",
+            lineHeight: 1.1,
+            textAlign: "center",
+            whiteSpace: "pre-line",
+          }}
+        >
+          피드백
+        </span>
       </button>
 
-      {/* 모달 */}
+      {/* 피드백 입력 카드 */}
       {open && (
         <div
           style={{
             position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,0.45)",
-            backdropFilter: "blur(2px)",
-            zIndex: 2600,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "flex-start",
-            paddingTop: 80,
+            right: 20,
+            bottom: 104, // 버튼 바로 위에 뜨도록
+            width: 280,
+            borderRadius: 18,
+            background: "#ffffff",
+            boxShadow:
+              "0 18px 40px rgba(15,23,42,0.35), 0 0 0 1px rgba(148,163,184,0.35)",
+            padding: "14px 14px 12px",
+            zIndex: 2300,
+            fontFamily: "Noto Sans KR, system-ui, sans-serif",
+            fontSize: 13,
           }}
-          onClick={() => setOpen(false)}
         >
           <div
-            onClick={(e) => e.stopPropagation()}
             style={{
-              width: "100%",
-              maxWidth: 420,
-              borderRadius: 24,
-              background: "#ffffff",
-              boxShadow: "0 18px 40px rgba(15,23,42,0.45)",
-              padding: "18px 18px 16px",
-              fontFamily: "Noto Sans KR, system-ui, sans-serif",
+              marginBottom: 8,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
           >
-            {/* 헤더 */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 10,
-              }}
-            >
+            <div>
               <div
                 style={{
-                  fontSize: 15,
+                  fontSize: 13,
                   fontWeight: 700,
+                  color: "#111827",
                 }}
               >
                 하마에게 피드백 보내기
               </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
+              <div
                 style={{
-                  border: "none",
-                  background: "transparent",
-                  fontSize: 18,
-                  cursor: "pointer",
+                  fontSize: 11,
+                  color: "#6b7280",
+                  marginTop: 2,
                 }}
               >
-                ×
-              </button>
+                버그 / 개선점 / 칭찬 뭐든 편하게 적어줘 🙂
+              </div>
             </div>
-
-            {/* 탭 버튼 */}
-            <div
+            <button
+              type="button"
+              onClick={() => !submitting && setOpen(false)}
               style={{
-                display: "flex",
-                gap: 6,
-                marginBottom: 10,
+                border: "none",
+                background: "transparent",
+                fontSize: 16,
+                cursor: "pointer",
+                color: "#9ca3af",
+                padding: 4,
               }}
             >
-              <TabButton
-                active={tab === "error"}
-                label="오류 신고"
-                onClick={() => setTab("error")}
-              />
-              <TabButton
-                active={tab === "idea"}
-                label="제안하기"
-                onClick={() => setTab("idea")}
-              />
-              <TabButton
-                active={tab === "ux"}
-                label="불편한 점"
-                onClick={() => setTab("ux")}
-              />
-            </div>
+              ✕
+            </button>
+          </div>
 
-            {/* 텍스트 입력 */}
+          {/* 타입 선택 */}
+          <div style={{ marginBottom: 8 }}>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as FeedbackType)}
+              disabled={submitting}
+              style={{
+                width: "100%",
+                borderRadius: 999,
+                border: "1px solid #e5e7eb",
+                padding: "6px 10px",
+                fontSize: 12,
+                background: "#f9fafb",
+                outline: "none",
+              }}
+            >
+              <option value="bug">🐞 버그 / 오류 신고</option>
+              <option value="idea">💡 기능 / UX 개선 제안</option>
+              <option value="etc">💬 칭찬 / 기타 의견</option>
+            </select>
+          </div>
+
+          {/* 내용 입력 */}
+          <div style={{ marginBottom: 10 }}>
             <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={
-                "어떤 점이 좋았는지 / 불편했는지 / 개선 아이디어를 자유롭게 적어주세요."
-              }
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="예) 검색 결과에 우리 동네 카페가 안 보여요!&#10;예) 예약 버튼 위치가 조금 헷갈려요."
+              rows={4}
+              disabled={submitting}
               style={{
                 width: "100%",
-                minHeight: 110,
-                borderRadius: 14,
+                borderRadius: 12,
                 border: "1px solid #e5e7eb",
-                padding: "10px 12px",
-                fontSize: 13,
-                fontFamily: "Noto Sans KR, system-ui, sans-serif",
-                resize: "vertical",
-                marginBottom: 8,
-                boxSizing: "border-box",
+                padding: "8px 10px",
+                fontSize: 12,
+                resize: "none",
+                outline: "none",
               }}
             />
+          </div>
 
-            {/* 이메일 (선택 사항) */}
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="이메일 (선택사항)"
+          {/* 버튼들 */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 6,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => !submitting && setOpen(false)}
+              disabled={submitting}
               style={{
-                width: "100%",
-                borderRadius: 9999,
-                border: "1px solid #e5e7eb",
-                padding: "8px 12px",
-                fontSize: 13,
-                fontFamily: "Noto Sans KR, system-ui, sans-serif",
-                marginBottom: 10,
-                boxSizing: "border-box",
+                border: "none",
+                background: "transparent",
+                padding: "6px 8px",
+                fontSize: 12,
+                color: "#6b7280",
+                cursor: "pointer",
               }}
-            />
+            >
+              취소
+            </button>
 
-            {/* 전송 버튼 */}
             <button
               type="button"
               onClick={handleSubmit}
+              disabled={submitting}
               style={{
-                width: "100%",
-                borderRadius: 9999,
                 border: "none",
-                padding: "10px 0",
-                fontSize: 14,
-                fontWeight: 700,
-                background: "linear-gradient(135deg, #2563eb, #4f46e5)",
+                borderRadius: 999,
+                padding: "6px 14px",
+                fontSize: 12,
+                fontWeight: 600,
+                background: submitting
+                  ? "rgba(37,99,235,0.4)"
+                  : "linear-gradient(135deg, #2563eb, #4f46e5)",
                 color: "#ffffff",
-                cursor: "pointer",
-                marginBottom: 6,
+                cursor: submitting ? "default" : "pointer",
               }}
             >
-              하마에게 보내기
+              {submitting ? "보내는 중..." : "보내기"}
             </button>
-
-            <div
-              style={{
-                fontSize: 11,
-                color: "#6b7280",
-                textAlign: "center",
-              }}
-            >
-              베타 기간 동안 보내주신 피드백은 포인트로 보상할 예정이에요 :)
-            </div>
           </div>
         </div>
       )}
     </>
-  );
-}
-
-type TabButtonProps = {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-};
-
-function TabButton({ active, label, onClick }: TabButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        flex: 1,
-        padding: "7px 0",
-        borderRadius: 9999,
-        border: "none",
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: "pointer",
-        background: active ? "#111827" : "#f3f4f6",
-        color: active ? "#f9fafb" : "#4b5563",
-      }}
-    >
-      {label}
-    </button>
   );
 }

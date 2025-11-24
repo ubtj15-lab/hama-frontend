@@ -634,24 +634,29 @@ export default function HomePage() {
           }}
         >
           <button
-            type="button"
-            onClick={handleMicClick}
-            aria-label="음성 검색 시작"
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              border: "none",
-              background: isListening ? "#1d4ed8" : "#ffffff",
-              boxShadow: "0 10px 20px rgba(15,23,42,0.18)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              transition: "background 0.2s ease, transform 0.1s ease",
-              transform: isListening ? "scale(1.04)" : "scale(1)",
-            }}
-          >
+  type="button"
+  onClick={handleMicClick}
+  aria-label="음성 검색 시작"
+  style={{
+    width: 72,
+    height: 72,
+    borderRadius: "50%",
+    border: "none",
+    background: isListening ? "#1d4ed8" : "#ffffff",
+    boxShadow: "0 10px 20px rgba(15,23,42,0.18)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    transition: "background 0.2s ease, transform 0.1s ease",
+    transform: isListening ? "scale(1.04)" : "scale(1)",
+
+    /** 🔥 피드백 버튼과 절대 겹치지 않기 */
+    marginBottom: 110,
+  }}
+>
+
+
             <span
               style={{
                 fontSize: 24,
