@@ -1,3 +1,4 @@
+// app/map/page.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
@@ -5,7 +6,6 @@ import Script from "next/script";
 import { useRouter, useSearchParams } from "next/navigation";
 import MicButton from "../components/MicButton";
 
-/** Kakao 타입 전역 선언 */
 declare global {
   interface Window {
     kakao: any;
@@ -16,61 +16,74 @@ export default function MapPage() {
   const router = useRouter();
   const params = useSearchParams();
 
-  // URL 파라미터 (검색 카드/추천 카드에서 넘어옴)
   const name = params.get("q") ?? "목적지";
   const lat = Number(params.get("lat") ?? 37.566535);
   const lng = Number(params.get("lng") ?? 126.9779692);
 
   const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
 
-  /** SDK 로드 후 지도 초기화 */
+  /** Kakao SDK 로드 후 지도 생성 */
   useEffect(() => {
-    if (!sdkReady || !mapRef.current) return;
-    if (!window.kakao?.maps) return;
+    if (!sdkReady) return;
+    if (typeof window === "undefined") return;
+    if (!window.kakao || !window.kakao.maps) return;
+    if (!mapRef.current) return;
 
-    let map: any = null;
-    let relayout: (() => void) | null = null;
+    const container = mapRef.current;
 
-    window.kakao.maps.load(() => {
-      const center = new window.kakao.maps.LatLng(lat, lng);
+    // 이미 만들어진 맵 있으면 제거 후 재생성
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current = null;
+      container.innerHTML = "";
+    }
 
-      map = new window.kakao.maps.Map(mapRef.current!, {
-        center,
-        level: 3,
-      });
+    const { kakao } = window;
+    const center = new kakao.maps.LatLng(lat, lng);
 
-      const marker = new window.kakao.maps.Marker({ position: center });
-      marker.setMap(map);
-
-      const iw = new window.kakao.maps.InfoWindow({
-        content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
-      });
-      iw.open(map, marker);
-
-      // 🔥 모바일에서 처음 로딩 시 레이아웃이 안 맞는 경우를 위한 보정
-      relayout = () => {
-        if (!map) return;
-        map.relayout();
-        map.setCenter(center);
-      };
-
-      // 살짝 딜레이 후 한 번 더 레이아웃 계산
-      setTimeout(relayout, 120);
-
-      // 화면 회전/리사이즈에도 다시 맞춰주기
-      window.addEventListener("resize", relayout);
+    const map = new kakao.maps.Map(container, {
+      center,
+      level: 3,
     });
 
-    // cleanup
-    return () => {
-      if (relayout) {
-        window.removeEventListener("resize", relayout);
-      }
-    };
+    const marker = new kakao.maps.Marker({ position: center });
+    marker.setMap(map);
+
+    const infoWindow = new kakao.maps.InfoWindow({
+      content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
+    });
+    infoWindow.open(map, marker);
+
+    mapInstanceRef.current = map;
+
+    // 모바일에서 레이아웃 확정 후 한 번 더 리레이아웃
+    setTimeout(() => {
+      map.relayout();
+      map.setCenter(center);
+    }, 200);
   }, [sdkReady, lat, lng, name]);
 
-  /** 길안내(카카오맵 링크) */
+  /** 화면 리사이즈/회전 시 리레이아웃 */
+  useEffect(() => {
+    const handler = () => {
+      const map = mapInstanceRef.current;
+      if (!map) return;
+      const { kakao } = window;
+      const center = new kakao.maps.LatLng(lat, lng);
+      map.relayout();
+      map.setCenter(center);
+    };
+
+    window.addEventListener("resize", handler);
+    window.addEventListener("orientationchange", handler);
+    return () => {
+      window.removeEventListener("resize", handler);
+      window.removeEventListener("orientationchange", handler);
+    };
+  }, [lat, lng]);
+
+  /** 길안내 (카카오맵 링크) */
   const handleNavigate = () => {
     const url = `https://map.kakao.com/link/to/${encodeURIComponent(
       name
@@ -78,7 +91,7 @@ export default function MapPage() {
     window.open(url, "_blank");
   };
 
-  /** 예약 페이지로 이동 */
+  /** 예약 페이지 이동 */
   const handleReserve = () => {
     router.push(`/reserve?q=${encodeURIComponent(name)}`);
   };
@@ -86,17 +99,14 @@ export default function MapPage() {
   /** 🎤 음성 명령 처리 */
   const handleVoiceCommand = (text: string) => {
     const t = text.replace(/\s+/g, "");
-    // "길안내", "길 찾아줘" 등 포함되면
     if (t.includes("길안내") || t.includes("길찾기") || t.includes("길찾아줘")) {
       handleNavigate();
       return;
     }
-    // "예약", "예약해줘" 등 포함되면
     if (t.includes("예약")) {
       handleReserve();
       return;
     }
-    // 그 외엔 그냥 무시 (원하면 토스트/alert로 안내 가능)
   };
 
   return (
@@ -164,17 +174,18 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* 지도 */}
+      {/* 지도 컨테이너 */}
       <div
         ref={mapRef}
         style={{
           width: "100%",
           maxWidth: 420,
-          height: 520, // 고정 높이 (모바일에서도 안전)
+          height: 520, // 모바일에서도 고정 높이
           borderRadius: 18,
           overflow: "hidden",
           boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
           background: "#cfe6ff",
+          position: "relative",
         }}
       />
 
@@ -227,10 +238,10 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Kakao Maps SDK */}
+      {/* Kakao Maps SDK: autoload 기본값(true) 사용 */}
       <Script
         id="kakao-map-sdk"
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_APP_KEY}&autoload=false`}
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_APP_KEY}`}
         strategy="afterInteractive"
         onLoad={() => setSdkReady(true)}
       />
@@ -256,7 +267,7 @@ const primaryBtn: React.CSSProperties = {
   color: "#fff",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 8px 18px rgba(37,99,235,.35)",
+  boxShadow: "0 8px 18px rgba(37,99,235,0.35)",
 };
 
 const ghostBtn: React.CSSProperties = {
