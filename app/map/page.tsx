@@ -256,7 +256,7 @@ const primaryBtn: React.CSSProperties = {
   color: "#fff",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 8px 18px rgba(37,99,235,.35)`,
+  boxShadow: "0 8px 18px rgba(37,99,235,.35)",
 };
 
 const ghostBtn: React.CSSProperties = {
