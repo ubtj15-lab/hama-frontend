@@ -90,6 +90,9 @@ export default function SearchPage() {
   /** 4) 페이지 인덱스 */
   const [pageIndex, setPageIndex] = useState(0);
 
+  /** 🔥 스와이프용 터치 시작 위치 */
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
   /** 현재 페이지 카드 목록 */
   const currentCards = pages[pageIndex] ?? [];
 
@@ -128,6 +131,29 @@ export default function SearchPage() {
     setExpanded(false);
     setDetailOpen(false);
     resetReserve();
+  };
+
+  /** 👉 슬라이더 영역에서 터치 시작 */
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  /** 👉 터치 끝났을 때 좌/우 스와이프 판단 */
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX === null) return;
+
+    const diffX = e.changedTouches[0].clientX - touchStartX;
+    const THRESHOLD = 40; // 이 정도 이상 움직이면 페이지 전환
+
+    if (diffX < -THRESHOLD) {
+      // 왼쪽으로 밀었다 → 다음 페이지
+      goToPage(pageIndex + 1);
+    } else if (diffX > THRESHOLD) {
+      // 오른쪽으로 밀었다 → 이전 페이지
+      goToPage(pageIndex - 1);
+    }
+
+    setTouchStartX(null);
   };
 
   /** 길안내 페이지로 이동 (+ 확대 상태 기억) */
@@ -314,7 +340,16 @@ export default function SearchPage() {
 
       {/* 기본 화면: 큰 카드 + 작은 카드 2개 (페이지 별) */}
       {!overlayVisible && selected && (
-        <>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+          // 🔥 여기 전체 블록에 스와이프 이벤트 연결
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           {/* 큰 카드 */}
           <div
             onClick={() => openExpanded(selected.id)}
@@ -428,14 +463,13 @@ export default function SearchPage() {
                     i === pageIndex && pages[i].length
                       ? "scale(1.2)"
                       : "scale(1)",
-                  transition:
-                    "background 0.2s ease, transform 0.2s ease",
+                  transition: "background 0.2s ease, transform 0.2s ease",
                 }}
                 aria-label={`페이지 ${i + 1}`}
               />
             ))}
           </div>
-        </>
+        </div>
       )}
 
       {/* 🔥 확대 모드 + 애니메이션 */}
@@ -478,14 +512,8 @@ export default function SearchPage() {
                   style={{
                     position: "absolute",
                     left: "50%",
-                    transform: expanded
-                      ? expandedTransform
-                      : collapsedTransform,
-                    bottom: expanded
-                      ? index === 0
-                        ? "12%"
-                        : "22%"
-                      : "0%",
+                    transform: expanded ? expandedTransform : collapsedTransform,
+                    bottom: expanded ? (index === 0 ? "12%" : "22%") : "0%",
                     width: index === 0 ? "55%" : "44%",
                     height: index === 0 ? "18%" : "16%",
                     borderRadius: 20,
@@ -533,8 +561,7 @@ export default function SearchPage() {
                 transform: expanded
                   ? "translateY(0) scale(1)"
                   : "translateY(40px) scale(0.95)",
-                transition:
-                  "opacity 0.3s ease, transform 0.3s ease",
+                transition: "opacity 0.3s ease, transform 0.3s ease",
               }}
             >
               <Image
@@ -595,9 +622,7 @@ export default function SearchPage() {
                 gap: 10,
                 marginTop: 14,
                 opacity: expanded ? 1 : 0,
-                transform: expanded
-                  ? "translateY(0)"
-                  : "translateY(24px)",
+                transform: expanded ? "translateY(0)" : "translateY(24px)",
                 transition:
                   "opacity 0.3s ease 0.03s, transform 0.3s ease 0.03s",
               }}
@@ -685,8 +710,8 @@ export default function SearchPage() {
                           fontSize: 12,
                         }}
                       >
-                        날짜와 시간을 선택해 주세요. (실제 예약이 아닌
-                        베타 테스트 화면입니다.)
+                        날짜와 시간을 선택해 주세요. (실제 예약이 아닌 베타
+                        테스트 화면입니다.)
                       </div>
 
                       {/* 날짜 선택 */}
@@ -944,8 +969,7 @@ function labelOfCategory(category: Store["category"]): string {
 function getDetailButtonLabel(place: CardInfo | null): string {
   if (!place) return "정보";
   if (place.category === "beauty") return "시술";
-  if (place.category === "cafe" || place.category === "restaurant")
-    return "메뉴";
+  if (place.category === "cafe" || place.category === "restaurant") return "메뉴";
   return "정보";
 }
 

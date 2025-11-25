@@ -1,37 +1,79 @@
 // app/map/page.tsx
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import Script from "next/script";
 import { useRouter, useSearchParams } from "next/navigation";
 import MicButton from "../components/MicButton";
+
+// Kakao 타입 선언
+declare global {
+  interface Window {
+    kakao: any;
+  }
+}
 
 export default function MapPage() {
   const router = useRouter();
   const params = useSearchParams();
 
+  // 검색/추천에서 넘어온 값
   const name = params.get("q") ?? "목적지";
   const lat = Number(params.get("lat") ?? 37.566535);
   const lng = Number(params.get("lng") ?? 126.9779692);
 
-  /** 카카오맵 링크 (웹 페이지) */
-  const mapUrl = `https://map.kakao.com/link/map/${encodeURIComponent(
-    name
-  )},${lat},${lng}`;
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [sdkReady, setSdkReady] = useState(false);
 
-  /** 길안내 버튼 → 카카오맵 길안내 페이지 */
+  // ✅ Kakao SDK 로드 후 지도 초기화
+  useEffect(() => {
+    if (!sdkReady) return;
+    if (!mapRef.current) return;
+    const { kakao } = window;
+    if (!kakao?.maps) return;
+
+    kakao.maps.load(() => {
+      const center = new kakao.maps.LatLng(lat, lng);
+
+      const map = new kakao.maps.Map(mapRef.current!, {
+        center,
+        level: 3,
+      });
+
+      const marker = new kakao.maps.Marker({ position: center });
+      marker.setMap(map);
+
+      const info = new kakao.maps.InfoWindow({
+        content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
+      });
+      info.open(map, marker);
+
+      // 모바일 회전/주소창 움직일 때 레이아웃 깨지는 것 방지
+      const handleResize = () => {
+        const c = map.getCenter();
+        kakao.maps.event.trigger(map, "resize");
+        map.setCenter(c);
+      };
+
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    });
+  }, [sdkReady, lat, lng, name]);
+
+  // 🔹 길안내 버튼 → 카카오맵 새 탭 / 앱으로 열기
   const handleNavigate = () => {
     const url = `https://map.kakao.com/link/to/${encodeURIComponent(
       name
     )},${lat},${lng}`;
-    window.open(url, "_blank");
+    window.open(url, "_blank"); // 우리 페이지는 그대로 두고 새 탭으로만 열기
   };
 
-  /** 예약 페이지로 이동 */
+  // 🔹 예약 버튼
   const handleReserve = () => {
     router.push(`/reserve?q=${encodeURIComponent(name)}`);
   };
 
-  /** 🎤 음성 명령 처리 */
+  // 🔹 음성 명령
   const handleVoiceCommand = (text: string) => {
     const t = text.replace(/\s+/g, "");
     if (t.includes("길안내") || t.includes("길찾기") || t.includes("길찾아줘")) {
@@ -40,7 +82,6 @@ export default function MapPage() {
     }
     if (t.includes("예약")) {
       handleReserve();
-      return;
     }
   };
 
@@ -109,8 +150,9 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* 카카오맵 iframe */}
+      {/* ✅ 깔끔한 카카오 지도 (마커 + 인포윈도우만) */}
       <div
+        ref={mapRef}
         style={{
           width: "100%",
           maxWidth: 420,
@@ -120,18 +162,7 @@ export default function MapPage() {
           boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
           background: "#cfe6ff",
         }}
-      >
-        <iframe
-          title="kakao-map"
-          src={mapUrl}
-          style={{
-            width: "100%",
-            height: "100%",
-            border: "0",
-          }}
-          loading="lazy"
-        />
-      </div>
+      />
 
       {/* 버튼들 */}
       <div
@@ -159,7 +190,7 @@ export default function MapPage() {
         </button>
       </div>
 
-      {/* 🎤 음성 명령 버튼 */}
+      {/* 음성 명령 버튼 */}
       <div
         style={{
           marginTop: 16,
@@ -181,6 +212,14 @@ export default function MapPage() {
           “길안내 시작” 또는 “예약해줘” 라고 말해보세요
         </div>
       </div>
+
+      {/* Kakao Maps SDK */}
+      <Script
+        id="kakao-map-sdk"
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_APP_KEY}&autoload=false`}
+        strategy="afterInteractive"
+        onLoad={() => setSdkReady(true)}
+      />
     </main>
   );
 }
@@ -203,7 +242,7 @@ const primaryBtn: React.CSSProperties = {
   color: "#fff",
   fontWeight: 700,
   cursor: "pointer",
-  boxShadow: "0 8px 18px rgba(37,99,235,0.35)",
+  boxShadow: "0 8px 18px rgba(37,99,235,.35)",
 };
 
 const ghostBtn: React.CSSProperties = {
