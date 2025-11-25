@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import MicButton from "../components/MicButton";
 import loadKakaoSdk from "../../utils/loadKakaoSdk";
 
-/** Kakao 타입 전역 선언 */
 declare global {
   interface Window {
     kakao: any;
@@ -23,41 +22,62 @@ export default function MapPage() {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any | null>(null);
 
-  /** SDK 로드 + 지도 초기화 */
-  useEffect(() => {
+  const [mapLoading, setMapLoading] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0); // 재시도용 트리거
+
+  const initMap = () => {
     if (!mapRef.current) return;
 
+    setMapLoading(true);
+    setMapError(null);
+
     loadKakaoSdk(() => {
-      if (!window.kakao?.maps) return;
+      try {
+        if (!window.kakao || !window.kakao.maps) {
+          setMapError("카카오 지도를 불러오지 못했어요.");
+          setMapLoading(false);
+          return;
+        }
 
-      const kakao = window.kakao;
-      const center = new kakao.maps.LatLng(lat, lng);
-      const container = mapRef.current!;
+        const kakao = window.kakao;
+        const center = new kakao.maps.LatLng(lat, lng);
+        const container = mapRef.current!;
 
-      // 새 지도 생성
-      const map = new kakao.maps.Map(container, {
-        center,
-        level: 3,
-      });
-      mapInstanceRef.current = map;
+        const map = new kakao.maps.Map(container, {
+          center,
+          level: 3,
+        });
+        mapInstanceRef.current = map;
 
-      const marker = new kakao.maps.Marker({ position: center });
-      marker.setMap(map);
+        const marker = new kakao.maps.Marker({ position: center });
+        marker.setMap(map);
 
-      const iw = new kakao.maps.InfoWindow({
-        content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
-      });
-      iw.open(map, marker);
+        const iw = new kakao.maps.InfoWindow({
+          content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
+        });
+        iw.open(map, marker);
 
-      // 📱 모바일에서 파란 배경만 보이지 않게 한 번 더 relayout
-      setTimeout(() => {
-        map.relayout();
-        map.setCenter(center);
-      }, 120);
+        setTimeout(() => {
+          map.relayout();
+          map.setCenter(center);
+        }, 150);
+
+        setMapLoading(false);
+      } catch (e) {
+        console.error("[MAP] initMap error", e);
+        setMapError("지도를 그리는 중 오류가 발생했어요.");
+        setMapLoading(false);
+      }
     });
-  }, [lat, lng, name]);
+  };
 
-  /** 화면 회전 / 리사이즈 시에도 지도 다시 그리기 */
+  useEffect(() => {
+    initMap();
+    // retryToken 바뀔 때마다 다시 시도
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lng, name, retryToken]);
+
   useEffect(() => {
     const handleResize = () => {
       const map = mapInstanceRef.current;
@@ -74,7 +94,6 @@ export default function MapPage() {
     };
   }, []);
 
-  /** 길안내(카카오맵 앱/웹 링크) */
   const handleNavigate = () => {
     const url = `https://map.kakao.com/link/to/${encodeURIComponent(
       name
@@ -82,12 +101,10 @@ export default function MapPage() {
     window.open(url, "_blank");
   };
 
-  /** 예약 페이지로 이동 (나중에 쓸 수도 있으니 남겨둠) */
   const handleReserve = () => {
     router.push(`/reserve?q=${encodeURIComponent(name)}`);
   };
 
-  /** 🎤 음성 명령 처리 */
   const handleVoiceCommand = (text: string) => {
     const t = text.replace(/\s+/g, "");
     if (t.includes("길안내") || t.includes("길찾기") || t.includes("길찾아줘")) {
@@ -98,6 +115,10 @@ export default function MapPage() {
       handleReserve();
       return;
     }
+  };
+
+  const handleRetry = () => {
+    setRetryToken((x) => x + 1);
   };
 
   return (
@@ -112,7 +133,6 @@ export default function MapPage() {
         gap: 12,
       }}
     >
-      {/* 상단 바 */}
       <div
         style={{
           width: "100%",
@@ -154,7 +174,6 @@ export default function MapPage() {
         <div style={{ width: 44 }} />
       </div>
 
-      {/* 목적지 카드 */}
       <div
         style={{
           width: "100%",
@@ -172,21 +191,69 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* 지도 영역 */}
       <div
-        ref={mapRef}
         style={{
           width: "100%",
           maxWidth: 420,
-          height: 520,
-          borderRadius: 18,
-          overflow: "hidden",
-          boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
-          background: "#cfe6ff", // SDK 로드 전에는 이 파란색
+          position: "relative",
         }}
-      />
+      >
+        <div
+          ref={mapRef}
+          style={{
+            width: "100%",
+            height: 520,
+            borderRadius: 18,
+            overflow: "hidden",
+            boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
+            background: "#cfe6ff",
+          }}
+        />
 
-      {/* 버튼들 */}
+        {(mapLoading || mapError) && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 18,
+              background: "rgba(239,246,255,0.9)",
+              fontFamily: "Noto Sans KR, system-ui, sans-serif",
+              fontSize: 13,
+              color: "#1f2937",
+              padding: "0 16px",
+              textAlign: "center",
+            }}
+          >
+            {mapLoading && <div>지도를 불러오는 중이에요…</div>}
+            {mapError && (
+              <>
+                <div style={{ marginBottom: 8 }}>{mapError}</div>
+                <button
+                  type="button"
+                  onClick={handleRetry}
+                  style={{
+                    border: "none",
+                    borderRadius: 9999,
+                    padding: "6px 16px",
+                    background: "#2563eb",
+                    color: "#fff",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 10px rgba(37,99,235,0.4)",
+                  }}
+                >
+                  다시 시도하기
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       <div
         style={{
           width: "100%",
@@ -232,7 +299,6 @@ export default function MapPage() {
         </button>
       </div>
 
-      {/* 🎤 음성 명령 버튼 */}
       <div
         style={{
           marginTop: 16,
