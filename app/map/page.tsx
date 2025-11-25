@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import Script from "next/script";
+import React, { useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import MicButton from "../components/MicButton";
+import loadKakaoSdk from "../../utils/loadKakaoSdk";
 
 /** Kakao 타입 전역 선언 */
 declare global {
@@ -22,40 +22,40 @@ export default function MapPage() {
 
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any | null>(null);
-  const [sdkReady, setSdkReady] = useState(false);
 
   /** SDK 로드 + 지도 초기화 */
   useEffect(() => {
-    if (!sdkReady) return;
     if (!mapRef.current) return;
-    if (!window.kakao?.maps) return;
 
-    window.kakao.maps.load(() => {
-      const center = new window.kakao.maps.LatLng(lat, lng);
+    loadKakaoSdk(() => {
+      if (!window.kakao?.maps) return;
+
+      const kakao = window.kakao;
+      const center = new kakao.maps.LatLng(lat, lng);
       const container = mapRef.current!;
 
       // 새 지도 생성
-      const map = new window.kakao.maps.Map(container, {
+      const map = new kakao.maps.Map(container, {
         center,
         level: 3,
       });
       mapInstanceRef.current = map;
 
-      const marker = new window.kakao.maps.Marker({ position: center });
+      const marker = new kakao.maps.Marker({ position: center });
       marker.setMap(map);
 
-      const iw = new window.kakao.maps.InfoWindow({
+      const iw = new kakao.maps.InfoWindow({
         content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
       });
       iw.open(map, marker);
 
-      // 📱 모바일에서 처음에 파란 배경만 보이지 않게 한 번 더 relayout
+      // 📱 모바일에서 파란 배경만 보이지 않게 한 번 더 relayout
       setTimeout(() => {
         map.relayout();
         map.setCenter(center);
       }, 120);
     });
-  }, [sdkReady, lat, lng, name]);
+  }, [lat, lng, name]);
 
   /** 화면 회전 / 리사이즈 시에도 지도 다시 그리기 */
   useEffect(() => {
@@ -74,7 +74,7 @@ export default function MapPage() {
     };
   }, []);
 
-  /** 길안내(카카오맵 링크) */
+  /** 길안내(카카오맵 앱/웹 링크) */
   const handleNavigate = () => {
     const url = `https://map.kakao.com/link/to/${encodeURIComponent(
       name
@@ -182,7 +182,7 @@ export default function MapPage() {
           borderRadius: 18,
           overflow: "hidden",
           boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
-          background: "#cfe6ff", // 로딩 중일 때만 보이는 파란색
+          background: "#cfe6ff", // SDK 로드 전에는 이 파란색
         }}
       />
 
@@ -254,14 +254,6 @@ export default function MapPage() {
           “길안내 시작” 또는 “예약해줘” 라고 말해보세요
         </div>
       </div>
-
-      {/* Kakao Maps SDK */}
-      <Script
-        id="kakao-map-sdk"
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_APP_KEY}&autoload=false`}
-        strategy="afterInteractive"
-        onLoad={() => setSdkReady(true)}
-      />
     </main>
   );
 }
