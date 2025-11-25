@@ -6,7 +6,6 @@ import Script from "next/script";
 import { useRouter, useSearchParams } from "next/navigation";
 import MicButton from "../components/MicButton";
 
-// Kakao 타입 선언
 declare global {
   interface Window {
     kakao: any;
@@ -17,63 +16,69 @@ export default function MapPage() {
   const router = useRouter();
   const params = useSearchParams();
 
-  // 검색/추천에서 넘어온 값
   const name = params.get("q") ?? "목적지";
   const lat = Number(params.get("lat") ?? 37.566535);
   const lng = Number(params.get("lng") ?? 126.9779692);
 
   const mapRef = useRef<HTMLDivElement>(null);
+  const mapObjRef = useRef<any | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
 
-  // ✅ Kakao SDK 로드 후 지도 초기화
+  // SDK 로드 후 지도 초기화
   useEffect(() => {
-    if (!sdkReady) return;
-    if (!mapRef.current) return;
-    const { kakao } = window;
-    if (!kakao?.maps) return;
+    if (!sdkReady || !mapRef.current) return;
+    if (!window.kakao?.maps) return;
 
-    kakao.maps.load(() => {
-      const center = new kakao.maps.LatLng(lat, lng);
+    window.kakao.maps.load(() => {
+      const center = new window.kakao.maps.LatLng(lat, lng);
 
-      const map = new kakao.maps.Map(mapRef.current!, {
+      const map = new window.kakao.maps.Map(mapRef.current!, {
         center,
         level: 3,
       });
+      mapObjRef.current = map;
 
-      const marker = new kakao.maps.Marker({ position: center });
+      const marker = new window.kakao.maps.Marker({ position: center });
       marker.setMap(map);
 
-      const info = new kakao.maps.InfoWindow({
+      const iw = new window.kakao.maps.InfoWindow({
         content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
       });
-      info.open(map, marker);
+      iw.open(map, marker);
 
-      // 모바일 회전/주소창 움직일 때 레이아웃 깨지는 것 방지
-      const handleResize = () => {
-        const c = map.getCenter();
-        kakao.maps.event.trigger(map, "resize");
-        map.setCenter(c);
-      };
-
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
+      // 모바일에서 처음 로드시 레이아웃 강제 재계산
+      setTimeout(() => {
+        map.relayout();
+        map.setCenter(center);
+      }, 100);
     });
   }, [sdkReady, lat, lng, name]);
 
-  // 🔹 길안내 버튼 → 카카오맵 새 탭 / 앱으로 열기
+  // 화면 회전 / 주소창 높이 변경 등에 따라 다시 relayout
+  useEffect(() => {
+    const handleResize = () => {
+      if (!mapObjRef.current || !window.kakao?.maps || !mapRef.current) return;
+      const center = new window.kakao.maps.LatLng(lat, lng);
+      mapObjRef.current.relayout();
+      mapObjRef.current.setCenter(center);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [lat, lng]);
+
   const handleNavigate = () => {
     const url = `https://map.kakao.com/link/to/${encodeURIComponent(
       name
     )},${lat},${lng}`;
-    window.open(url, "_blank"); // 우리 페이지는 그대로 두고 새 탭으로만 열기
+    // 전체 창을 카카오맵으로 이동 (앱/웹 자동 연결)
+    window.location.href = url;
   };
 
-  // 🔹 예약 버튼
   const handleReserve = () => {
     router.push(`/reserve?q=${encodeURIComponent(name)}`);
   };
 
-  // 🔹 음성 명령
   const handleVoiceCommand = (text: string) => {
     const t = text.replace(/\s+/g, "");
     if (t.includes("길안내") || t.includes("길찾기") || t.includes("길찾아줘")) {
@@ -109,11 +114,7 @@ export default function MapPage() {
           marginBottom: 6,
         }}
       >
-        <button
-          onClick={() => router.back()}
-          style={topBtnStyle}
-          aria-label="뒤로"
-        >
+        <button onClick={() => router.back()} style={topBtnStyle} aria-label="뒤로">
           ⬅️
         </button>
         <h1
@@ -150,7 +151,7 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* ✅ 깔끔한 카카오 지도 (마커 + 인포윈도우만) */}
+      {/* 지도 영역 */}
       <div
         ref={mapRef}
         style={{
@@ -160,7 +161,7 @@ export default function MapPage() {
           borderRadius: 18,
           overflow: "hidden",
           boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
-          background: "#cfe6ff",
+          background: "#cfe6ff", // 로딩 중일 땐 이 파란색만 보임
         }}
       />
 
@@ -174,18 +175,10 @@ export default function MapPage() {
           marginTop: 10,
         }}
       >
-        <button
-          onClick={handleNavigate}
-          style={primaryBtn}
-          aria-label="길안내 시작"
-        >
+        <button onClick={handleNavigate} style={primaryBtn} aria-label="길안내 시작">
           길안내 시작
         </button>
-        <button
-          onClick={handleReserve}
-          style={ghostBtn}
-          aria-label="예약 페이지"
-        >
+        <button onClick={handleReserve} style={ghostBtn} aria-label="예약 페이지">
           예약하기
         </button>
       </div>
