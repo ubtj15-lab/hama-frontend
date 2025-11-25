@@ -1,15 +1,17 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import Script from "next/script";
 import { useRouter, useSearchParams } from "next/navigation";
 import MicButton from "../components/MicButton";
-import loadKakaoSdk from "../../utils/loadKakaoSdk";
 
 declare global {
   interface Window {
     kakao: any;
   }
 }
+
+const KAKAO_JS_KEY = "0a7d727707ad45e650718af282076602";
 
 export default function MapPage() {
   const router = useRouter();
@@ -21,62 +23,38 @@ export default function MapPage() {
 
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any | null>(null);
-
-  const [mapLoading, setMapLoading] = useState(true);
-  const [mapError, setMapError] = useState<string | null>(null);
-  const [retryToken, setRetryToken] = useState(0); // 재시도용 트리거
-
-  const initMap = () => {
-    if (!mapRef.current) return;
-
-    setMapLoading(true);
-    setMapError(null);
-
-    loadKakaoSdk(() => {
-      try {
-        if (!window.kakao || !window.kakao.maps) {
-          setMapError("카카오 지도를 불러오지 못했어요.");
-          setMapLoading(false);
-          return;
-        }
-
-        const kakao = window.kakao;
-        const center = new kakao.maps.LatLng(lat, lng);
-        const container = mapRef.current!;
-
-        const map = new kakao.maps.Map(container, {
-          center,
-          level: 3,
-        });
-        mapInstanceRef.current = map;
-
-        const marker = new kakao.maps.Marker({ position: center });
-        marker.setMap(map);
-
-        const iw = new kakao.maps.InfoWindow({
-          content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
-        });
-        iw.open(map, marker);
-
-        setTimeout(() => {
-          map.relayout();
-          map.setCenter(center);
-        }, 150);
-
-        setMapLoading(false);
-      } catch (e) {
-        console.error("[MAP] initMap error", e);
-        setMapError("지도를 그리는 중 오류가 발생했어요.");
-        setMapLoading(false);
-      }
-    });
-  };
+  const [sdkReady, setSdkReady] = useState(false);
 
   useEffect(() => {
-    initMap();
-    // retryToken 바뀔 때마다 다시 시도
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng, name, retryToken]);
+    if (!sdkReady) return;
+    if (!mapRef.current) return;
+    if (!window.kakao?.maps) return;
+
+    window.kakao.maps.load(() => {
+      const center = new window.kakao.maps.LatLng(lat, lng);
+      const container = mapRef.current!;
+
+      const map = new window.kakao.maps.Map(container, {
+        center,
+        level: 3,
+      });
+
+      mapInstanceRef.current = map;
+
+      const marker = new window.kakao.maps.Marker({ position: center });
+      marker.setMap(map);
+
+      const iw = new window.kakao.maps.InfoWindow({
+        content: `<div style="padding:6px 10px;font-size:13px;">${name}</div>`,
+      });
+      iw.open(map, marker);
+
+      setTimeout(() => {
+        map.relayout();
+        map.setCenter(center);
+      }, 150);
+    });
+  }, [sdkReady, lat, lng, name]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -115,10 +93,6 @@ export default function MapPage() {
       handleReserve();
       return;
     }
-  };
-
-  const handleRetry = () => {
-    setRetryToken((x) => x + 1);
   };
 
   return (
@@ -192,67 +166,17 @@ export default function MapPage() {
       </div>
 
       <div
+        ref={mapRef}
         style={{
           width: "100%",
           maxWidth: 420,
-          position: "relative",
+          height: 520,
+          borderRadius: 18,
+          overflow: "hidden",
+          boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
+          background: "#cfe6ff",
         }}
-      >
-        <div
-          ref={mapRef}
-          style={{
-            width: "100%",
-            height: 520,
-            borderRadius: 18,
-            overflow: "hidden",
-            boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
-            background: "#cfe6ff",
-          }}
-        />
-
-        {(mapLoading || mapError) && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 18,
-              background: "rgba(239,246,255,0.9)",
-              fontFamily: "Noto Sans KR, system-ui, sans-serif",
-              fontSize: 13,
-              color: "#1f2937",
-              padding: "0 16px",
-              textAlign: "center",
-            }}
-          >
-            {mapLoading && <div>지도를 불러오는 중이에요…</div>}
-            {mapError && (
-              <>
-                <div style={{ marginBottom: 8 }}>{mapError}</div>
-                <button
-                  type="button"
-                  onClick={handleRetry}
-                  style={{
-                    border: "none",
-                    borderRadius: 9999,
-                    padding: "6px 16px",
-                    background: "#2563eb",
-                    color: "#fff",
-                    fontSize: 12,
-                    cursor: "pointer",
-                    boxShadow: "0 4px 10px rgba(37,99,235,0.4)",
-                  }}
-                >
-                  다시 시도하기
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      />
 
       <div
         style={{
@@ -320,6 +244,13 @@ export default function MapPage() {
           “길안내 시작” 또는 “예약해줘” 라고 말해보세요
         </div>
       </div>
+
+      <Script
+        id="kakao-map-sdk"
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&autoload=false`}
+        strategy="afterInteractive"
+        onLoad={() => setSdkReady(true)}
+      />
     </main>
   );
 }
