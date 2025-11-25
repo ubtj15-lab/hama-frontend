@@ -15,9 +15,9 @@ export default function loadKakaoSdk(callback: () => void) {
   // ✅ 여기 한 줄만 네 자바스크립트 키로 바꿔줘
   const appKey =
   process.env.NEXT_PUBLIC_KAKAO_APP_KEY ||
-  "8cfbd9f056e93408f99ec4df8cbc52bd";
+  "0a7d727707ad45e650718af282076602";
 
-if (!appKey || appKey === "8cfbd9f056e93408f99ec4df8cbc52bd") {
+if (!appKey || appKey === "0a7d727707ad45e650718af282076602") {
   console.error("[KAKAO] JavaScript 키가 설정되어 있지 않습니다.");
   return;
 }
