@@ -1,4 +1,3 @@
-// app/map/page.tsx
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
@@ -6,6 +5,7 @@ import Script from "next/script";
 import { useRouter, useSearchParams } from "next/navigation";
 import MicButton from "../components/MicButton";
 
+/** Kakao 타입 전역 선언 */
 declare global {
   interface Window {
     kakao: any;
@@ -20,23 +20,26 @@ export default function MapPage() {
   const lat = Number(params.get("lat") ?? 37.566535);
   const lng = Number(params.get("lng") ?? 126.9779692);
 
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapObjRef = useRef<any | null>(null);
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<any | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
 
-  // SDK 로드 후 지도 초기화
+  /** SDK 로드 + 지도 초기화 */
   useEffect(() => {
-    if (!sdkReady || !mapRef.current) return;
+    if (!sdkReady) return;
+    if (!mapRef.current) return;
     if (!window.kakao?.maps) return;
 
     window.kakao.maps.load(() => {
       const center = new window.kakao.maps.LatLng(lat, lng);
+      const container = mapRef.current!;
 
-      const map = new window.kakao.maps.Map(mapRef.current!, {
+      // 새 지도 생성
+      const map = new window.kakao.maps.Map(container, {
         center,
         level: 3,
       });
-      mapObjRef.current = map;
+      mapInstanceRef.current = map;
 
       const marker = new window.kakao.maps.Marker({ position: center });
       marker.setMap(map);
@@ -46,39 +49,45 @@ export default function MapPage() {
       });
       iw.open(map, marker);
 
-      // 모바일에서 처음 로드시 레이아웃 강제 재계산
+      // 📱 모바일에서 처음에 파란 배경만 보이지 않게 한 번 더 relayout
       setTimeout(() => {
         map.relayout();
         map.setCenter(center);
-      }, 100);
+      }, 120);
     });
   }, [sdkReady, lat, lng, name]);
 
-  // 화면 회전 / 주소창 높이 변경 등에 따라 다시 relayout
+  /** 화면 회전 / 리사이즈 시에도 지도 다시 그리기 */
   useEffect(() => {
     const handleResize = () => {
-      if (!mapObjRef.current || !window.kakao?.maps || !mapRef.current) return;
-      const center = new window.kakao.maps.LatLng(lat, lng);
-      mapObjRef.current.relayout();
-      mapObjRef.current.setCenter(center);
+      const map = mapInstanceRef.current;
+      if (!map) return;
+      map.relayout();
     };
 
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [lat, lng]);
+    window.addEventListener("orientationchange", handleResize);
 
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, []);
+
+  /** 길안내(카카오맵 링크) */
   const handleNavigate = () => {
     const url = `https://map.kakao.com/link/to/${encodeURIComponent(
       name
     )},${lat},${lng}`;
-    // 전체 창을 카카오맵으로 이동 (앱/웹 자동 연결)
-    window.location.href = url;
+    window.open(url, "_blank");
   };
 
+  /** 예약 페이지로 이동 (나중에 쓸 수도 있으니 남겨둠) */
   const handleReserve = () => {
     router.push(`/reserve?q=${encodeURIComponent(name)}`);
   };
 
+  /** 🎤 음성 명령 처리 */
   const handleVoiceCommand = (text: string) => {
     const t = text.replace(/\s+/g, "");
     if (t.includes("길안내") || t.includes("길찾기") || t.includes("길찾아줘")) {
@@ -87,6 +96,7 @@ export default function MapPage() {
     }
     if (t.includes("예약")) {
       handleReserve();
+      return;
     }
   };
 
@@ -114,7 +124,18 @@ export default function MapPage() {
           marginBottom: 6,
         }}
       >
-        <button onClick={() => router.back()} style={topBtnStyle} aria-label="뒤로">
+        <button
+          onClick={() => router.back()}
+          style={{
+            border: "none",
+            background: "#fff",
+            borderRadius: 12,
+            padding: "10px 12px",
+            boxShadow: "0 6px 14px rgba(0,0,0,0.08)",
+            cursor: "pointer",
+          }}
+          aria-label="뒤로"
+        >
           ⬅️
         </button>
         <h1
@@ -161,7 +182,7 @@ export default function MapPage() {
           borderRadius: 18,
           overflow: "hidden",
           boxShadow: "0 10px 24px rgba(0,0,0,0.10)",
-          background: "#cfe6ff", // 로딩 중일 땐 이 파란색만 보임
+          background: "#cfe6ff", // 로딩 중일 때만 보이는 파란색
         }}
       />
 
@@ -175,15 +196,43 @@ export default function MapPage() {
           marginTop: 10,
         }}
       >
-        <button onClick={handleNavigate} style={primaryBtn} aria-label="길안내 시작">
+        <button
+          onClick={handleNavigate}
+          style={{
+            flex: 1,
+            height: 48,
+            borderRadius: 12,
+            border: "none",
+            background: "#2563eb",
+            color: "#fff",
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: "0 8px 18px rgba(37,99,235,.35)",
+          }}
+          aria-label="길안내 시작"
+        >
           길안내 시작
         </button>
-        <button onClick={handleReserve} style={ghostBtn} aria-label="예약 페이지">
+        <button
+          onClick={handleReserve}
+          style={{
+            flex: 1,
+            height: 48,
+            borderRadius: 12,
+            border: "1px solid #cbd5e1",
+            background: "#ffffff",
+            color: "#0f172a",
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: "0 6px 14px rgba(0,0,0,0.06)",
+          }}
+          aria-label="예약 페이지"
+        >
           예약하기
         </button>
       </div>
 
-      {/* 음성 명령 버튼 */}
+      {/* 🎤 음성 명령 버튼 */}
       <div
         style={{
           marginTop: 16,
@@ -216,36 +265,3 @@ export default function MapPage() {
     </main>
   );
 }
-
-const topBtnStyle: React.CSSProperties = {
-  border: "none",
-  background: "#fff",
-  borderRadius: 12,
-  padding: "10px 12px",
-  boxShadow: "0 6px 14px rgba(0,0,0,0.08)",
-  cursor: "pointer",
-};
-
-const primaryBtn: React.CSSProperties = {
-  flex: 1,
-  height: 48,
-  borderRadius: 12,
-  border: "none",
-  background: "#2563eb",
-  color: "#fff",
-  fontWeight: 700,
-  cursor: "pointer",
-  boxShadow: "0 8px 18px rgba(37,99,235,.35)",
-};
-
-const ghostBtn: React.CSSProperties = {
-  flex: 1,
-  height: 48,
-  borderRadius: 12,
-  border: "1px solid #cbd5e1",
-  background: "#ffffff",
-  color: "#0f172a",
-  fontWeight: 700,
-  cursor: "pointer",
-  boxShadow: "0 6px 14px rgba(0,0,0,0.06)",
-};

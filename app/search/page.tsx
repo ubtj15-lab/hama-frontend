@@ -25,9 +25,9 @@ function mapUrlCategoryToStoreCategory(
   c: string | null
 ): Store["category"] | null {
   if (!c) return null;
+
   if (c === "cafe" || c === "restaurant" || c === "beauty") return c;
 
-  // 카카오 카테고리 코드 → 내부 카테고리 매핑
   switch (c) {
     case "CE7":
       return "cafe";
@@ -66,18 +66,19 @@ type StoreDetail = {
   menu: { name: string; note?: string }[];
 };
 
-/** ⚠️ 필요하면 여기 안에 id별 상세 메뉴/시술을 채워주면 됨 */
 const STORE_DETAILS: Record<string, StoreDetail> = {
-  // "cafe_01": {
-  //   title: "블루문 커피랩 시그니처 메뉴",
-  //   tagline: "에스프레소 & 브런치가 인기 많아요",
-  //   hours: "매일 09:00 ~ 22:00",
-  //   highlight: "주말 브런치 예약 추천",
-  //   menu: [
-  //     { name: "시그니처 라떼", note: "샷 추가 +500" },
-  //     { name: "브런치 플레이트", note: "주말 한정" },
-  //   ],
-  // },
+  // 예시만 하나 넣어둘게 (필요하면 더 채워도 되고, 안 채워도 동작엔 문제 없음)
+  cafe_01: {
+    title: "블루문 커피랩 시그니처 메뉴",
+    tagline: "원두 향 좋은 분위기 좋은 카페",
+    hours: "매일 10:00 ~ 22:00",
+    highlight: "라떼 아트가 인기!",
+    menu: [
+      { name: "블루문 라떼", note: "시그니처" },
+      { name: "콜드브루", note: "산미가 부드러운 스타일" },
+      { name: "수제 케이크", note: "매일 메뉴 변경" },
+    ],
+  },
 };
 
 export default function SearchPage() {
@@ -89,7 +90,6 @@ export default function SearchPage() {
 
   const stores = storesData as Store[];
 
-  /** 1) 검색어로 카테고리 추론 */
   const inferCategoryFromQuery = (q: string): Store["category"] => {
     const t = q.toLowerCase();
 
@@ -109,12 +109,11 @@ export default function SearchPage() {
     return "cafe";
   };
 
-  // 🔥 우선순위: URL category > 검색어로 추론
   const paramCategory = mapUrlCategoryToStoreCategory(rawCategory);
   const activeCategory: Store["category"] =
     paramCategory ?? inferCategoryFromQuery(query);
 
-  /** 2) 해당 카테고리 매장만 모으기 */
+  /** 2) 선택된 카테고리 매장만 모으기 */
   const categoryStores = stores.filter((s) => s.category === activeCategory);
 
   /** 3) 카테고리 안에서 3개씩 3페이지 (최대 9개) */
@@ -124,14 +123,22 @@ export default function SearchPage() {
     categoryStores.slice(6, 9),
   ];
 
-  /** 페이지 인덱스 */
+  /** 4) 페이지 인덱스 */
   const [pageIndex, setPageIndex] = useState(0);
+
+  /** 스와이프 애니메이션 방향 */
+  const [swipeDirection, setSwipeDirection] = useState<
+    "left" | "right" | null
+  >(null);
+  const touchStartXRef = useRef<number | null>(null);
 
   /** 현재 페이지 카드 목록 */
   const currentCards = pages[pageIndex] ?? [];
 
   /** 선택된 카드 ID */
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string>(
+    currentCards[0]?.id ?? pages[0]?.[0]?.id ?? ""
+  );
 
   /** 오버레이 / 확대 상태 */
   const [overlayVisible, setOverlayVisible] = useState(false);
@@ -145,28 +152,17 @@ export default function SearchPage() {
   const [reserveDate, setReserveDate] = useState<string | null>(null);
   const [reserveTime, setReserveTime] = useState<string | null>(null);
 
-  /** 스와이프용 터치 시작 좌표 */
-  const touchStartXRef = useRef<number | null>(null);
-
-  /** 선택된 카드 */
   const selected =
-    (currentCards.find((c) => c.id === selectedId) ??
-      currentCards[0] ??
-      null) || null;
-
-  const others = selected
-    ? currentCards.filter((c) => c.id !== selected.id)
-    : currentCards;
+    currentCards.find((c) => c.id === selectedId) ?? currentCards[0];
+  const others = currentCards.filter((c) => c.id !== selected?.id);
 
   const detail = selected ? STORE_DETAILS[selected.id] : undefined;
-
-  const detailLabel = getDetailButtonLabel(selected);
 
   /** 페이지 점 클릭 */
   const goToPage = (index: number) => {
     if (index < 0 || index >= pages.length) return;
     const nextCards = pages[index];
-    if (!nextCards || !nextCards.length) return;
+    if (!nextCards.length) return;
 
     setPageIndex(index);
     setSelectedId(nextCards[0].id);
@@ -218,6 +214,8 @@ export default function SearchPage() {
     setDetailOpen((prev) => !prev);
   };
 
+  const detailLabel = getDetailButtonLabel(selected || null);
+
   /** 카드 클릭 → 확대 모드 */
   const openExpanded = (id: string) => {
     setSelectedId(id);
@@ -240,30 +238,6 @@ export default function SearchPage() {
     if (!detailOpen && reserveStep === 0 && e.currentTarget.scrollTop > 40) {
       closeExpanded();
     }
-  };
-
-  /** 스와이프 핸들러 */
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    touchStartXRef.current = e.touches[0].clientX;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-    const startX = touchStartXRef.current;
-    if (startX == null) return;
-
-    const endX = e.changedTouches[0].clientX;
-    const diff = endX - startX;
-    const threshold = 40; // 손가락으로 살짝 밀어도 인식되도록 정도
-
-    if (diff > threshold) {
-      // 오른쪽 → 왼쪽으로 밀기(이전 페이지)
-      goToPage(pageIndex - 1);
-    } else if (diff < -threshold) {
-      // 왼쪽 → 오른쪽으로 밀기(다음 페이지)
-      goToPage(pageIndex + 1);
-    }
-
-    touchStartXRef.current = null;
   };
 
   const resetReserve = () => {
@@ -306,34 +280,39 @@ export default function SearchPage() {
     setTimeout(() => setExpanded(true), 10);
 
     window.sessionStorage.removeItem("hama_search_last_id");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, activeCategory]);
+  }, [query, activeCategory]); // 검색어나 카테고리가 바뀔 때만 체크
 
-  /** 첫 렌더 시 기본 선택 카드 설정 */
-  useEffect(() => {
-    if (!selectedId && currentCards.length > 0) {
-      setSelectedId(currentCards[0].id);
+  /** 👉 스와이프 핸들러 (모바일 제스처) */
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    touchStartXRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    const startX = touchStartXRef.current;
+    if (startX == null) return;
+
+    const endX = e.changedTouches[0].clientX;
+    const diff = endX - startX;
+    const threshold = 40;
+
+    if (diff > threshold) {
+      // 오른쪽으로 밀기 → 이전 페이지
+      if (pageIndex > 0 && pages[pageIndex - 1].length) {
+        setSwipeDirection("right");
+        goToPage(pageIndex - 1);
+        setTimeout(() => setSwipeDirection(null), 220);
+      }
+    } else if (diff < -threshold) {
+      // 왼쪽으로 밀기 → 다음 페이지
+      if (pageIndex < pages.length - 1 && pages[pageIndex + 1].length) {
+        setSwipeDirection("left");
+        goToPage(pageIndex + 1);
+        setTimeout(() => setSwipeDirection(null), 220);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageIndex, currentCards.length]);
 
-  // 카테고리 매장이 하나도 없을 경우 방어
-  if (!categoryStores.length) {
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "#eef5fb",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Noto Sans KR, system-ui, sans-serif",
-        }}
-      >
-        현재 카테고리에 해당하는 매장이 없어요.
-      </main>
-    );
-  }
+    touchStartXRef.current = null;
+  };
 
   return (
     <main
@@ -401,102 +380,106 @@ export default function SearchPage() {
 
       {/* 기본 화면: 큰 카드 + 작은 카드 2개 (페이지 별) */}
       {!overlayVisible && selected && (
-        <>
-          {/* 스와이프 영역 전체를 감싸기 */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 8,
+            transform:
+              swipeDirection === "left"
+                ? "translateX(-16px)"
+                : swipeDirection === "right"
+                ? "translateX(16px)"
+                : "translateX(0)",
+            transition: "transform 0.22s ease-out",
+          }}
+        >
+          {/* 큰 카드 */}
           <div
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
+            onClick={() => openExpanded(selected.id)}
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 8,
+              width: 316,
+              height: 269,
+              borderRadius: 24,
+              overflow: "hidden",
+              position: "relative",
+              boxShadow: "0 6px 18px rgba(0, 0, 0, 0.2)",
+              cursor: "pointer",
             }}
           >
-            {/* 큰 카드 */}
+            <Image
+              src={selected.image}
+              alt={selected.name}
+              fill
+              sizes="316px"
+              style={{ objectFit: "cover" }}
+            />
             <div
-              onClick={() => openExpanded(selected.id)}
               style={{
-                width: 316,
-                height: 269,
-                borderRadius: 24,
-                overflow: "hidden",
-                position: "relative",
-                boxShadow: "0 6px 18px rgba(0, 0, 0, 0.2)",
-                cursor: "pointer",
+                position: "absolute",
+                left: 12,
+                bottom: 12,
+                padding: "6px 10px",
+                borderRadius: 9999,
+                background: "rgba(15,23,42,0.75)",
+                color: "#f9fafb",
+                fontSize: 12,
+                fontFamily: "Noto Sans KR, system-ui, sans-serif",
               }}
             >
-              <Image
-                src={selected.image}
-                alt={selected.name}
-                fill
-                sizes="316px"
-                style={{ objectFit: "cover" }}
-              />
+              {selected.name} · {labelOfCategory(selected.category)}
+            </div>
+          </div>
+
+          {/* 작은 카드 2개 */}
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              marginTop: 8,
+            }}
+          >
+            {others.map((card) => (
               <div
+                key={card.id}
+                onClick={() => openExpanded(card.id)}
                 style={{
-                  position: "absolute",
-                  left: 12,
-                  bottom: 12,
-                  padding: "6px 10px",
-                  borderRadius: 9999,
-                  background: "rgba(15,23,42,0.75)",
-                  color: "#f9fafb",
-                  fontSize: 12,
-                  fontFamily: "Noto Sans KR, system-ui, sans-serif",
+                  width: 156,
+                  height: 165,
+                  borderRadius: 24,
+                  overflow: "hidden",
+                  position: "relative",
+                  boxShadow: "0 6px 18px rgba(0, 0, 0, 0.2)",
+                  cursor: "pointer",
                 }}
               >
-                {selected.name} · {labelOfCategory(selected.category)}
-              </div>
-            </div>
-
-            {/* 작은 카드 2개 */}
-            <div
-              style={{
-                display: "flex",
-                gap: 16,
-                marginTop: 8,
-              }}
-            >
-              {others.map((card) => (
+                <Image
+                  src={card.image}
+                  alt={card.name}
+                  fill
+                  sizes="156px"
+                  style={{ objectFit: "cover" }}
+                />
                 <div
-                  key={card.id}
-                  onClick={() => openExpanded(card.id)}
                   style={{
-                    width: 156,
-                    height: 165,
-                    borderRadius: 24,
-                    overflow: "hidden",
-                    position: "relative",
-                    boxShadow: "0 6px 18px rgba(0, 0, 0, 0.2)",
-                    cursor: "pointer",
+                    position: "absolute",
+                    left: 10,
+                    bottom: 10,
+                    padding: "4px 8px",
+                    borderRadius: 9999,
+                    background: "rgba(15,23,42,0.75)",
+                    color: "#f9fafb",
+                    fontFamily: "Noto Sans KR, system-ui, sans-serif",
+                    fontSize: 11,
                   }}
                 >
-                  <Image
-                    src={card.image}
-                    alt={card.name}
-                    fill
-                    sizes="156px"
-                    style={{ objectFit: "cover" }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 10,
-                      bottom: 10,
-                      padding: "4px 8px",
-                      borderRadius: 9999,
-                      background: "rgba(15,23,42,0.75)",
-                      color: "#f9fafb",
-                      fontFamily: "Noto Sans KR, system-ui, sans-serif",
-                      fontSize: 11,
-                    }}
-                  >
-                    {card.name}
-                  </div>
+                  {card.name}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
 
           {/* 페이지 점 3개 */}
@@ -533,7 +516,7 @@ export default function SearchPage() {
               />
             ))}
           </div>
-        </>
+        </div>
       )}
 
       {/* 🔥 확대 모드 + 애니메이션 */}
@@ -866,7 +849,9 @@ export default function SearchPage() {
                                 background:
                                   reserveTime === t ? "#2563eb" : "#e5e7eb",
                                 color:
-                                  reserveTime === t ? "#ffffff" : "#111827",
+                                  reserveTime === t
+                                    ? "#ffffff"
+                                    : "#111827",
                                 textAlign: "center",
                               }}
                             >
