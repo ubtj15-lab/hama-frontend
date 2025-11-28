@@ -1,32 +1,40 @@
+// app/components/HeaderMenu.tsx
 "use client";
 
-import { Button } from "@/components/ui/button";
+import React from "react";
 
-const hamaUser = typeof window !== "undefined"
-  ? JSON.parse(localStorage.getItem("hamaUser") || "null")
-  : null;
+// 아주 심플한 버튼 컴포넌트 (shadcn 없이)
+type SimpleButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>;
 
-const isLoggedIn = Boolean(hamaUser?.nickname);
-
-export default function HeaderMenu() {
-  const handleClick = () => {
-    if (isLoggedIn) {
-      // 1) 브라우저에 저장된 유저 정보 삭제
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("hamaUser");
-      }
-
-      // 2) 서버 로그아웃(지금은 그냥 메인으로 redirect만 함)
-      window.location.href = "/api/auth/kakao/logout";
-    } else {
-      // 로그인 시작
-      window.location.href = "/api/auth/kakao/login";
-    }
-  };
-
+function SimpleButton({ className = "", ...props }: SimpleButtonProps) {
   return (
-    <Button onClick={handleClick}>
-      {isLoggedIn ? "로그아웃" : "카카오로 로그인"}
-    </Button>
+    <button
+      {...props}
+      className={
+        "rounded-full px-3 py-1 text-sm font-medium bg-white text-slate-900 shadow " +
+        className
+      }
+    />
+  );
+}
+
+// 하마 상단 메뉴 (필요하면 나중에 더 예쁘게 꾸미자)
+export default function HeaderMenu() {
+  return (
+    <header
+      style={{
+        width: "100%",
+        maxWidth: 430,
+        margin: "0 auto",
+        padding: "12px 16px",
+        boxSizing: "border-box",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+      }}
+    >
+      <div style={{ fontSize: 16, fontWeight: 700 }}>HAMA</div>
+      <SimpleButton>메뉴</SimpleButton>
+    </header>
   );
 }
