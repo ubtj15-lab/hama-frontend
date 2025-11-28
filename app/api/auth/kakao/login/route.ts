@@ -1,10 +1,11 @@
 // app/api/auth/kakao/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const REST_API_KEY = process.env.KAKAO_REST_API_KEY!;
-const REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI!;
+const REST_API_KEY = process.env.KAKAO_REST_API_KEY;
+const REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI;
 
 export async function GET(req: NextRequest) {
+  // 여기서 env가 비어 있으면 "Kakao env not set" 반환
   if (!REST_API_KEY || !REDIRECT_URI) {
     console.error("Kakao env missing", { REST_API_KEY, REDIRECT_URI });
     return new NextResponse("Kakao env not set", { status: 500 });
