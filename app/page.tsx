@@ -61,6 +61,7 @@ interface PointLog {
 
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
+const LOGIN_FLAG_KEY = "hamaLoggedIn"; // 🔐 로그인 여부 플래그
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") {
@@ -122,13 +123,39 @@ export default function HomePage() {
   // 🔹 유저 (닉네임 + 포인트)
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
 
+  // 🔹 로그인 여부를 따로 관리 (닉네임 말고 플래그 기준)
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
   // ======================
-  // 🧩 초기 유저 정보 로드
-  // ======================
-  useEffect(() => {
+// 🧩 초기 유저 정보 + 로그인 플래그 로드 (뒤로가기/포커스에도 동기화)
+// ======================
+useEffect(() => {
+  const syncLoginState = () => {
+    if (typeof window === "undefined") return;
+
+    // 유저 정보 + 로그인 플래그를 항상 localStorage 기준으로 맞추기
     const loaded = loadUserFromStorage();
     setUser(loaded);
-  }, []);
+
+    const flag = window.localStorage.getItem(LOGIN_FLAG_KEY);
+    setIsLoggedIn(flag === "1");
+  };
+
+  // 처음 로드할 때 한 번
+  syncLoginState();
+
+  // 뒤로가기(bfcache 복원), 탭 포커스, 다른 탭에서 로그인 변경까지 다 잡기
+  window.addEventListener("pageshow", syncLoginState);
+  window.addEventListener("focus", syncLoginState);
+  window.addEventListener("storage", syncLoginState);
+
+  return () => {
+    window.removeEventListener("pageshow", syncLoginState);
+    window.removeEventListener("focus", syncLoginState);
+    window.removeEventListener("storage", syncLoginState);
+  };
+}, []);
+
 
   // ======================
   // 💰 포인트 적립 함수
@@ -256,12 +283,38 @@ export default function HomePage() {
     return () => window.removeEventListener("resize", handler);
   }, [menuOpen]);
 
-  // 🟡 카카오 로그인 (백엔드 연동)
-  const handleKakaoLogin = () => {
-    const backendBaseUrl =
-      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:4000";
-    const loginUrl = `${backendBaseUrl}/auth/kakao/login`;
-    window.location.href = loginUrl;
+  // ============================
+  // 🟡 카카오 로그인 / 로그아웃 버튼
+  // ============================
+  const handleKakaoButtonClick = () => {
+    if (isLoggedIn) {
+      // 🔴 로그아웃: 브라우저 쪽 정보 다 정리
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(USER_KEY);
+        window.localStorage.removeItem(LOG_KEY);
+        window.localStorage.removeItem(LOGIN_FLAG_KEY);
+      }
+      setUser({ nickname: "게스트", points: 0 });
+      setIsLoggedIn(false);
+
+      // 서버 로그아웃 라우트로 이동 (Next API)
+      window.location.href = "/api/auth/kakao/logout";
+    } else {
+      // 🟢 로그인: 앱 기준으로는 로그인 상태로 표시
+      if (typeof window !== "undefined") {
+        const newUser: HamaUser = {
+          nickname: "카카오 사용자", // 나중에 카카오 닉네임으로 바꿀 수 있음
+          points: user.points,
+        };
+        window.localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+        window.localStorage.setItem(LOGIN_FLAG_KEY, "1");
+        setUser(newUser);
+        setIsLoggedIn(true);
+      }
+
+      // 카카오 로그인 (Next API)
+      window.location.href = "/api/auth/kakao/login";
+    }
   };
 
   const goToPointHistory = () => {
@@ -395,8 +448,9 @@ export default function HomePage() {
               <div
                 style={{ display: "flex", flexDirection: "column", gap: 8 }}
               >
+                {/* 🔐 로그인 / 로그아웃 토글 버튼 */}
                 <button
-                  onClick={handleKakaoLogin}
+                  onClick={handleKakaoButtonClick}
                   style={{
                     width: "100%",
                     padding: "8px 10px",
@@ -409,7 +463,7 @@ export default function HomePage() {
                     cursor: "pointer",
                   }}
                 >
-                  카카오로 로그인
+                  {isLoggedIn ? "로그아웃" : "카카오로 로그인"}
                 </button>
 
                 <button
