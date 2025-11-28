@@ -1,25 +1,21 @@
 // app/api/auth/kakao/login/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function GET(req: NextRequest) {
-  // 🔹 환경변수는 요청이 들어올 때마다 바로 읽자
-  const REST_API_KEY = process.env.KAKAO_REST_API_KEY;
+export async function GET() {
+  const REST_KEY = process.env.KAKAO_REST_API_KEY;
   const REDIRECT_URI = process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI;
 
-  // 🔍 디버깅용: 뭐가 없는지 확인
-  if (!REST_API_KEY || !REDIRECT_URI) {
-    const msg = `Kakao env not set: REST_API_KEY=${
-      REST_API_KEY ? "OK" : "MISSING"
-    }, REDIRECT_URI=${REDIRECT_URI ? "OK" : "MISSING"}`;
-    console.error(msg);
-    return new NextResponse(msg, { status: 500 });
+  if (!REST_KEY || !REDIRECT_URI) {
+    return new Response("Kakao env not set", { status: 500 });
   }
 
-  const kakaoUrl =
-    "https://kauth.kakao.com/oauth/authorize" +
-    `?client_id=${REST_API_KEY}` +
-    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-    `&response_type=code`;
+  const kakaoAuthUrl =
+    "https://kauth.kakao.com/oauth/authorize?" +
+    new URLSearchParams({
+      client_id: REST_KEY,          // ★ 반드시 REST API 키
+      redirect_uri: REDIRECT_URI,   // ★ 위 환경변수와 동일
+      response_type: "code",
+    }).toString();
 
-  return NextResponse.redirect(kakaoUrl);
+  return NextResponse.redirect(kakaoAuthUrl);
 }
