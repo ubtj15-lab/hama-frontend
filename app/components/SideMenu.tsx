@@ -1,85 +1,157 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-interface HamaUser {
-  nickname: string;
-  point: number;
+interface SideMenuProps {
+  isOpen: boolean;
+  onClose: () => void;
+  isLoggedIn: boolean;
+  onLogin: () => void;
+  onLogout: () => void;
 }
 
-export default function SideMenu() {
+export default function SideMenu({
+  isOpen,
+  onClose,
+  isLoggedIn,
+  onLogin,
+  onLogout,
+}: SideMenuProps) {
   const router = useRouter();
 
-  const [hamaUser, setHamaUser] = useState<HamaUser | null>(null);
-
-  // 브라우저에 저장된 하마 유저 정보 가져오기
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    try {
-      const raw = localStorage.getItem("hamaUser");
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as HamaUser;
-      setHamaUser(parsed);
-    } catch {
-      // 깨진 데이터면 그냥 무시
-      setHamaUser(null);
-    }
-  }, []);
-
-  const isLoggedIn = Boolean(hamaUser?.nickname);
-
-  const handlePrimaryButtonClick = () => {
-    if (isLoggedIn) {
-      // 로그아웃: 저장된 유저 정보 제거 + 로그아웃 API로 이동
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("hamaUser");
-      }
-      router.push("/api/auth/kakao/logout");
-    } else {
-      // 로그인 시작
-      router.push("/api/auth/kakao/login");
-    }
-  };
-
-  const nicknameLabel = isLoggedIn
-    ? `${hamaUser?.nickname} 님`
-    : "게스트 님";
-
-  const pointLabel = isLoggedIn
-    ? (hamaUser?.point ?? 0).toLocaleString() + " P"
-    : "0 P";
-
   return (
-    <div style={{ padding: 16 }}>
-      {/* 상단 인사 영역 */}
-      <div style={{ marginBottom: 12 }}>
-        <div>안녕하세요 👋</div>
-        <div style={{ fontWeight: 700, fontSize: 18 }}>{nicknameLabel}</div>
-        <div style={{ fontSize: 13, marginTop: 4 }}>포인트✨</div>
-        <span style={{ fontWeight: 700 }}>{pointLabel}</span>
-      </div>
-
-      {/* 메인 버튼 (로그인 / 로그아웃) */}
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: isOpen ? 0 : "-100%",
+        width: "260px",
+        height: "100vh",
+        background: "#ffffff",
+        boxShadow: "2px 0 18px rgba(0,0,0,0.15)",
+        transition: "left 0.28s ease",
+        zIndex: 9999,
+        padding: "24px 18px",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* 닫기 버튼 */}
       <button
-        onClick={handlePrimaryButtonClick}
+        onClick={onClose}
         style={{
-          width: "100%",
-          height: 48,
-          borderRadius: 999,
+          background: "none",
           border: "none",
-          background: "#FEE500",
-          fontWeight: 700,
-          fontSize: 15,
+          fontSize: 22,
           cursor: "pointer",
+          marginBottom: 28,
         }}
       >
-        {isLoggedIn ? "로그아웃" : "카카오로 로그인"}
+        ✕
       </button>
 
-      {/* 아래 나머지 메뉴는 기존 그대로 두면 됨 */}
-      {/* 필요하면 여기 밑에 '오늘의 추천 보기', '내 예약', '최근 본 매장' 같은 기존 JSX 계속 이어서 쓰기 */}
+      {/* 메뉴 리스트 */}
+      <ul
+        style={{
+          listStyle: "none",
+          padding: 0,
+          margin: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          fontSize: 15,
+        }}
+      >
+        {/* 베타 안내 사항 */}
+        <li>
+          <Link
+            href="/beta-info"
+            onClick={onClose}
+            style={{
+              display: "block",
+              padding: "10px 0",
+              color: "#1f2937",
+              textDecoration: "none",
+            }}
+          >
+            🦛 베타 안내
+          </Link>
+        </li>
+
+        {/* 마이페이지 */}
+        <li>
+          <Link
+            href="/mypage"
+            onClick={onClose}
+            style={{
+              display: "block",
+              padding: "10px 0",
+              color: "#1f2937",
+              textDecoration: "none",
+            }}
+          >
+            👤 마이페이지
+          </Link>
+        </li>
+
+        {/* 설정 */}
+        <li>
+          <Link
+            href="/settings"
+            onClick={onClose}
+            style={{
+              display: "block",
+              padding: "10px 0",
+              color: "#1f2937",
+              textDecoration: "none",
+            }}
+          >
+            ⚙️ 설정
+          </Link>
+        </li>
+
+        {/* 로그인 상태에 따른 버튼 */}
+        <li>
+          {isLoggedIn ? (
+            <button
+              onClick={() => {
+                onLogout();
+                onClose();
+              }}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "10px 0",
+                background: "none",
+                border: "none",
+                color: "#1f2937",
+                cursor: "pointer",
+              }}
+            >
+              🚪 로그아웃
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                onLogin();
+                onClose();
+              }}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "10px 0",
+                background: "none",
+                border: "none",
+                color: "#1f2937",
+                cursor: "pointer",
+              }}
+            >
+              💛 카카오로 로그인
+            </button>
+          )}
+        </li>
+      </ul>
     </div>
   );
 }

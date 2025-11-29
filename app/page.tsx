@@ -127,35 +127,33 @@ export default function HomePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // ======================
-// 🧩 초기 유저 정보 + 로그인 플래그 로드 (뒤로가기/포커스에도 동기화)
-// ======================
-useEffect(() => {
-  const syncLoginState = () => {
-    if (typeof window === "undefined") return;
+  // 🧩 초기 유저 정보 + 로그인 플래그 로드
+  // ======================
+  useEffect(() => {
+    const syncLoginState = () => {
+      if (typeof window === "undefined") return;
 
-    // 유저 정보 + 로그인 플래그를 항상 localStorage 기준으로 맞추기
-    const loaded = loadUserFromStorage();
-    setUser(loaded);
+      const loaded = loadUserFromStorage();
+      setUser(loaded);
 
-    const flag = window.localStorage.getItem(LOGIN_FLAG_KEY);
-    setIsLoggedIn(flag === "1");
-  };
+      const flag = window.localStorage.getItem(LOGIN_FLAG_KEY);
+      setIsLoggedIn(flag === "1");
+    };
 
-  // 처음 로드할 때 한 번
-  syncLoginState();
+    // 처음 로드 시
+    syncLoginState();
 
-  // 뒤로가기(bfcache 복원), 탭 포커스, 다른 탭에서 로그인 변경까지 다 잡기
-  window.addEventListener("pageshow", syncLoginState);
-  window.addEventListener("focus", syncLoginState);
-  window.addEventListener("storage", syncLoginState);
+    // 뒤로가기(bfcache), 포커스, 다른 탭 변경까지
+    window.addEventListener("pageshow", syncLoginState);
+    window.addEventListener("focus", syncLoginState);
+    window.addEventListener("storage", syncLoginState);
 
-  return () => {
-    window.removeEventListener("pageshow", syncLoginState);
-    window.removeEventListener("focus", syncLoginState);
-    window.removeEventListener("storage", syncLoginState);
-  };
-}, []);
-
+    return () => {
+      window.removeEventListener("pageshow", syncLoginState);
+      window.removeEventListener("focus", syncLoginState);
+      window.removeEventListener("storage", syncLoginState);
+    };
+  }, []);
 
   // ======================
   // 💰 포인트 적립 함수
@@ -214,7 +212,6 @@ useEffect(() => {
     const keyword = (text ?? query).trim();
     if (!keyword) return;
 
-    // 🔍 카테고리 감지
     const detectedCategory = inferCategory(keyword);
 
     if (detectedCategory) {
@@ -223,14 +220,13 @@ useEffect(() => {
       return;
     }
 
-    // 🔍 일반 검색
     addPoints(5, "검색");
     router.push(`/search?query=${encodeURIComponent(keyword)}`);
   };
 
   // ⌨️ 엔터(이동) 누를 때도 검색 실행
   const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); // 새로고침 막기
+    e.preventDefault();
     handleSearch();
   };
 
@@ -248,7 +244,7 @@ useEffect(() => {
       try {
         recognition.start();
       } catch {
-        // 이미 실행 중일 때 start() 호출 에러 방지
+        // 이미 실행 중일 때 start 에러 방지
       }
     }
   };
@@ -303,7 +299,7 @@ useEffect(() => {
       // 🟢 로그인: 앱 기준으로는 로그인 상태로 표시
       if (typeof window !== "undefined") {
         const newUser: HamaUser = {
-          nickname: "카카오 사용자", // 나중에 카카오 닉네임으로 바꿀 수 있음
+          nickname: "카카오 사용자", // 나중에 카카오 닉네임으로 교체 가능
           points: user.points,
         };
         window.localStorage.setItem(USER_KEY, JSON.stringify(newUser));
@@ -335,6 +331,12 @@ useEffect(() => {
   const goToSettings = () => {
     alert("설정 화면도 곧 붙일 거예요 🔧");
     setMenuOpen(false);
+  };
+
+  // 🆕 베타 안내 페이지 이동
+  const goToBetaInfo = () => {
+    setMenuOpen(false);
+    router.push("/beta-info");
   };
 
   return (
@@ -501,6 +503,25 @@ useEffect(() => {
                   }}
                 >
                   오늘의 추천 보기
+                </button>
+
+                {/* 🆕 베타 안내 버튼 */}
+                <button
+                  onClick={goToBetaInfo}
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #E5E7EB",
+                    background: "#EEF2FF",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#111827",
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  🦛 베타 안내 보기
                 </button>
 
                 <button
@@ -709,8 +730,7 @@ useEffect(() => {
               cursor: "pointer",
               transition: "background 0.2s ease, transform 0.1s ease",
               transform: isListening ? "scale(1.04)" : "scale(1)",
-              /** 🔥 피드백 버튼과 겹치지 않게 여백 확보 */
-              marginBottom: 110,
+              marginBottom: 110, // 피드백 버튼과 간격
             }}
           >
             <span
