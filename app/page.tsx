@@ -6,6 +6,8 @@ import Image from "next/image";
 
 // 🔹 피드백 FAB
 import FeedbackFab from "@/components/FeedbackFab";
+// 🔹 공통 로그 함수
+import { logEvent } from "../lib/logEvent";
 
 // ---- Web Speech API 타입 선언 (빌드 에러 방지) ----
 declare global {
@@ -123,7 +125,7 @@ export default function HomePage() {
   // 🔹 유저 (닉네임 + 포인트)
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
 
-  // 🔹 로그인 여부를 따로 관리 (닉네임 말고 플래그 기준)
+  // 🔹 로그인 여부
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // ======================
@@ -140,10 +142,13 @@ export default function HomePage() {
       setIsLoggedIn(flag === "1");
     };
 
-    // 처음 로드 시
+    // 세션 시작 로그
+    logEvent("session_start", { page: "home" });
+    // 페이지 뷰 로그
+    logEvent("page_view", { page: "home" });
+
     syncLoginState();
 
-    // 뒤로가기(bfcache), 포커스, 다른 탭 변경까지
     window.addEventListener("pageshow", syncLoginState);
     window.addEventListener("focus", syncLoginState);
     window.addEventListener("storage", syncLoginState);
@@ -179,6 +184,7 @@ export default function HomePage() {
 
     if (!SpeechRecognition) {
       console.warn("이 브라우저는 음성 인식을 지원하지 않아요 ㅠㅠ");
+      logEvent("voice_unsupported", { browser: navigator.userAgent });
       return;
     }
 
@@ -189,11 +195,15 @@ export default function HomePage() {
 
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
+    recognition.onerror = (event: any) => {
+      setIsListening(false);
+      logEvent("voice_error", { error: event.error });
+    };
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript.trim();
       setQuery(transcript);
+      logEvent("voice_success", { text: transcript });
       handleSearch(transcript); // 음성 결과로 바로 검색
       addPoints(10, "음성 검색");
     };
@@ -216,11 +226,17 @@ export default function HomePage() {
 
     if (detectedCategory) {
       addPoints(5, "카테고리 검색");
+      logEvent("search", {
+        query: keyword,
+        mode: "category",
+        category: detectedCategory,
+      });
       router.push(`/search?category=${detectedCategory}`);
       return;
     }
 
     addPoints(5, "검색");
+    logEvent("search", { query: keyword, mode: "text" });
     router.push(`/search?query=${encodeURIComponent(keyword)}`);
   };
 
@@ -232,9 +248,12 @@ export default function HomePage() {
 
   // 🎙 마이크 클릭
   const handleMicClick = () => {
+    logEvent("mic_click", { page: "home" });
+
     const recognition = recognitionRef.current;
     if (!recognition) {
       alert("이 브라우저는 음성 인식을 지원하지 않아요 ㅠㅠ (크롬 권장)");
+      logEvent("voice_unsupported", { browser: navigator.userAgent });
       return;
     }
 
@@ -251,7 +270,13 @@ export default function HomePage() {
 
   // 🍔 메뉴 버튼 클릭
   const handleMenuClick = () => {
-    setMenuOpen((prev) => !prev);
+    setMenuOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        logEvent("page_view", { page: "menu" });
+      }
+      return next;
+    });
   };
 
   // 메뉴 위치 업데이트
@@ -284,7 +309,9 @@ export default function HomePage() {
   // ============================
   const handleKakaoButtonClick = () => {
     if (isLoggedIn) {
-      // 🔴 로그아웃: 브라우저 쪽 정보 다 정리
+      // 🔴 로그아웃
+      logEvent("logout", { page: "home" });
+
       if (typeof window !== "undefined") {
         window.localStorage.removeItem(USER_KEY);
         window.localStorage.removeItem(LOG_KEY);
@@ -293,13 +320,14 @@ export default function HomePage() {
       setUser({ nickname: "게스트", points: 0 });
       setIsLoggedIn(false);
 
-      // 서버 로그아웃 라우트로 이동 (Next API)
       window.location.href = "/api/auth/kakao/logout";
     } else {
-      // 🟢 로그인: 앱 기준으로는 로그인 상태로 표시
+      // 🟢 로그인 시작
+      logEvent("login_start", { page: "home" });
+
       if (typeof window !== "undefined") {
         const newUser: HamaUser = {
-          nickname: "카카오 사용자", // 나중에 카카오 닉네임으로 교체 가능
+          nickname: "카카오 사용자",
           points: user.points,
         };
         window.localStorage.setItem(USER_KEY, JSON.stringify(newUser));
@@ -308,27 +336,30 @@ export default function HomePage() {
         setIsLoggedIn(true);
       }
 
-      // 카카오 로그인 (Next API)
       window.location.href = "/api/auth/kakao/login";
     }
   };
 
   const goToPointHistory = () => {
     setMenuOpen(false);
+    logEvent("page_view", { page: "point_history" });
     router.push("/mypage/points");
   };
 
   const goToRecentStores = () => {
+    logEvent("page_view", { page: "recent_stores" });
     alert("최근 본 매장은 다음 버전에서 열릴 예정이에요!");
     setMenuOpen(false);
   };
 
   const goToMyReservations = () => {
+    logEvent("page_view", { page: "my_reservations" });
     alert("내 예약 보기 기능은 베타에서 준비 중이에요 🙂");
     setMenuOpen(false);
   };
 
   const goToSettings = () => {
+    logEvent("page_view", { page: "settings" });
     alert("설정 화면도 곧 붙일 거예요 🔧");
     setMenuOpen(false);
   };
@@ -336,6 +367,7 @@ export default function HomePage() {
   // 🆕 베타 안내 페이지 이동
   const goToBetaInfo = () => {
     setMenuOpen(false);
+    logEvent("page_view", { page: "beta_info" });
     router.push("/beta-info");
   };
 
@@ -487,6 +519,7 @@ export default function HomePage() {
                 <button
                   onClick={() => {
                     setMenuOpen(false);
+                    logEvent("page_view", { page: "recommend" });
                     router.push("/recommend");
                   }}
                   style={{
@@ -616,7 +649,7 @@ export default function HomePage() {
             />
           </button>
 
-          {/* 검색 인풋 (Enter / 이동 키로도 검색) */}
+          {/* 검색 인풋 */}
           <form
             onSubmit={handleSearchSubmit}
             style={{
@@ -692,7 +725,7 @@ export default function HomePage() {
             }}
           >
             <Image
-              src="/images/hama.png" // public/images/hama.png 필요
+              src="/images/hama.png"
               alt="하마"
               fill
               sizes="220px"
@@ -730,7 +763,7 @@ export default function HomePage() {
               cursor: "pointer",
               transition: "background 0.2s ease, transform 0.1s ease",
               transform: isListening ? "scale(1.04)" : "scale(1)",
-              marginBottom: 110, // 피드백 버튼과 간격
+              marginBottom: 110,
             }}
           >
             <span
