@@ -12,7 +12,8 @@ export type HamaLogType =
   | "login_start"
   | "logout"
   | "error"
-  | "custom";
+  | "custom"
+  | "feedback"; // ✅ 이 줄 추가
 
 export async function logEvent(type: HamaLogType, data: any = {}) {
   try {
