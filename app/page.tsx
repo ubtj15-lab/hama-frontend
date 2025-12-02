@@ -4,9 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-// 🔹 피드백 FAB
 import FeedbackFab from "@/components/FeedbackFab";
-// 🔹 공통 로그 함수
 import { logEvent } from "@/lib/logEvent";
 
 // ---- Web Speech API 타입 선언 (빌드 에러 방지) ----

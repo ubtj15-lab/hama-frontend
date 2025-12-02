@@ -1,4 +1,4 @@
-// /lib/logEvent.ts
+// lib/logEvent.ts
 
 export type HamaLogType =
   | "page_view"

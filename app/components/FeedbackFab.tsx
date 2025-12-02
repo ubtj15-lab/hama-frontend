@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { logEvent } from "../lib/logEvent";
+import { logEvent } from "@/lib/logEvent";
 
 interface FeedbackFabProps {
   page?: string;
