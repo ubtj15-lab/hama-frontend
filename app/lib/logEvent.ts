@@ -1,5 +1,4 @@
-// lib/logEvent.ts
-
+// app/lib/logEvent.ts
 export type HamaLogType =
   | "page_view"
   | "voice_success"
