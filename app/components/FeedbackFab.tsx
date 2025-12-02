@@ -2,10 +2,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { logEvent } from "@/lib/logEvent";
+import { logEvent } from "../lib/logEvent";
 
 interface FeedbackFabProps {
-  page?: string; // 어디서 열렸는지(옵션)
+  page?: string;
 }
 
 export default function FeedbackFab({ page = "home" }: FeedbackFabProps) {
@@ -13,171 +13,123 @@ export default function FeedbackFab({ page = "home" }: FeedbackFabProps) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 
+  // 🔹 피드백 창 열기
   const handleOpen = () => {
     setOpen(true);
-    logEvent("page_view", { page: "feedback_opened", from: page });
   };
 
+  // 🔹 피드백 창 닫기
   const handleClose = () => {
     setOpen(false);
   };
 
+  // 🔹 피드백 제출
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = message.trim();
     if (!text) return;
 
     setSending(true);
+
     try {
-      // 🔹 피드백 내용을 Supabase log_events에 저장
-      await logEvent("custom", {
-        kind: "feedback",
-        from: page,
+      // 🟦 Supabase log_events에 저장되는 기록
+      await logEvent("feedback", {
+        page,
         message: text,
       });
-
-      setMessage("");
-      setOpen(false);
-      alert("피드백이 전송되었어요. 고마워! 🙌");
     } catch (err) {
-      console.error("피드백 전송 실패:", err);
-      alert("피드백 전송 중 오류가 났어요. 나중에 다시 시도해줘 ㅠㅠ");
-    } finally {
-      setSending(false);
+      console.error("피드백 저장 실패:", err);
     }
+
+    setMessage("");
+    setOpen(false);
+    setSending(false);
+
+    alert("피드백이 전송되었어요. 고마워! 🙌");
   };
 
   return (
     <>
-      {/* 오른쪽 아래 둥둥 떠 있는 버튼 */}
+      {/* 🔵 우측 하단 floating button */}
       <button
-        type="button"
         onClick={handleOpen}
         style={{
           position: "fixed",
-          right: 20,
-          bottom: 20,
-          width: 52,
-          height: 52,
+          bottom: 24,
+          right: 24,
+          width: 56,
+          height: 56,
           borderRadius: "50%",
+          background: "#2563EB",
+          color: "white",
           border: "none",
-          background:
-            "linear-gradient(135deg, rgba(37,99,235,1), rgba(59,130,246,1))",
-          boxShadow: "0 12px 24px rgba(15,23,42,0.3)",
-          color: "#fff",
           fontSize: 24,
+          boxShadow: "0 6px 20px rgba(0,0,0,0.2)",
           cursor: "pointer",
           zIndex: 2000,
         }}
-        aria-label="하마에게 피드백 보내기"
       >
         💬
       </button>
 
-      {/* 모달 */}
+      {/* 🔵 피드백 모달 */}
       {open && (
         <div
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(15,23,42,0.35)",
+            background: "rgba(0,0,0,0.4)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 2100,
+            zIndex: 3000,
           }}
           onClick={handleClose}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: "100%",
-              maxWidth: 360,
-              borderRadius: 18,
-              background: "#ffffff",
+              width: "90%",
+              maxWidth: 350,
+              background: "white",
+              borderRadius: 16,
               padding: 20,
-              boxShadow:
-                "0 18px 40px rgba(15,23,42,0.35), 0 0 0 1px rgba(148,163,184,0.4)",
             }}
           >
-            <h2
-              style={{
-                fontSize: 16,
-                fontWeight: 700,
-                marginBottom: 8,
-              }}
-            >
-              하마에게 피드백 보내기
-            </h2>
-            <p
-              style={{
-                fontSize: 13,
-                color: "#6b7280",
-                marginBottom: 12,
-              }}
-            >
-              불편했던 점이나 있었으면 하는 기능을 자유롭게 적어줘.
-            </p>
+            <h3 style={{ marginBottom: 12 }}>피드백 보내기</h3>
 
             <form onSubmit={handleSubmit}>
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                rows={4}
-                placeholder="예: 검색 결과에 키즈카페도 같이 나오면 좋겠어요!"
+                placeholder="하마에게 남기고 싶은 의견을 적어주세요!"
                 style={{
                   width: "100%",
-                  borderRadius: 12,
-                  border: "1px solid #e5e7eb",
+                  height: 100,
                   padding: 10,
-                  fontSize: 13,
-                  resize: "none",
-                  boxSizing: "border-box",
+                  borderRadius: 8,
+                  border: "1px solid #ccc",
                   marginBottom: 12,
-                  outline: "none",
+                  fontSize: 14,
                 }}
               />
 
-              <div
+              <button
+                type="submit"
+                disabled={sending}
                 style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: 8,
+                  width: "100%",
+                  background: "#2563EB",
+                  color: "white",
+                  padding: "10px 0",
+                  borderRadius: 8,
+                  border: "none",
+                  fontSize: 16,
+                  cursor: "pointer",
                 }}
               >
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 999,
-                    border: "1px solid #e5e7eb",
-                    background: "#ffffff",
-                    fontSize: 13,
-                    cursor: "pointer",
-                  }}
-                >
-                  닫기
-                </button>
-                <button
-                  type="submit"
-                  disabled={sending}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: 999,
-                    border: "none",
-                    background:
-                      "linear-gradient(135deg, #2563eb, #4f46e5)",
-                    color: "#ffffff",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    opacity: sending ? 0.7 : 1,
-                  }}
-                >
-                  {sending ? "보내는 중..." : "보내기"}
-                </button>
-              </div>
+                {sending ? "전송 중..." : "전송하기"}
+              </button>
             </form>
           </div>
         </div>
