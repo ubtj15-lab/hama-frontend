@@ -3,29 +3,25 @@
 import React, { useState } from "react";
 import { logEvent } from "../lib/logEvent";
 
-type FeedbackFabProps = {
-  page?: string; // 현재 페이지 이름 (home / search 등)
-};
-
-export default function FeedbackFab({ page = "home" }: FeedbackFabProps) {
+export default function FeedbackFab({ page = "home" }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [category, setCategory] = useState("bug");
   const [sending, setSending] = useState(false);
 
   const currentPage = page ?? "home";
 
-  // ◆ 피드백 창 열기
+  // ◆ 피드백창 열기
   const handleOpen = () => {
     setOpen(true);
 
-    // 피드백 폼 열렸다는 로그
     logEvent("custom", {
       kind: "feedback_open",
       page: currentPage,
     });
   };
 
-  // ◆ 피드백 창 닫기
+  // ◆ 닫기
   const handleClose = () => {
     setOpen(false);
   };
@@ -33,84 +29,86 @@ export default function FeedbackFab({ page = "home" }: FeedbackFabProps) {
   // ◆ 피드백 제출
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const text = message.trim();
-    if (!text) return;
 
+    if (!message.trim()) return;
     setSending(true);
 
-    try {
-      // Supabase log_events에 저장되는 기록
-      await logEvent("feedback", {
-        page: currentPage,
-        message: text,
-      });
+    await logEvent("feedback", {
+      page: currentPage,
+      category,
+      message,
+    });
 
-      setMessage("");
-      setOpen(false);
-      alert("피드백이 전송됐어! 고마워 🙌");
-    } catch (err) {
-      console.error("피드백 전송 오류:", err);
-      alert("전송 중 오류가 났어. 잠시 후 다시 시도해줘!");
-    } finally {
-      setSending(false);
-    }
+    setSending(false);
+    setMessage("");
+    setOpen(false);
   };
 
   return (
     <>
-      {/* 플로팅 버튼(FAB) */}
+      {/* 🔵 파란색 FAB 버튼 */}
       <button
-        type="button"
         onClick={handleOpen}
-        className="fixed bottom-4 right-4 z-50 rounded-full border bg-white/90 px-4 py-3 text-sm shadow-lg backdrop-blur-sm"
+        className="fixed bottom-6 right-6 z-50 rounded-full bg-blue-600 px-5 py-3 text-white font-semibold shadow-xl hover:bg-blue-700 active:scale-95 transition"
       >
-        의견 보내기
+        피드백
       </button>
 
-      {/* 모달 오버레이 */}
+      {/* 모달 */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-semibold">
-                하마에게 피드백 보내기
-              </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-5 animate-fadeIn">
+            {/* 헤더 */}
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold">하마에게 피드백 보내기</h2>
               <button
-                type="button"
                 onClick={handleClose}
-                className="text-sm text-gray-500"
+                className="text-gray-500 hover:text-gray-700 text-sm"
               >
-                닫기
+                ✕
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <textarea
-                className="h-32 w-full resize-none rounded-xl border px-3 py-2 text-sm outline-none"
-                placeholder="불편했던 점, 좋았던 점, 개선 아이디어를 자유롭게 남겨줘 😊"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                disabled={sending}
-              />
+            <p className="text-sm text-gray-500 mb-3">
+              버그 / 개선점 / 칭찬 뭐든 편하게 적어줘 😊
+            </p>
 
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="rounded-xl border px-3 py-1.5 text-sm"
-                  disabled={sending}
-                >
-                  취소
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-blue-500 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
-                  disabled={sending}
-                >
-                  {sending ? "전송 중..." : "전송하기"}
-                </button>
-              </div>
-            </form>
+            {/* 카테고리 */}
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full mb-3 rounded-xl border p-2 text-sm"
+            >
+              <option value="bug">🐞 버그 / 오류 신고</option>
+              <option value="improve">✨ 개선 제안</option>
+              <option value="praise">💙 칭찬 / 좋은 점</option>
+            </select>
+
+            {/* 메시지 입력 */}
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="w-full h-28 border rounded-xl p-3 text-sm resize-none"
+              placeholder={`예) 검색 결과에 우리 동네 카페가 안 보여요!\n예) 예약 버튼 위치가 조금 헷갈려요.`}
+            />
+
+            {/* 버튼 */}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={handleClose}
+                className="px-4 py-2 rounded-xl border text-sm"
+              >
+                취소
+              </button>
+
+              <button
+                onClick={handleSubmit}
+                disabled={sending}
+                className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold disabled:opacity-50"
+              >
+                {sending ? "전송 중..." : "보내기"}
+              </button>
+            </div>
           </div>
         </div>
       )}
