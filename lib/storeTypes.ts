@@ -1,98 +1,77 @@
-// app/lib/storeTypes.ts
+// lib/storeTypes.ts
 
-export type StoreCategory = "restaurant" | "cafe" | "salon" | "activity" | string;
+// ✅ Supabase에서 읽어오는 원본 형태
+export interface StoreRecord {
+  id: string;
+  name: string;
+  category: string; // restaurant | cafe | salon | activity
+  area: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  phone: string | null;
+  image_url: string | null;
+  is_active: boolean;
 
+  // 추가 속성 (있으면 쓰고 없으면 null)
+  mood: string | null;
+  with_kids: boolean | null;
+  for_work: boolean | null;
+  price_level: number | null;
+  tags: string[] | null;
+
+  // 있으면 "0.5 km" 같은 힌트(없어도 됨)
+  distance_hint?: string | null;
+}
+
+// ✅ 홈 카드 타입 (UI에서 쓰는 형태)
 export interface HomeCard {
   id: string;
   name: string;
   categoryLabel: string;
 
-  imageUrl?: string | null;
+  // route.ts에서 계산해서 넣어줌
+  distanceKm: number;
 
-  distanceKm?: number | null;
+  moodText: string;
+  imageUrl: string;
+  quickQuery?: string;
 
+  // 길찾기/지도용
+  lat?: number | null;
+  lng?: number | null;
+
+  // 카드에서 참고
   mood?: string | null;
-  moodText?: string | null;
-
-  tags?: string[] | null;
-
   withKids?: boolean | null;
   forWork?: boolean | null;
   priceLevel?: number | null;
-
-  lat?: number | null;
-  lng?: number | null;
-
-  quickQuery?: string | null;
-}
-
-export interface StoreRecord {
-  id: string;
-  name: string;
-  category: StoreCategory;
-
-  area?: string | null;
-  address?: string | null;
-
-  lat?: number | null;
-  lng?: number | null;
-
-  phone?: string | null;
-  kakao_place_url?: string | null;
-
-  distance_hint?: string | null;
-  image_url?: string | null;
-
-  mood?: string | null;
-  with_kids?: boolean | null;
-  for_work?: boolean | null;
-  price_level?: number | null;
   tags?: string[] | null;
-
-  is_active?: boolean | null;
 }
 
-// ✅ 변환 함수는 여기 “하나만” 유지
-export function mapStoreToHomeCard(store: StoreRecord): HomeCard {
-  // distance_hint가 "0.5 km" 같은 형태면 숫자만 뽑아줌 (없으면 null)
-  let distanceKm: number | null = null;
-  if (store.distance_hint) {
-    const num = parseFloat(store.distance_hint);
-    if (!Number.isNaN(num)) distanceKm = num;
-  }
-
-  const categoryLabel =
-    store.category === "restaurant"
-      ? "식당"
-      : store.category === "cafe"
-      ? "카페"
-      : store.category === "salon"
-      ? "미용실"
-      : store.category === "activity"
-      ? "액티비티"
-      : String(store.category ?? "기타");
-
+/**
+ * ✅ DB(StoreRecord) → UI(HomeCard) 변환 (단 하나만 유지!)
+ * distanceKm은 외부에서 계산해서 넘겨줌
+ */
+export function mapStoreToHomeCard(store: StoreRecord, distanceKm = 0): HomeCard {
   return {
     id: store.id,
     name: store.name,
-    categoryLabel,
+    categoryLabel: store.category,
 
-    imageUrl: store.image_url ?? null,
+    distanceKm: typeof distanceKm === "number" && !Number.isNaN(distanceKm) ? distanceKm : 0,
 
-    distanceKm,
-
-    mood: store.mood ?? null,
-    moodText: store.mood ?? null,
-
-    tags: store.tags ?? [],
-
-    withKids: store.with_kids ?? null,
-    forWork: store.for_work ?? null,
-    priceLevel: typeof store.price_level === "number" ? store.price_level : null,
-
-    lat: typeof store.lat === "number" ? store.lat : null,
-    lng: typeof store.lng === "number" ? store.lng : null,
-
+    moodText: store.mood ?? "가까운 추천 매장",
+    imageUrl: store.image_url ?? "/images/sample-cafe-1.jpg",
     quickQuery: store.name,
+
+    lat: store.lat,
+    lng: store.lng,
+
+    mood: store.mood,
+    withKids: store.with_kids,
+    forWork: store.for_work,
+    priceLevel: store.price_level,
+    tags: store.tags ?? [],
   };
 }

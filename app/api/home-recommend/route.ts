@@ -1,79 +1,77 @@
-// app/api/home-recommend/route.ts
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { calcDistanceKm } from "@/lib/geo";
-import type { StoreRecord } from "@/lib/storeTypes";
-import { mapStoreToHomeCard } from "@/lib/storeMappers";
+// lib/storeTypes.ts
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY! // 네 프로젝트가 이렇게 쓰고 있으면 유지
-);
+// ✅ Supabase에서 읽어오는 원본 형태
+export interface StoreRecord {
+  id: string;
+  name: string;
+  category: string; // restaurant | cafe | salon | activity
+  area: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  phone: string | null;
+  image_url: string | null;
+  is_active: boolean;
 
-type TabKey = "all" | "restaurant" | "cafe" | "salon" | "activity";
+  // 추가 속성 (있으면 쓰고 없으면 null)
+  mood: string | null;
+  with_kids: boolean | null;
+  for_work: boolean | null;
+  price_level: number | null;
+  tags: string[] | null;
 
-const COUNT_BY_TAB: Record<TabKey, number> = {
-  all: 12,
-  restaurant: 3,
-  cafe: 3,
-  salon: 3,
-  activity: 3,
-};
-
-// 배열 셔플
-function shuffle<T>(arr: T[]) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+  // 있으면 "0.5 km" 같은 힌트(없어도 됨)
+  distance_hint?: string | null;
 }
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+// ✅ 홈 카드 타입 (UI에서 쓰는 형태)
+export interface HomeCard {
+  id: string;
+  name: string;
+  categoryLabel: string;
 
-  const tab = (searchParams.get("tab") ?? "all") as TabKey;
-  const limit = COUNT_BY_TAB[tab] ?? 12;
+  // route.ts에서 계산해서 넣어줌
+  distanceKm: number;
 
-  const lat = Number(searchParams.get("lat") ?? "0");
-  const lng = Number(searchParams.get("lng") ?? "0");
-  const hasLoc = !!lat && !!lng;
+  moodText: string;
+  imageUrl: string;
+  quickQuery?: string;
 
-  // 1) 먼저 넉넉히 가져와서(랜덤용) 탭별 필터 & 셔플
-  //    850개면 전부 가져오면 비싸니까 200~300 정도만 샘플링
-  //    (나중에 RPC/random 샘플링으로 최적화 가능)
-  let q = supabase
-    .from("stores")
-    .select(
-      "id,name,category,lat,lng,address,phone,image_url,is_active,mood,with_kids,for_work,price_level,tags"
-    )
-    .eq("is_active", true)
-    .limit(300);
+  // 길찾기/지도용
+  lat?: number | null;
+  lng?: number | null;
 
-  if (tab !== "all") {
-    q = q.eq("category", tab);
-  }
+  // 카드에서 참고
+  mood?: string | null;
+  withKids?: boolean | null;
+  forWork?: boolean | null;
+  priceLevel?: number | null;
+  tags?: string[] | null;
+}
 
-  const { data, error } = await q;
+/**
+ * ✅ DB(StoreRecord) → UI(HomeCard) 변환 (단 하나만 유지!)
+ * distanceKm은 외부에서 계산해서 넘겨줌
+ */
+export function mapStoreToHomeCard(store: StoreRecord, distanceKm = 0): HomeCard {
+  return {
+    id: store.id,
+    name: store.name,
+    categoryLabel: store.category,
 
-  if (error || !data) {
-    console.error("home-recommend error:", error);
-    return NextResponse.json({ items: [], error: "failed_to_load" }, { status: 500 });
-  }
+    distanceKm: typeof distanceKm === "number" && !Number.isNaN(distanceKm) ? distanceKm : 0,
 
-  const stores = data as StoreRecord[];
+    moodText: store.mood ?? "가까운 추천 매장",
+    imageUrl: store.image_url ?? "/images/sample-cafe-1.jpg",
+    quickQuery: store.name,
 
-  // 2) 랜덤 + limit
-  const picked = shuffle(stores).slice(0, limit);
+    lat: store.lat,
+    lng: store.lng,
 
-  // 3) 거리 계산 + 카드 변환
-  const cards = picked.map((store) => {
-    const distanceKm = hasLoc
-      ? calcDistanceKm(lat, lng, store.lat, store.lng)
-      : null;
-    return mapStoreToHomeCard(store, distanceKm ?? undefined);
-  });
-
-  return NextResponse.json({ items: cards });
+    mood: store.mood,
+    withKids: store.with_kids,
+    forWork: store.for_work,
+    priceLevel: store.price_level,
+    tags: store.tags ?? [],
+  };
 }
