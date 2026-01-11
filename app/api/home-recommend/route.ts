@@ -1,14 +1,26 @@
 // app/api/home-recommend/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { mapStoreToHomeCard, type StoreRecord } from "@/lib/storeTypes";
+import { calcDistanceKm } from "@/lib/geo";
+import type { StoreRecord } from "@/lib/storeTypes";
+import { mapStoreToHomeCard } from "@/lib/storeMappers";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
+  process.env.SUPABASE_ANON_KEY! // 네 프로젝트가 이렇게 쓰고 있으면 유지
 );
 
-// Fisher–Yates shuffle (진짜 랜덤 셔플)
+type TabKey = "all" | "restaurant" | "cafe" | "salon" | "activity";
+
+const COUNT_BY_TAB: Record<TabKey, number> = {
+  all: 12,
+  restaurant: 3,
+  cafe: 3,
+  salon: 3,
+  activity: 3,
+};
+
+// 배열 셔플
 function shuffle<T>(arr: T[]) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -21,40 +33,47 @@ function shuffle<T>(arr: T[]) {
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
-  // tab = all | restaurant | cafe | salon | activity
-  const tab = (searchParams.get("tab") ?? "all").toLowerCase();
+  const tab = (searchParams.get("tab") ?? "all") as TabKey;
+  const limit = COUNT_BY_TAB[tab] ?? 12;
 
-  // 개수: 종합 12개, 나머지 탭 3개
-  const limit = tab === "all" ? 12 : 3;
+  const lat = Number(searchParams.get("lat") ?? "0");
+  const lng = Number(searchParams.get("lng") ?? "0");
+  const hasLoc = !!lat && !!lng;
 
-  // DB 조회: active만, tab이 all이 아니면 category 필터
-  let query = supabase.from("stores").select("*").eq("is_active", true);
+  // 1) 먼저 넉넉히 가져와서(랜덤용) 탭별 필터 & 셔플
+  //    850개면 전부 가져오면 비싸니까 200~300 정도만 샘플링
+  //    (나중에 RPC/random 샘플링으로 최적화 가능)
+  let q = supabase
+    .from("stores")
+    .select(
+      "id,name,category,lat,lng,address,phone,image_url,is_active,mood,with_kids,for_work,price_level,tags"
+    )
+    .eq("is_active", true)
+    .limit(300);
 
   if (tab !== "all") {
-    query = query.eq("category", tab);
+    q = q.eq("category", tab);
   }
 
-  // ✅ 랜덤 뽑기 위해 충분히 크게 가져옴 (너 DB가 850+니까 1000 정도면 안전)
-  const { data, error } = await query.limit(1000);
+  const { data, error } = await q;
 
   if (error || !data) {
     console.error("home-recommend error:", error);
-    return NextResponse.json(
-      { items: [], error: "failed_to_load" },
-      { status: 500 }
-    );
+    return NextResponse.json({ items: [], error: "failed_to_load" }, { status: 500 });
   }
 
   const stores = data as StoreRecord[];
 
-  // ✅ 빈값/깨진 데이터 방어 (name 없는 row 같은 거)
-  const clean = stores.filter((s) => s?.id && s?.name);
+  // 2) 랜덤 + limit
+  const picked = shuffle(stores).slice(0, limit);
 
-  // ✅ 랜덤 셔플 후 limit개만 선택
-  const picked = shuffle(clean).slice(0, limit);
-
-  // ✅ HomeCard 변환 (distance는 route에서 계산 안 함: 빌드 안정화 목적)
-  const cards = picked.map(mapStoreToHomeCard);
+  // 3) 거리 계산 + 카드 변환
+  const cards = picked.map((store) => {
+    const distanceKm = hasLoc
+      ? calcDistanceKm(lat, lng, store.lat, store.lng)
+      : null;
+    return mapStoreToHomeCard(store, distanceKm ?? undefined);
+  });
 
   return NextResponse.json({ items: cards });
 }
