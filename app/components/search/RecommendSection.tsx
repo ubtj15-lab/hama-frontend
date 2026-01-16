@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import type { HomeCard } from "../../../lib/storeTypes";
-import { fetchStores } from "../../../lib/storeRepository";
+import type { HomeCard } from "@lib/storeTypes";
+import { fetchStores } from "@lib/storeRepository";
+
 import {
   inferPreferenceFromText,
   rankStoresByPreference,
-} from "../../../lib/recommendEngine";
+} from "@lib/recommendEngine";
 
 // Supabase에서 실패하거나 데이터가 없을 때 쓸 비상용 카드 3장
 const FALLBACK_CARDS: HomeCard[] = [

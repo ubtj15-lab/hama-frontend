@@ -4,8 +4,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-import type { HomeCard } from "../lib/storeTypes";
-import { fetchHomeCardsByTab, type HomeTabKey } from "../lib/storeRepository";
+import type { HomeCard } from "@/lib/storeTypes";
+import { fetchHomeCardsByTab } from "@lib/storeRepository";
+
 
 import FeedbackFab from "@/components/FeedbackFab";
 import { logEvent } from "@/lib/logEvent";

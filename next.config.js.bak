@@ -1,0 +1,8 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  // 절대 넣지 마:
+  // output: "export",
+};
+
+module.exports = nextConfig;

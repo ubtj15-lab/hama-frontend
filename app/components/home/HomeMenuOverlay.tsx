@@ -1,13 +1,18 @@
 // components/home/HomeMenuOverlay.tsx
 "use client";
 
-import React from "react";
-import type { HamaUser } from "@/lib/storeTypes";
+import React, { useMemo } from "react";
+
+type HamaUser = {
+  id?: string;
+  nickname?: string | null;
+  points?: number | null;
+};
 
 interface HomeMenuOverlayProps {
   open: boolean;
   menuPos: { top: number; left: number };
-  user: HamaUser;
+  user?: HamaUser | null;
   isLoggedIn: boolean;
   onClose: () => void;
   onKakaoClick: () => void;
@@ -33,7 +38,17 @@ export default function HomeMenuOverlay({
   onRecentStores,
   onSettings,
 }: HomeMenuOverlayProps) {
+  const safeNickname = user?.nickname?.trim() ? user!.nickname : "게스트";
+  const safePoints = useMemo(() => {
+    const p = user?.points;
+    return typeof p === "number" && Number.isFinite(p) ? p : 0;
+  }, [user?.points]);
+
   if (!open) return null;
+
+  // 화면 밖으로 나가지 않게 살짝 보정 (선택사항이지만 UX 안정)
+  const left = Math.max(12, menuPos.left);
+  const top = Math.max(12, menuPos.top);
 
   return (
     <>
@@ -51,8 +66,8 @@ export default function HomeMenuOverlay({
       <div
         style={{
           position: "fixed",
-          top: menuPos.top,
-          left: menuPos.left,
+          top,
+          left,
           width: 240,
           borderRadius: 20,
           background: "#ffffff",
@@ -78,8 +93,9 @@ export default function HomeMenuOverlay({
               marginBottom: 4,
             }}
           >
-            안녕하세요 👋
+            안녕하세요
           </div>
+
           <div
             style={{
               fontSize: 18,
@@ -88,8 +104,9 @@ export default function HomeMenuOverlay({
               marginBottom: 6,
             }}
           >
-            {user.nickname || "게스트"} 님
+            {safeNickname} 님
           </div>
+
           <div
             style={{
               display: "inline-flex",
@@ -116,7 +133,7 @@ export default function HomeMenuOverlay({
                 color: "#111827",
               }}
             >
-              {user.points.toLocaleString()} P
+              {safePoints.toLocaleString()} P
             </span>
           </div>
         </div>
@@ -143,6 +160,7 @@ export default function HomeMenuOverlay({
 
           <button
             onClick={onPointHistory}
+            disabled={!isLoggedIn}
             style={{
               width: "100%",
               padding: "8px 10px",
@@ -151,7 +169,8 @@ export default function HomeMenuOverlay({
               background: "#ffffff",
               fontSize: 14,
               textAlign: "left",
-              cursor: "pointer",
+              cursor: isLoggedIn ? "pointer" : "not-allowed",
+              opacity: isLoggedIn ? 1 : 0.5,
             }}
           >
             📌 포인트 히스토리
@@ -195,6 +214,7 @@ export default function HomeMenuOverlay({
 
           <button
             onClick={onMyReservations}
+            disabled
             style={{
               width: "100%",
               padding: "8px 10px",
@@ -203,7 +223,8 @@ export default function HomeMenuOverlay({
               background: "#f3f4f6",
               fontSize: 14,
               textAlign: "left",
-              cursor: "pointer",
+              cursor: "not-allowed",
+              opacity: 0.7,
             }}
           >
             내 예약 (준비중)
@@ -216,7 +237,7 @@ export default function HomeMenuOverlay({
               padding: "8px 10px",
               borderRadius: 10,
               border: "1px solid #E5E7EB",
-              background: "#f3f4f6",
+              background: "#ffffff",
               fontSize: 14,
               textAlign: "left",
               cursor: "pointer",
@@ -227,6 +248,7 @@ export default function HomeMenuOverlay({
 
           <button
             onClick={onSettings}
+            disabled
             style={{
               width: "100%",
               padding: "8px 10px",
@@ -235,7 +257,8 @@ export default function HomeMenuOverlay({
               background: "#f3f4f6",
               fontSize: 14,
               textAlign: "left",
-              cursor: "pointer",
+              cursor: "not-allowed",
+              opacity: 0.7,
             }}
           >
             설정 (준비중)

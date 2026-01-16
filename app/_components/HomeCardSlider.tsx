@@ -2,7 +2,8 @@
 
 import React from "react";
 import Image from "next/image";
-import type { HomeCard } from "../../lib/storeTypes";
+import type { HomeCard } from "@lib/storeTypes";
+
 
 export default function HomeCardSlider({
   cards,

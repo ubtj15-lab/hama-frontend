@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { Place } from "@/app/search/page";
-import { logEvent } from "@/lib/logEvent";
+import type { Place } from "@lib/storeTypes";
+import { logEvent } from "@lib/logEvent";
 
 interface Props {
   place: Place;
@@ -15,7 +15,7 @@ export default function RecommendCard({ place }: Props) {
     });
 
     if (place.placeUrl) {
-      window.open(place.placeUrl, "_blank");
+      window.open(place.placeUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -45,15 +45,19 @@ export default function RecommendCard({ place }: Props) {
       >
         {place.name}
       </div>
-      <div
-        style={{
-          fontSize: 11,
-          color: "#6b7280",
-          marginBottom: 4,
-        }}
-      >
-        {place.address}
-      </div>
+
+      {place.address && (
+        <div
+          style={{
+            fontSize: 11,
+            color: "#6b7280",
+            marginBottom: 4,
+          }}
+        >
+          {place.address}
+        </div>
+      )}
+
       {place.distance != null && (
         <div style={{ fontSize: 11, color: "#0f766e" }}>
           약 {place.distance}m 거리

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { HomeCard } from "../../lib/storeTypes";
-import { fetchStores } from "../../lib/storeRepository";
+import type { HomeCard } from "@lib/storeTypes";
+import { fetchStores } from "@lib/storeRepository";
+
 
 const FALLBACK_HOME_CARDS: HomeCard[] = [
   {

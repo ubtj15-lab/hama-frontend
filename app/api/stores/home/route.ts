@@ -1,33 +1,27 @@
 // app/api/stores/home/route.ts
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
-import { StoreRecord, mapStoreToHomeCard } from "@/lib/storeTypes";
+import { createClient } from "@supabase/supabase-js";
+import type { StoreRecord } from "../../../lib/storeTypes";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export async function GET() {
   try {
     const { data, error } = await supabase
-      .from<StoreRecord>("stores")
+      .from("stores")
       .select("*")
       .eq("is_active", true)
       .limit(20);
 
     if (error) {
-      console.error("[/api/stores/home] supabase error", error);
-      return NextResponse.json(
-        { ok: false, error: error.message },
-        { status: 500 }
-      );
+      return NextResponse.json({ items: [], error: error.message }, { status: 500 });
     }
 
-    const records = data ?? [];
-    const cards = records.map(mapStoreToHomeCard);
-
-    return NextResponse.json({ ok: true, items: cards });
-  } catch (err: any) {
-    console.error("[/api/stores/home] unknown error", err);
-    return NextResponse.json(
-      { ok: false, error: "unknown_error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ items: (data ?? []) as StoreRecord[] });
+  } catch (e) {
+    return NextResponse.json({ items: [], error: "unknown" }, { status: 500 });
   }
 }

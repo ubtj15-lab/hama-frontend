@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../../lib/supabaseClient";
+import { supabase } from "@lib/supabaseClient";
+import type { StoreRecord } from "@lib/storeTypes";
+
 
 export type StoreCategory = "cafe" | "restaurant" | "salon" | "activity";
 

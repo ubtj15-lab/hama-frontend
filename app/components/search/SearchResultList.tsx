@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { Place } from "@/app/search/page";
-import { logEvent } from "@/lib/logEvent";
+import type { Place } from "@lib/storeTypes";
+import { logEvent } from "@lib/logEvent";
 
 interface Props {
   results: Place[];
@@ -17,7 +17,7 @@ export default function SearchResultList({ results }: Props) {
     });
 
     if (place.placeUrl) {
-      window.open(place.placeUrl, "_blank");
+      window.open(place.placeUrl, "_blank", "noopener,noreferrer");
     }
   };
 
@@ -48,15 +48,19 @@ export default function SearchResultList({ results }: Props) {
           >
             {p.name}
           </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: "#6b7280",
-              marginBottom: 2,
-            }}
-          >
-            {p.address}
-          </div>
+
+          {p.address && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#6b7280",
+                marginBottom: 2,
+              }}
+            >
+              {p.address}
+            </div>
+          )}
+
           <div style={{ fontSize: 11, color: "#9ca3af" }}>
             {p.distance != null && (
               <span style={{ marginRight: 8 }}>{p.distance}m</span>

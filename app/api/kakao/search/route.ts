@@ -1,6 +1,8 @@
 // app/api/kakao/search/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 const KAKAO_REST_API_KEY = process.env.KAKAO_REST_API_KEY ?? "";
 
 if (!KAKAO_REST_API_KEY) {
