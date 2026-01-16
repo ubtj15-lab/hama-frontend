@@ -4,9 +4,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
+import type { HomeTabKey } from "@/lib/storeTypes";
 import type { HomeCard } from "@/lib/storeTypes";
 import { fetchHomeCardsByTab } from "@lib/storeRepository";
-
 
 import FeedbackFab from "@/components/FeedbackFab";
 import { logEvent } from "@/lib/logEvent";
@@ -144,6 +144,7 @@ function appendPointLog(amount: number, reason: string) {
     // ignore
   }
 }
+
 
 export default function HomePage() {
   const router = useRouter();
@@ -364,6 +365,83 @@ export default function HomePage() {
     }
   };
 
+  // =====================
+  // 🧭 추천 카드 디테일 액션 (예약/길안내/평점/메뉴)
+  // =====================
+  const openInNewTab = (url: string) => {
+    try {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      // ignore
+    }
+  };
+
+  const getCardLatLng = (card: HomeCard): { lat?: number; lng?: number } => {
+    // HomeCard 스키마가 확정되기 전이라 안전하게 any로 접근
+    const anyCard = card as any;
+    const lat =
+      typeof anyCard.lat === "number"
+        ? anyCard.lat
+        : typeof anyCard.latitude === "number"
+        ? anyCard.latitude
+        : undefined;
+    const lng =
+      typeof anyCard.lng === "number"
+        ? anyCard.lng
+        : typeof anyCard.longitude === "number"
+        ? anyCard.longitude
+        : undefined;
+    return { lat, lng };
+  };
+
+  const handlePlaceDetailAction = (
+    card: HomeCard,
+    action: "예약" | "길안내" | "평점" | "메뉴"
+  ) => {
+    const name = (card?.name ?? "").trim();
+    if (!name) return;
+
+    // 공통: 로그
+    logEvent("place_detail_action", { id: card.id, name, action });
+
+    // 1) 길안내: 좌표가 있으면 link/to, 없으면 q 검색
+    if (action === "길안내") {
+      const { lat, lng } = getCardLatLng(card);
+      if (typeof lat === "number" && typeof lng === "number") {
+        openInNewTab(
+          `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`
+        );
+      } else {
+        openInNewTab(`https://map.kakao.com/?q=${encodeURIComponent(name)}`);
+      }
+      return;
+    }
+
+    // 2) 예약/평점/메뉴: 일단 모바일 네이버 검색으로 연결 (실데이터 연동되면 URL 필드로 교체)
+    if (action === "예약") {
+      openInNewTab(
+        `https://m.search.naver.com/search.naver?query=${encodeURIComponent(
+          `${name} 예약`
+        )}`
+      );
+      return;
+    }
+
+    if (action === "평점") {
+      openInNewTab(
+        `https://m.search.naver.com/search.naver?query=${encodeURIComponent(
+          `${name} 리뷰`
+        )}`
+      );
+      return;
+    }
+
+    // action === "메뉴"
+    openInNewTab(
+      `https://m.search.naver.com/search.naver?query=${encodeURIComponent(`${name} 메뉴`)}`
+    );
+  };
+
   // 🍔 메뉴 버튼 클릭
   const handleMenuClick = () => {
     setMenuOpen((prev) => {
@@ -430,21 +508,18 @@ export default function HomePage() {
     router.push("/beta-info");
   };
 
-  // 🟦 추천 카드 클릭 시: 상세 오버레이 열기
-  const handleCardClick = (card: HomeCard) => {
-    logEvent("home_recommend_click", {
-      id: card.id,
-      name: card.name,
-      category: card.categoryLabel,
-      tab: homeTab,
-    });
-    setSelectedCard(card);
-  };
+  // ============================
+  // 🎛 상단 메뉴 항목
+  // ============================
+  const menuItems = [
+    { label: "포인트 내역", onClick: goToPointHistory },
+    { label: "베타 안내", onClick: goToBetaInfo },
+  ];
 
-  // ✅ 탭 UI 데이터
-  type HomeTabKey = "all" | "restaurant" | "cafe" | "beauty" | "activity";
-
-const HOME_TABS: { key: HomeTabKey; label: string }[] = [
+  // ============================
+  // 🧭 홈 추천 탭 버튼
+  // ============================
+  const tabButtons: { key: HomeTabKey; label: string }[] = [
   { key: "all", label: "종합" },
   { key: "restaurant", label: "식당" },
   { key: "cafe", label: "카페" },
@@ -452,214 +527,149 @@ const HOME_TABS: { key: HomeTabKey; label: string }[] = [
   { key: "activity", label: "액티비티" },
 ];
 
-const COUNT_BY_TAB: Record<string, number> = {
-  all: 12,
-  restaurant: 3,
-  cafe: 3,
-  salon: 3,
-  activity: 3,
-};
 
 
+  // 카드 렌더용 (5개)
   const cardsToRender = homeCards.slice(0, 5);
 
+  // ======================
+  // 🎨 UI
+  // ======================
   return (
     <main
       style={{
         minHeight: "100vh",
-        background: "linear-gradient(180deg, #f6f0e9 0%, #f4f6fb 40%, #f4f6fb 100%)",
-        display: "flex",
-        justifyContent: "center",
+        background: "linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 100%)",
+        paddingBottom: 110,
       }}
     >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 430,
-          margin: "0 auto",
-          padding: "16px 16px 40px",
-          boxSizing: "border-box",
-          position: "relative",
-          fontFamily: "Noto Sans KR, system-ui, sans-serif",
-        }}
-      >
-        {/* ===================== 메뉴 오버레이 ===================== */}
-        {menuOpen && (
-          <>
-            <div
-              onClick={() => setMenuOpen(false)}
-              style={{ position: "fixed", inset: 0, zIndex: 1500 }}
-            />
-            <div
-              style={{
-                position: "fixed",
-                top: menuPos.top,
-                left: menuPos.left,
-                width: 240,
-                borderRadius: 20,
-                background: "#ffffff",
-                boxShadow:
-                  "0 10px 25px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(148, 163, 184, 0.3)",
-                padding: 16,
-                zIndex: 1600,
-                fontSize: 13,
-              }}
-            >
-              <div
-                style={{
-                  marginBottom: 16,
-                  paddingBottom: 10,
-                  borderBottom: "1px solid #E5E7EB",
-                }}
-              >
-                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>
-                  안녕하세요
-                </div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#111827", marginBottom: 6 }}>
-                  {user.nickname || "게스트"} 님
-                </div>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "4px 10px",
-                    borderRadius: 999,
-                    background: "#EEF2FF",
-                  }}
-                >
-                  <span style={{ fontSize: 12, color: "#4F46E5", fontWeight: 600 }}>포인트</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
-                    {user.points.toLocaleString()} P
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <button
-                  onClick={handleKakaoButtonClick}
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px",
-                    borderRadius: 999,
-                    border: "none",
-                    background: "#FEE500",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#2D2D2D",
-                    cursor: "pointer",
-                  }}
-                >
-                  {isLoggedIn ? "로그아웃" : "카카오로 로그인"}
-                </button>
-
-                <button
-                  onClick={goToPointHistory}
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #E5E7EB",
-                    background: "#ffffff",
-                    fontSize: 14,
-                    textAlign: "left",
-                    cursor: "pointer",
-                  }}
-                >
-                  포인트 히스토리
-                </button>
-
-                <button
-                  onClick={goToBetaInfo}
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #E5E7EB",
-                    background: "#EEF2FF",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#111827",
-                    textAlign: "left",
-                    cursor: "pointer",
-                  }}
-                >
-                  베타 안내 보기
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ===================== 상단 헤더 ===================== */}
+      <div style={{ maxWidth: 430, margin: "0 auto", padding: "14px 16px 0" }}>
+        {/* ===================== 상단 바 ===================== */}
         <header
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: 16,
+            marginBottom: 12,
           }}
         >
+          {/* 메뉴 버튼 */}
           <button
             ref={menuButtonRef}
             type="button"
             onClick={handleMenuClick}
             aria-label="메뉴 열기"
             style={{
-              width: 40,
-              height: 40,
+              width: 42,
+              height: 42,
               borderRadius: 999,
               border: "none",
               background: "#ffffff",
-              boxShadow: "0 4px 12px rgba(15,23,42,0.15)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              boxShadow: "0 6px 18px rgba(15,23,42,0.12)",
               cursor: "pointer",
-              flexShrink: 0,
+              fontSize: 18,
             }}
           >
-            <div
-              style={{
-                width: 18,
-                height: 2,
-                borderRadius: 999,
-                background: "#111827",
-                boxShadow: "0 6px 0 #111827, 0 -6px 0 #111827",
-              }}
-            />
+            ☰
           </button>
 
-          <div
-            style={{
-              flex: 1,
-              textAlign: "center",
-              fontWeight: 800,
-              letterSpacing: 3,
-              fontSize: 20,
-              color: "#2563EB",
-            }}
-          >
+          {/* 중앙 로고 */}
+          <div style={{ fontWeight: 900, letterSpacing: 1.2, fontSize: 22, color: "#2563EB" }}>
             HAMA
           </div>
 
-          <div style={{ width: 40, height: 40 }} />
+          {/* 로그인/로그아웃 */}
+          <button
+            type="button"
+            onClick={handleKakaoButtonClick}
+            style={{
+              height: 42,
+              borderRadius: 999,
+              border: "none",
+              padding: "0 14px",
+              background: isLoggedIn ? "#111827" : "#FEE500",
+              color: isLoggedIn ? "#ffffff" : "#111827",
+              fontWeight: 800,
+              cursor: "pointer",
+              boxShadow: "0 6px 18px rgba(15,23,42,0.12)",
+            }}
+          >
+            {isLoggedIn ? "로그아웃" : "카카오 로그인"}
+          </button>
         </header>
 
-        {/* ===================== 검색바 ===================== */}
+        {/* ===================== 메뉴 오버레이 ===================== */}
+        {menuOpen && (
+          <div
+            onClick={() => setMenuOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 3000,
+              background: "transparent",
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "absolute",
+                top: menuPos.top,
+                left: menuPos.left,
+                width: 180,
+                borderRadius: 16,
+                background: "#ffffff",
+                boxShadow: "0 16px 40px rgba(15,23,42,0.18)",
+                overflow: "hidden",
+              }}
+            >
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid #E5E7EB" }}>
+                <div style={{ fontSize: 12, color: "#6B7280" }}>닉네임</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>
+                  {user.nickname}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, color: "#2563EB", fontWeight: 800 }}>
+                  {user.points.toLocaleString()}P
+                </div>
+              </div>
+
+              {menuItems.map((it) => (
+                <button
+                  key={it.label}
+                  type="button"
+                  onClick={it.onClick}
+                  style={{
+                    width: "100%",
+                    padding: "12px 12px",
+                    textAlign: "left",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    color: "#111827",
+                  }}
+                >
+                  {it.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ===================== 검색 바 ===================== */}
         <form
           onSubmit={handleSearchSubmit}
           style={{
             display: "flex",
             alignItems: "center",
+            gap: 8,
             background: "#ffffff",
             borderRadius: 999,
-            padding: "0 10px 0 18px",
-            boxShadow: "0 14px 30px rgba(15,23,42,0.16), 0 0 0 1px rgba(148,163,184,0.12)",
-            marginBottom: 18,
+            padding: "10px 12px",
+            boxShadow: "0 10px 30px rgba(15,23,42,0.10)",
+            marginBottom: 12,
           }}
         >
-          <span style={{ fontSize: 18, marginRight: 8 }}>🔍</span>
+          <span style={{ fontSize: 16 }}>🔎</span>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -668,53 +678,49 @@ const COUNT_BY_TAB: Record<string, number> = {
               flex: 1,
               border: "none",
               outline: "none",
-              height: 46,
-              fontSize: 15,
+              fontSize: 14,
               background: "transparent",
             }}
           />
           <button
             type="submit"
             style={{
-              border: "none",
+              height: 36,
+              padding: "0 16px",
               borderRadius: 999,
-              padding: "0 18px",
-              height: 34,
-              marginLeft: 4,
-              background: "linear-gradient(135deg, #2563eb, #4f46e5)",
-              color: "#ffffff",
-              fontSize: 13,
-              fontWeight: 700,
+              border: "none",
               cursor: "pointer",
-              boxShadow: "0 6px 14px rgba(37,99,235,0.45)",
+              background: "linear-gradient(135deg, #38bdf8, #2563eb)",
+              color: "#ffffff",
+              fontWeight: 800,
             }}
           >
             검색
           </button>
         </form>
 
-        {/* ===================== ✅ 추천 탭 5개 ===================== */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
-          {HOME_TABS.map((t) => {
-            const active = homeTab === t.key;
+        {/* ===================== 카테고리 탭 ===================== */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          {tabButtons.map((t) => {
+            const active = t.key === homeTab;
             return (
               <button
                 key={t.key}
                 type="button"
                 onClick={() => {
                   setHomeTab(t.key);
-                  logEvent("home_tab_click", { tab: t.key });
+                  addPoints(1, "홈 탭 변경");
                 }}
                 style={{
-                  flex: "0 0 auto",
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  border: active ? "1px solid rgba(37,99,235,0.35)" : "1px solid #E5E7EB",
-                  background: active ? "#EEF2FF" : "#ffffff",
-                  color: active ? "#2563EB" : "#111827",
-                  fontSize: 13,
-                  fontWeight: active ? 800 : 600,
+                  border: "none",
                   cursor: "pointer",
+                  height: 34,
+                  padding: "0 14px",
+                  borderRadius: 999,
+                  background: active ? "#dbeafe" : "#ffffff",
+                  color: active ? "#1d4ed8" : "#111827",
+                  fontWeight: active ? 900 : 700,
+                  boxShadow: active ? "0 8px 22px rgba(37,99,235,0.18)" : "0 6px 16px rgba(15,23,42,0.08)",
                 }}
               >
                 {t.label}
@@ -723,173 +729,104 @@ const COUNT_BY_TAB: Record<string, number> = {
           })}
         </div>
 
-        {isHomeLoading && (
-          <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 10 }}>
-            추천 카드 불러오는 중…
-          </div>
-        )}
-
-        {/* ===================== 메인 추천 카드 슬라이더 ===================== */}
-        <section style={{ marginTop: 10, marginBottom: 34 }}>
-          <div style={{ position: "relative", height: 340 }}>
-            {cardsToRender.length === 0 && !isHomeLoading && (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 14,
-                  color: "#6B7280",
-                }}
-              >
-                추천할 매장이 없어요 (데이터/카테고리 코드 확인)
-              </div>
-            )}
-
-            {cardsToRender.map((card, idx) => {
-              const offset = idx - activeIndex;
-              const absOffset = Math.abs(offset);
-              if (absOffset > 2) return null;
-
-              const depth = Math.min(absOffset, 2);
-              const scale = depth === 0 ? 1 : depth === 1 ? 0.93 : 0.86;
-              const translateX = offset * 18;
-
-              const boxShadow =
-                depth === 0
-                  ? "0 22px 45px rgba(15,23,42,0.30)"
-                  : depth === 1
-                  ? "0 16px 34px rgba(15,23,42,0.20)"
-                  : "0 10px 24px rgba(15,23,42,0.14)";
-
-              const distanceKm =
-                typeof card.distanceKm === "number" && !Number.isNaN(card.distanceKm)
-                  ? card.distanceKm
-                  : null;
-
-              const distanceLabel = distanceKm !== null ? `${distanceKm.toFixed(1)} km` : "";
-
-              const moodText = (card.mood && card.mood.trim()) || card.moodText;
-              const tags = card.tags ? card.tags.slice(0, 3) : [];
-
-              return (
-                <button
-                  key={card.id}
-                  type="button"
-                  onClick={() => handleCardClick(card)}
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    margin: "0 auto",
-                    maxWidth: 360,
-                    height: 340,
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
-                    borderRadius: 32,
-                    overflow: "hidden",
-                    background: "#ffffff",
-                    display: "flex",
-                    flexDirection: "column",
-                    textAlign: "left",
-                    boxShadow,
-                    transform: `translateX(${translateX}px) scale(${scale})`,
-                    transition: "transform 0.35s ease, opacity 0.3s ease, box-shadow 0.3s ease",
-                    zIndex: 99 - absOffset,
-                    opacity: 1,
-                  }}
-                >
-                  <div
+        {/* ===================== 메인 추천 카드 ===================== */}
+        <section style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 360,
+              aspectRatio: "1 / 1",
+              borderRadius: 28,
+              background: "#ffffff",
+              boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            {/* 카드 리스트 */}
+            <div style={{ display: "flex", height: "100%", transform: `translateX(-${activeIndex * 100}%)`, transition: "transform 0.28s ease" }}>
+              {(cardsToRender.length ? cardsToRender : Array.from({ length: 5 }).map((_, i) => ({
+                id: `empty-${i}`,
+                name: "로딩 중",
+                categoryLabel: "",
+                moodText: "",
+                imageUrl: "",
+              }) as any)).map((card: HomeCard, idx: number) => {
+                const tags = Array.isArray((card as any).tags) ? (card as any).tags : [];
+                return (
+                  <button
+                    key={card.id ?? idx}
+                    type="button"
+                    onClick={() => {
+                      if (!card?.id || (card as any).id?.startsWith?.("empty-")) return;
+                      setSelectedCard(card);
+                      logEvent("home_card_open", { id: card.id, name: card.name, tab: homeTab });
+                      addPoints(2, "홈 추천 카드 열람");
+                    }}
                     style={{
+                      minWidth: "100%",
+                      height: "100%",
+                      border: "none",
+                      background: "transparent",
+                      cursor: "pointer",
+                      padding: 0,
                       position: "relative",
-                      flex: 1,
-                      background: "linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)",
                     }}
                   >
-                    {card.imageUrl && (
-                      <Image src={card.imageUrl} alt={card.name} fill style={{ objectFit: "cover" }} />
-                    )}
-                  </div>
-
-                  <div style={{ padding: "18px 20px 20px", background: "#ffffff" }}>
-                    <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6, color: "#111827" }}>
-                      {card.name}
-                    </h2>
-
-                    <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 6 }}>
-                      {card.categoryLabel}
-                      {distanceLabel ? ` · ${distanceLabel}` : ""}
+                    <div style={{ position: "relative", width: "100%", height: "70%", background: "#dbeafe" }}>
+                      {card.imageUrl && (
+                        <Image src={card.imageUrl} alt={card.name} fill style={{ objectFit: "cover" }} />
+                      )}
                     </div>
 
-                    <div style={{ fontSize: 13, color: "#4B5563", marginBottom: 8 }}>{moodText}</div>
+                    <div style={{ padding: 16, textAlign: "left" }}>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 6 }}>
+                        {card.name}
+                      </div>
 
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 2 }}>
-                      {card.withKids && (
-                        <span
-                          style={{
-                            padding: "3px 8px",
-                            borderRadius: 999,
-                            background: "#FEF3C7",
-                            fontSize: 11,
-                            color: "#92400E",
-                          }}
-                        >
-                          아이랑 가기 좋아요
-                        </span>
-                      )}
+                      <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
+                        {card.categoryLabel}
+                      </div>
 
-                      {card.forWork && (
-                        <span
-                          style={{
-                            padding: "3px 8px",
-                            borderRadius: 999,
-                            background: "#DBEAFE",
-                            fontSize: 11,
-                            color: "#1D4ED8",
-                          }}
-                        >
-                          작업·공부하기 좋음
-                        </span>
-                      )}
+                      <div style={{ fontSize: 13, color: "#111827", fontWeight: 700, marginBottom: 10 }}>
+                        {(card as any).mood ?? card.moodText}
+                      </div>
 
-                      {typeof card.priceLevel === "number" && card.priceLevel > 0 && (
-                        <span
-                          style={{
-                            padding: "3px 8px",
-                            borderRadius: 999,
-                            background: "#ECFDF5",
-                            fontSize: 11,
-                            color: "#047857",
-                          }}
-                        >
-                          {"₩".repeat(card.priceLevel)}
-                        </span>
-                      )}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {typeof (card as any).priceLevel === "number" && (card as any).priceLevel > 0 && (
+                          <span
+                            style={{
+                              padding: "3px 8px",
+                              borderRadius: 999,
+                              background: "#ECFDF5",
+                              fontSize: 11,
+                              color: "#047857",
+                            }}
+                          >
+                            {"₩".repeat((card as any).priceLevel)}
+                          </span>
+                        )}
 
-                      {tags.map((tag) => (
-                        <span
-                          key={tag}
-                          style={{
-                            padding: "3px 8px",
-                            borderRadius: 999,
-                            background: "#F3F4F6",
-                            fontSize: 11,
-                            color: "#374151",
-                          }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                        {tags.map((tag: string) => (
+                          <span
+                            key={tag}
+                            style={{
+                              padding: "3px 8px",
+                              borderRadius: 999,
+                              background: "#F3F4F6",
+                              fontSize: 11,
+                              color: "#374151",
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* 인디케이터 점 (5개 기준) */}
@@ -1000,11 +937,11 @@ const COUNT_BY_TAB: Record<string, number> = {
                         marginBottom: 10,
                       }}
                     >
-                      {selectedCard.name} · {selectedCard.categoryLabel}
+                      {selectedCard.name} · {(selectedCard as any).categoryLabel}
                     </div>
 
                     <div style={{ fontSize: 14, color: "#e5e7eb" }}>
-                      {selectedCard.mood ?? selectedCard.moodText}
+                      {(selectedCard as any).mood ?? (selectedCard as any).moodText}
                     </div>
                   </div>
                 </div>
@@ -1029,12 +966,10 @@ const COUNT_BY_TAB: Record<string, number> = {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      logEvent("place_detail_action", { id: selectedCard.id, name: selectedCard.name, action: label });
-
-                      if (label === "길안내") alert("길안내 기능은 다음 버전에서 지도로 연결할게요!");
-                      else if (label === "예약") alert("예약 기능은 사장님 플랫폼 붙이면서 열릴 예정이에요");
-                      else if (label === "평점") alert("평점/후기 기능은 하마 커뮤와 함께 붙을 예정이에요");
-                      else alert("메뉴 정보는 추후 실제 매장 데이터 연동 시 노출됩니다.");
+                      handlePlaceDetailAction(
+                        selectedCard,
+                        label as "예약" | "길안내" | "평점" | "메뉴"
+                      );
                     }}
                     style={{
                       flex: 1,
