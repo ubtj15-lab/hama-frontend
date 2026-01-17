@@ -1128,7 +1128,8 @@ export default function HomePage() {
           </div>
         </nav>
 
-        <FeedbackFab />
+        {!selectedCard && <FeedbackFab />}
+
       </div>
     </main>
   );
