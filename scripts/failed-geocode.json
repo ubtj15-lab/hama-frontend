@@ -1,0 +1,134 @@
+[
+  {
+    "id": "8dbe6bb1-79f3-4979-a84a-6e5be710454e",
+    "name": "양심장어 오산청호",
+    "address": "경기도 오산시 엘지로 230 1, 2층",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "afe2e7df-aff2-4782-9879-c35dd20dcc44",
+    "name": "반송돈 동탄북광장점",
+    "address": "반송돈 동탄북광장점",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "d2ce676b-dbe0-4497-af14-c6cf0ab93ecb",
+    "name": "코지하우스 화성동탄점",
+    "address": "경기 화성시 여울로 108 1, 2층",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "334a8264-0d57-47ee-a000-d3b6685cec07",
+    "name": "스시이세이 롯데백화점 동탄점",
+    "address": "경기 화성시 오산동 967-157 롯데백화점 동탄점",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "503b409e-98e0-44ca-aa01-fff63bb3028b",
+    "name": "디라이프스타일키친 롯데백화점 동탄점",
+    "address": "경기 화성시 오산동 967-157 롯데백화점 동탄점",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "054cacdd-1a49-4263-a526-5ab5fa55c779",
+    "name": "옥이떡볶이",
+    "address": "경기 화성시 목동 393-10",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "f06768d7-bb9d-408c-befb-628e2c098606",
+    "name": "트랩보드게임카페 동탄호수공원점",
+    "address": "경기 화성시 동탄대로5길 9 11블럭 3층",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "cbdfbc35-8452-4a19-915d-2d4ef939bb8e",
+    "name": "히어로보드게임카페 동탄호수공원점",
+    "address": "경기 화성시 동탄대로5길 15 12블록 2층",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "54f3af5d-b617-474b-a4fb-685fbf4bc98d",
+    "name": "벌툰 파리지앵 동탄호수공원점",
+    "address": "경기 화성시 동탄대로5길 15 그랑파샤쥬 12블록 3층",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "7abc6055-c4fd-4714-b4d6-52a7e9a209b2",
+    "name": "뉴이크헤어 동탄점",
+    "address": "뉴이크헤어 동탄점",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "5b99bad0-eae6-42ac-a4a8-3be249e0cc40",
+    "name": "더호프헤어 동탄호수공원점",
+    "address": "경기 화성시 동탄대로5길 15 그랑파사쥬동 3층 12블럭",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "1f232517-8270-4907-898f-0d545e06f5fd",
+    "name": "블랙울프",
+    "address": "경기도 오산시 오산대력로132번길 45",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "5f539fa5-2ca8-4429-8886-3e8115afc5ac",
+    "name": "더스페이스 갤러리카페",
+    "address": "더스페이스 갤러리카페",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "22b6d777-37aa-43c3-b5e7-707be3a19a13",
+    "name": "보구슬라바 한국병원점",
+    "address": "보구슬라바 한국병원점",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "9284f0e1-c869-408c-b1a4-b9d154a21397",
+    "name": "파리크라상 롯데백화점 동탄점",
+    "address": "경기 화성시 오산동 967-157",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "30dddcc3-3518-40b7-98d1-743b16b70962",
+    "name": "오산 맑음터공원",
+    "address": "경기 오산시 누읍동 115-1",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "d90ae248-80de-412e-b39e-906336d6c899",
+    "name": "달빛호수공원",
+    "address": "경기 오산시 원동 715-8",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "fa8428f8-ac39-4807-84c4-49c882782818",
+    "name": "능동공원",
+    "address": "경기 화성시 능동 666-1",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "dfdfe616-e0ae-4cb5-915a-f2ec01a39311",
+    "name": "능동생활도시숲",
+    "address": "경기 화성시 동탄숲속로 69-21",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "b8b29961-9008-485d-a66b-f248626c9899",
+    "name": "선납지공원",
+    "address": "경기 화성시 영천동 612",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "50faedd4-8e93-47bc-bc61-7757e673f9f0",
+    "name": "평택석정근린공원",
+    "address": "경기 평택시 장당길 66-20",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  },
+  {
+    "id": "67d1cb6b-e63d-4837-b799-2887d4b790dc",
+    "name": "함박산중앙공원",
+    "address": "경기 평택시 고덕동 1694-450",
+    "reason": "NO_RESULT_OR_INVALID_COORDS"
+  }
+]

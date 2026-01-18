@@ -2,7 +2,7 @@
 import type { HomeCard, HomeTabKey } from "@lib/storeTypes";
 
 /** Fisher–Yates shuffle */
-function shuffle<T>(arr: T[]): T[] {
+function shuffle<T>(arr: readonly T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -13,21 +13,67 @@ function shuffle<T>(arr: T[]): T[] {
 
 /**
  * 카테고리 정규화:
- * - 과거/구코드에서 beauty가 들어오면 salon으로 취급
+ * - beauty => salon
+ * - 한글/코드/영문 혼용 방어
  */
 function normalizeCategory(cat: string | null | undefined): string {
-  const c = (cat ?? "").toLowerCase();
+  const c = (cat ?? "").toLowerCase().trim();
+
+  // 과거 호환
   if (c === "beauty") return "salon";
+
+  // 한글 라벨 방어
+  if (c.includes("미용") || c.includes("헤어") || c.includes("이발")) return "salon";
+  if (c.includes("카페") || c.includes("커피")) return "cafe";
+  if (c.includes("식당") || c.includes("음식") || c.includes("레스토랑") || c.includes("밥")) return "restaurant";
+  if (c.includes("액티비") || c.includes("활동") || c.includes("체험")) return "activity";
+
+  // 카카오 코드 방어 (혹시 들어오는 경우)
+  if (c === "bk9") return "salon";
+  if (c === "ce7") return "cafe";
+  if (c === "fd6") return "restaurant";
+  if (c === "at4") return "activity";
+
   return c;
 }
 
 /**
- * 홈 추천 API(/api/home-recommend) 호출해서 cards를 받아온 뒤,
- * tab에 따라 필터 + 랜덤 섞기까지 해서 반환.
- *
- * - tab === "all" : 전체 섞어서 반환
- * - tab !== "all" : 해당 카테고리만 섞어서 반환 (beauty는 salon으로 보정)
- * - opts.limit을 주면 그 개수만 잘라서 반환
+ * 카드에서 카테고리 후보를 최대한 찾아서 반환
+ */
+function getCardCategory(card: HomeCard): string {
+  const anyCard = card as unknown as Record<string, unknown>;
+
+  const category = anyCard["category"];
+  if (typeof category === "string" && category.trim()) return category;
+
+  const categoryLabel = anyCard["categoryLabel"];
+  if (typeof categoryLabel === "string" && categoryLabel.trim()) return categoryLabel;
+
+  const categoryCode = anyCard["categoryCode"];
+  if (typeof categoryCode === "string" && categoryCode.trim()) return categoryCode;
+
+  const category_code = anyCard["category_code"];
+  if (typeof category_code === "string" && category_code.trim()) return category_code;
+
+  return "";
+}
+
+type HomeRecommendResponse = {
+  items?: unknown;
+  data?: unknown;
+};
+
+function asHomeCardArray(v: unknown): HomeCard[] {
+  // 런타임에서는 구조가 완벽히 동일하다는 보장이 없어서,
+  // 최소한 "배열"인지 확인 후 HomeCard[]로 캐스팅
+  if (!Array.isArray(v)) return [];
+  return v as HomeCard[];
+}
+
+/**
+ * 홈 추천 API(/api/home-recommend) 호출
+ * - all: 12개
+ * - 카테고리 탭: 무조건 5개
  */
 export async function fetchHomeCardsByTab(
   tab: HomeTabKey,
@@ -36,13 +82,20 @@ export async function fetchHomeCardsByTab(
   try {
     const lat = opts?.lat ?? 0;
     const lng = opts?.lng ?? 0;
-    const limit = opts?.limit ?? opts?.count ?? 12;
+
+    const normalizedTab = normalizeCategory(String(tab));
+
+    // ✅ UI 고정 규칙
+    const wantCount = normalizedTab === "all" ? (opts?.count ?? opts?.limit ?? 12) : 5;
+
+    // ✅ 서버에는 넉넉히 요청
+    const serverCount = Math.max(100, wantCount * 20);
 
     const qs = new URLSearchParams();
     qs.set("lat", String(lat));
     qs.set("lng", String(lng));
     qs.set("tab", String(tab));
-    qs.set("count", String(limit));
+    qs.set("count", String(serverCount));
 
     const res = await fetch(`/api/home-recommend?${qs.toString()}`, {
       cache: "no-store",
@@ -50,38 +103,29 @@ export async function fetchHomeCardsByTab(
 
     if (!res.ok) return [];
 
-    const json = (await res.json()) as { items?: HomeCard[] };
-    const items = Array.isArray(json.items) ? json.items : [];
+    const json = (await res.json()) as HomeRecommendResponse;
 
-    // 탭 필터 (서버에서도 하지만, 혹시 모를 방어)
-    let filtered =
-      tab === "all"
+    // ✅ items / data 둘 다 방어적으로 처리
+    const items: HomeCard[] = asHomeCardArray(json.items ?? json.data);
+
+    if (!items.length) return [];
+
+    const filtered: HomeCard[] =
+      normalizedTab === "all"
         ? items
-        : items.filter(
-            (c) => normalizeCategory(c.categoryLabel) === normalizeCategory(tab)
-          );
+        : items.filter((c: HomeCard) => normalizeCategory(getCardCategory(c)) === normalizedTab);
 
-    // 랜덤 추천
-    filtered = shuffle(filtered);
+    if (!filtered.length) return [];
 
-    // 필요하면 개수 제한
-    if (limit && limit > 0) {
-      filtered = filtered.slice(0, limit);
-    }
-
-    return filtered;
+    return shuffle(filtered).slice(0, wantCount);
   } catch {
     return [];
   }
 }
 
-/**
- * 기존 코드 호환용 (useHomeCards.ts에서 사용)
- * - 일단 "all" 기준으로 받아오면 됨
- */
+/** 기존 코드 호환 */
 export async function fetchStores(): Promise<HomeCard[]> {
   return fetchHomeCardsByTab("all", { count: 12 });
 }
 
-// page.tsx에서 type HomeTabKey를 storeRepository에서 import하고 있으면 이걸로 해결됨
 export type { HomeTabKey };

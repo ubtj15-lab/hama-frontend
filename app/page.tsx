@@ -223,15 +223,93 @@ export default function HomePage() {
     async function load() {
       setIsHomeLoading(true);
       try {
-        const cards = await fetchHomeCardsByTab(homeTab);
+        let cards: HomeCard[] = [];
+
+        if (homeTab === "all") {
+          const all = (await fetchHomeCardsByTab("all")) ?? [];
+
+          const getKey = (c: any) =>
+            (
+              c?.tab ??
+              c?.homeTab ??
+              c?.type ??
+              c?.categoryKey ??
+              c?.category ??
+              c?.categoryCode ??
+              ""
+            )
+              .toString()
+              .toLowerCase();
+
+          // 1) 각 카테고리 후보 뽑기
+          const restaurants = all.filter((c: any) => {
+            const k = getKey(c);
+            return k === "restaurant" || k === "food" || k === "fd6";
+          });
+
+          const cafes = all.filter((c: any) => {
+            const k = getKey(c);
+            return k === "cafe" || k === "ce7";
+          });
+
+          const beauty = all.filter((c: any) => {
+            const k = getKey(c);
+            return k === "beauty" || k === "bk9" || k === "salon";
+          });
+
+          const activity = all.filter((c: any) => {
+            const k = getKey(c);
+            return k === "activity" || k === "at4";
+          });
+
+          // 2) 목표 쿼터대로 먼저 담기
+          const picked: HomeCard[] = [];
+          const pickSet = new Set<string>();
+
+          const pushSome = (arr: HomeCard[], n: number) => {
+            for (const item of arr) {
+              const id = String((item as any).id ?? "");
+              if (!id) continue;
+              if (pickSet.has(id)) continue;
+              picked.push(item);
+              pickSet.add(id);
+              if (picked.length >= n) break;
+            }
+          };
+
+          // 카테고리별 쿼터
+          pushSome(restaurants as any, 4);
+          pushSome(cafes as any, 4);
+          pushSome(beauty as any, 2);
+          pushSome(activity as any, 2);
+
+          // 3) 부족하면 all에서 남은 걸로 12장까지 채우기
+          if (picked.length < 12) {
+            for (const item of all as any) {
+              const id = String(item?.id ?? "");
+              if (!id) continue;
+              if (pickSet.has(id)) continue;
+              picked.push(item);
+              pickSet.add(id);
+              if (picked.length >= 12) break;
+            }
+          }
+
+          cards = picked.slice(0, 12);
+        } else {
+          cards = (await fetchHomeCardsByTab(homeTab, { count: 5 })) ?? [];
+        }
+
         if (!alive) return;
 
-        const five = (cards ?? []).slice(0, 5);
-        setHomeCards(five);
+        setHomeCards(cards);
         setActiveIndex(0);
 
-        logEvent("home_tab_loaded", { tab: homeTab, count: five.length });
-      } catch {
+        logEvent("home_tab_loaded", {
+          tab: homeTab,
+          count: cards.length,
+        });
+      } catch (e) {
         if (!alive) return;
         setHomeCards([]);
         setActiveIndex(0);
@@ -489,12 +567,11 @@ export default function HomePage() {
     { key: "all", label: "종합" },
     { key: "restaurant", label: "식당" },
     { key: "cafe", label: "카페" },
-    { key: "beauty", label: "미용실" },
+    { key: "salon", label: "미용실" },
     { key: "activity", label: "액티비티" },
   ];
 
-  // ✅ 최대 5장만
-  const cardsToRender = homeCards.slice(0, 5);
+  const cardsToRender = homeCards;
   const total = cardsToRender.length;
 
   // ✅ 스택: 원형으로 4장
@@ -513,13 +590,12 @@ export default function HomePage() {
       }}
     >
       <div
-  style={{
-    maxWidth: 430,
-    margin: "0 auto",
-    padding: "20px 18px 0", // ⬅ 위/좌우 여백 증가
-  }}
->
-
+        style={{
+          maxWidth: 430,
+          margin: "0 auto",
+          padding: "20px 18px 0",
+        }}
+      >
         {/* ===================== 상단 바 ===================== */}
         <header
           style={{
@@ -672,17 +748,15 @@ export default function HomePage() {
 
         {/* ===================== 카테고리 탭 ===================== */}
         <div
-  style={{
-    display: "flex",
-    gap: 10,
-    rowGap: 10,
-    flexWrap: "wrap",
-    justifyContent: "center",
-    marginBottom: 22,
-  }}
->
-
-
+          style={{
+            display: "flex",
+            gap: 10,
+            rowGap: 10,
+            flexWrap: "wrap",
+            justifyContent: "center",
+            marginBottom: 22,
+          }}
+        >
           {tabButtons.map((t) => {
             const active = t.key === homeTab;
             return (
@@ -717,16 +791,15 @@ export default function HomePage() {
         <section style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div style={{ width: "100%", overflow: "visible" }}>
             <div
-  style={{
-    width: "100%",
-    maxWidth: 320,
-    aspectRatio: "1 / 1",
-    position: "relative",
-    overflow: "visible",
-    margin: "0 auto", // ✅ 가운데 정렬
-  }}
->
-
+              style={{
+                width: "100%",
+                maxWidth: 320,
+                aspectRatio: "1 / 1",
+                position: "relative",
+                overflow: "visible",
+                margin: "0 auto",
+              }}
+            >
               {/* 로딩 */}
               {isHomeLoading && (
                 <div
@@ -775,23 +848,36 @@ export default function HomePage() {
                   .reverse()
                   .map(({ card, depth }) => {
                     // frontDepth: 0이 맨 앞
-                    const frontDepth = STACK_SIZE - 1 - depth;
+                    // frontDepth: 0이 맨 앞
+const frontDepth = STACK_SIZE - 1 - depth;
 
-                    const translateX = frontDepth * 14; // ✅ 14, 28, 42
-                    const translateY = frontDepth * 8;  // ✅ 8, 16, 24
+// ✅ peek 컨셉: 뒤로 갈수록 좌우 여백이 커져서 양쪽으로 '얇게' 보이게
+// 앞 카드: 여백 0
+// 2번째: 좌우 10px
+// 3번째: 좌우 18px
+// 4번째: 좌우 26px
+const SIDE_GAP = [0, 10, 18, 26];
+const TOP_GAP = [0, 6, 12, 18];
 
-                    const scale =
-                      frontDepth === 0 ? 1 : frontDepth === 1 ? 0.95 : frontDepth === 2 ? 0.90 : 0.85;
+const side = SIDE_GAP[frontDepth] ?? frontDepth * 10;
+const top = TOP_GAP[frontDepth] ?? frontDepth * 6;
 
-                    const opacity =
-                      frontDepth === 0 ? 1 : frontDepth === 1 ? 0.82 : frontDepth === 2 ? 0.62 : 0.46;
+const scale =
+  frontDepth === 0 ? 1 : frontDepth === 1 ? 0.98 : frontDepth === 2 ? 0.96 : 0.94;
 
-                    const shadow =
-                      frontDepth === 0
-                        ? "0 22px 45px rgba(15,23,42,0.30)"
-                        : frontDepth === 1
-                        ? "0 16px 34px rgba(15,23,42,0.20)"
-                        : "0 10px 24px rgba(15,23,42,0.14)";
+const opacity =
+  frontDepth === 0 ? 1 : frontDepth === 1 ? 0.85 : frontDepth === 2 ? 0.65 : 0.48;
+
+const shadow =
+  frontDepth === 0
+    ? "0 24px 55px rgba(15,23,42,0.32)"
+    : frontDepth === 1
+    ? "0 18px 45px rgba(15,23,42,0.22)"
+    : "0 12px 30px rgba(15,23,42,0.16)";
+
+
+
+
 
                     const anyCard = card as any;
                     const imageUrl: string | undefined = anyCard.imageUrl ?? anyCard.image ?? undefined;
@@ -810,22 +896,32 @@ export default function HomePage() {
                           addPoints(2, "홈 추천 카드 열람");
                         }}
                         style={{
-                          position: "absolute",
-                          inset: 0,
-                          width: "100%",
-                          height: "100%",
-                          borderRadius: 28,
-                          border: "none",
-                          padding: 0,
-                          cursor: "pointer",
-                          background: "#ffffff",
-                          overflow: "hidden",
-                          boxShadow: shadow,
-                          opacity,
-                          zIndex: 100 - frontDepth,
-                          transform: `scale(${scale}) translate(${translateX}px, ${translateY}px)`,
-                          transition: "transform 0.25s ease, opacity 0.25s ease",
-                        }}
+  position: "absolute",
+
+  // ✅ inset:0 제거하고, 좌우/상단 여백으로 '좌우 peek' 만들기
+  top,
+  left: side,
+  right: side,
+  bottom: 0,
+
+  borderRadius: 28,
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+  background: "#ffffff",
+  overflow: "hidden",
+
+  boxShadow: shadow,
+  opacity,
+
+  // ✅ scale만 주고, 좌우 translate는 쓰지 않음 (옆 카드처럼 보이는 문제 제거)
+  transform: `scale(${scale})`,
+  transformOrigin: "center",
+  transition: "all 0.25s ease",
+
+  zIndex: 100 - frontDepth,
+}}
+
                       >
                         <div style={{ position: "relative", width: "100%", height: "70%", background: "#dbeafe" }}>
                           {imageUrl && (
@@ -854,15 +950,14 @@ export default function HomePage() {
 
           {/* 인디케이터 */}
           <div
-  style={{
-    marginTop: 18,
-    marginBottom: 28, // ⬅ 마이크랑 거리
-    display: "flex",
-    justifyContent: "center",
-    gap: 6,
-  }}
->
-
+            style={{
+              marginTop: 18,
+              marginBottom: 28,
+              display: "flex",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
             {cardsToRender.map((_, idx) => (
               <button
                 key={idx}
@@ -1129,7 +1224,6 @@ export default function HomePage() {
         </nav>
 
         {!selectedCard && <FeedbackFab />}
-
       </div>
     </main>
   );
