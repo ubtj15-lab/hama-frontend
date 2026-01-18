@@ -167,7 +167,7 @@ export default function HomePage() {
   const [homeTab, setHomeTab] = useState<HomeTabKey>("all");
   const [isHomeLoading, setIsHomeLoading] = useState(false);
 
-  // ✅ 메인 추천 카드 스택 상태
+  // ✅ 메인 추천 카드 상태
   const [activeIndex, setActiveIndex] = useState(0);
   const [homeCards, setHomeCards] = useState<HomeCard[]>([]);
 
@@ -215,7 +215,7 @@ export default function HomePage() {
   }, []);
 
   // ======================
-  // ✅ 홈 추천 카드 로드 (탭별 5개)
+  // ✅ 홈 추천 카드 로드
   // ======================
   useEffect(() => {
     let alive = true;
@@ -236,12 +236,12 @@ export default function HomePage() {
               c?.categoryKey ??
               c?.category ??
               c?.categoryCode ??
+              c?.categoryLabel ??
               ""
             )
               .toString()
               .toLowerCase();
 
-          // 1) 각 카테고리 후보 뽑기
           const restaurants = all.filter((c: any) => {
             const k = getKey(c);
             return k === "restaurant" || k === "food" || k === "fd6";
@@ -254,7 +254,7 @@ export default function HomePage() {
 
           const beauty = all.filter((c: any) => {
             const k = getKey(c);
-            return k === "beauty" || k === "bk9" || k === "salon";
+            return k === "salon" || k === "beauty" || k === "bk9";
           });
 
           const activity = all.filter((c: any) => {
@@ -262,7 +262,6 @@ export default function HomePage() {
             return k === "activity" || k === "at4";
           });
 
-          // 2) 목표 쿼터대로 먼저 담기
           const picked: HomeCard[] = [];
           const pickSet = new Set<string>();
 
@@ -273,31 +272,70 @@ export default function HomePage() {
               if (pickSet.has(id)) continue;
               picked.push(item);
               pickSet.add(id);
-              if (picked.length >= n) break;
+              if (picked.filter(Boolean).length >= picked.length && picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= 999999) break;
+              if (picked.length >= n + (pickSet.size - pickSet.size)) break;
+              if (picked.filter(Boolean).length >= n && picked.length >= n) break;
             }
           };
 
-          // 카테고리별 쿼터
+          // 12장 쿼터: 4/4/2/2
           pushSome(restaurants as any, 4);
-          pushSome(cafes as any, 4);
-          pushSome(beauty as any, 2);
-          pushSome(activity as any, 2);
+          pushSome(cafes as any, 8); // 누적이 아니라 "카페 4개"가 목적이므로 아래에서 다시 자름
+          // 위 pushSome은 누적 카운트 방식이라, 정확히 맞추기 위해 아래에서 slice로 강제
+          // (실제로는 아래에서 다시 담아줌)
 
-          // 3) 부족하면 all에서 남은 걸로 12장까지 채우기
-          if (picked.length < 12) {
+          // ✅ 정확히 쿼터대로 다시 담기 (중복/부족 방지)
+          const repick: HomeCard[] = [];
+          const repickSet = new Set<string>();
+          const repush = (arr: HomeCard[], n: number) => {
+            for (const item of arr) {
+              const id = String((item as any).id ?? "");
+              if (!id) continue;
+              if (repickSet.has(id)) continue;
+              repick.push(item);
+              repickSet.add(id);
+              if (repick.length >= n + (repick.length - repick.length)) break;
+              if (repick.filter(Boolean).length >= 999999) break;
+              if (repick.length >= 999999) break;
+              if (repick.length >= n + (repick.length - repick.length)) break;
+              if (repick.length >= n) break;
+            }
+          };
+
+          // 순서: 식당 -> 카페 -> 미용실 -> 액티비티
+          repush(restaurants as any, 4);
+          repush(cafes as any, 4);
+          repush(beauty as any, 2);
+          repush(activity as any, 2);
+
+          // 부족하면 all에서 채우기
+          if (repick.length < 12) {
             for (const item of all as any) {
               const id = String(item?.id ?? "");
               if (!id) continue;
-              if (pickSet.has(id)) continue;
-              picked.push(item);
-              pickSet.add(id);
-              if (picked.length >= 12) break;
+              if (repickSet.has(id)) continue;
+              repick.push(item);
+              repickSet.add(id);
+              if (repick.length >= 12) break;
             }
           }
 
-          cards = picked.slice(0, 12);
+          cards = repick.slice(0, 12);
         } else {
+          // ✅ 각 탭은 5개로 통일
           cards = (await fetchHomeCardsByTab(homeTab, { count: 5 })) ?? [];
+          cards = cards.slice(0, 5);
         }
 
         if (!alive) return;
@@ -325,10 +363,11 @@ export default function HomePage() {
     };
   }, [homeTab]);
 
-  // activeIndex 보정
+  // activeIndex 보정 (순환 X: 양끝 고정)
   useEffect(() => {
     const max = Math.max(0, homeCards.length - 1);
-    if (activeIndex > max) setActiveIndex(0);
+    if (activeIndex > max) setActiveIndex(max);
+    if (activeIndex < 0) setActiveIndex(0);
   }, [homeCards.length, activeIndex]);
 
   // ======================
@@ -571,15 +610,111 @@ export default function HomePage() {
     { key: "activity", label: "액티비티" },
   ];
 
+  // ============================
+  // ✅ 카드 렌더용 (순환 X)
+  // ============================
   const cardsToRender = homeCards;
   const total = cardsToRender.length;
 
-  // ✅ 스택: 원형으로 4장
-  const STACK_SIZE = Math.min(4, total);
-  const stackCards =
-    total > 0
-      ? Array.from({ length: STACK_SIZE }, (_, i) => cardsToRender[(activeIndex + i) % total])
-      : [];
+  const hasPrev = total > 0 && activeIndex > 0;
+  const hasNext = total > 0 && activeIndex < total - 1;
+
+  const prevCard = hasPrev ? cardsToRender[activeIndex - 1] : null;
+  const currCard = total > 0 ? cardsToRender[activeIndex] : null;
+  const nextCard = hasNext ? cardsToRender[activeIndex + 1] : null;
+
+  const getImageUrl = (card: HomeCard | null) => {
+    if (!card) return undefined;
+    const anyCard = card as any;
+    return (anyCard.imageUrl ?? anyCard.image ?? undefined) as string | undefined;
+  };
+
+  const renderCardButton = (card: HomeCard, mode: "prev" | "curr" | "next") => {
+    const anyCard = card as any;
+    const imageUrl = getImageUrl(card);
+
+    const baseShadow = "0 22px 45px rgba(15,23,42,0.26)";
+    const sideShadow = "0 14px 30px rgba(15,23,42,0.18)";
+
+    const styleByMode: React.CSSProperties =
+      mode === "curr"
+        ? {
+            zIndex: 30,
+            opacity: 1,
+            transform: "translateX(0px) scale(1)",
+            boxShadow: baseShadow,
+          }
+        : mode === "prev"
+        ? {
+            zIndex: 20,
+            opacity: 0.55,
+            transform: "translateX(-56px) scale(0.92)",
+            boxShadow: sideShadow,
+          }
+        : {
+            zIndex: 10,
+            opacity: 0.55,
+            transform: "translateX(56px) scale(0.92)",
+            boxShadow: sideShadow,
+          };
+
+    const onClick = () => {
+      if (mode === "prev") {
+        setActiveIndex((v) => Math.max(0, v - 1));
+        return;
+      }
+      if (mode === "next") {
+        setActiveIndex((v) => Math.min(total - 1, v + 1));
+        return;
+      }
+      // curr
+      setSelectedCard(card);
+      logEvent("home_card_open", { id: anyCard.id, name: anyCard.name, tab: homeTab });
+      addPoints(2, "홈 추천 카드 열람");
+    };
+
+    return (
+      <button
+        key={String(anyCard.id ?? `${mode}-${activeIndex}`)}
+        type="button"
+        onClick={onClick}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          borderRadius: 28,
+          border: "none",
+          padding: 0,
+          cursor: "pointer",
+          background: "#ffffff",
+          overflow: "hidden",
+          transition: "transform 0.22s ease, opacity 0.22s ease",
+          ...styleByMode,
+        }}
+      >
+        <div style={{ position: "relative", width: "100%", height: "70%", background: "#dbeafe" }}>
+          {imageUrl && (
+            <Image src={imageUrl} alt={anyCard.name ?? "place"} fill style={{ objectFit: "cover" }} />
+          )}
+        </div>
+
+        <div style={{ padding: 16, textAlign: "left" }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 6 }}>
+            {anyCard.name}
+          </div>
+
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
+            {anyCard.categoryLabel ?? anyCard.category}
+          </div>
+
+          <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>
+            {anyCard.mood ?? anyCard.moodText ?? ""}
+          </div>
+        </div>
+      </button>
+    );
+  };
 
   return (
     <main
@@ -787,7 +922,7 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* ===================== 메인 추천 카드 (겹침 스택) ===================== */}
+        {/* ===================== 메인 추천 카드 (좌/우 스택) ===================== */}
         <section style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div style={{ width: "100%", overflow: "visible" }}>
             <div
@@ -840,115 +975,14 @@ export default function HomePage() {
                 </div>
               )}
 
-              {/* ✅ 실제 카드 스택: 뒤→앞 렌더로 안정적인 겹침 */}
-              {!isHomeLoading &&
-                total > 0 &&
-                stackCards
-                  .map((card, depth) => ({ card, depth }))
-                  .reverse()
-                  .map(({ card, depth }) => {
-                    // frontDepth: 0이 맨 앞
-                    // frontDepth: 0이 맨 앞
-const frontDepth = STACK_SIZE - 1 - depth;
-
-// ✅ peek 컨셉: 뒤로 갈수록 좌우 여백이 커져서 양쪽으로 '얇게' 보이게
-// 앞 카드: 여백 0
-// 2번째: 좌우 10px
-// 3번째: 좌우 18px
-// 4번째: 좌우 26px
-const SIDE_GAP = [0, 10, 18, 26];
-const TOP_GAP = [0, 6, 12, 18];
-
-const side = SIDE_GAP[frontDepth] ?? frontDepth * 10;
-const top = TOP_GAP[frontDepth] ?? frontDepth * 6;
-
-const scale =
-  frontDepth === 0 ? 1 : frontDepth === 1 ? 0.98 : frontDepth === 2 ? 0.96 : 0.94;
-
-const opacity =
-  frontDepth === 0 ? 1 : frontDepth === 1 ? 0.85 : frontDepth === 2 ? 0.65 : 0.48;
-
-const shadow =
-  frontDepth === 0
-    ? "0 24px 55px rgba(15,23,42,0.32)"
-    : frontDepth === 1
-    ? "0 18px 45px rgba(15,23,42,0.22)"
-    : "0 12px 30px rgba(15,23,42,0.16)";
-
-
-
-
-
-                    const anyCard = card as any;
-                    const imageUrl: string | undefined = anyCard.imageUrl ?? anyCard.image ?? undefined;
-
-                    return (
-                      <button
-                        key={String(anyCard.id ?? `${frontDepth}`)}
-                        type="button"
-                        onClick={() => {
-                          if (frontDepth !== 0) {
-                            setActiveIndex((prev) => (total ? (prev + 1) % total : 0));
-                            return;
-                          }
-                          setSelectedCard(card);
-                          logEvent("home_card_open", { id: anyCard.id, name: anyCard.name, tab: homeTab });
-                          addPoints(2, "홈 추천 카드 열람");
-                        }}
-                        style={{
-  position: "absolute",
-
-  // ✅ inset:0 제거하고, 좌우/상단 여백으로 '좌우 peek' 만들기
-  top,
-  left: side,
-  right: side,
-  bottom: 0,
-
-  borderRadius: 28,
-  border: "none",
-  padding: 0,
-  cursor: "pointer",
-  background: "#ffffff",
-  overflow: "hidden",
-
-  boxShadow: shadow,
-  opacity,
-
-  // ✅ scale만 주고, 좌우 translate는 쓰지 않음 (옆 카드처럼 보이는 문제 제거)
-  transform: `scale(${scale})`,
-  transformOrigin: "center",
-  transition: "all 0.25s ease",
-
-  zIndex: 100 - frontDepth,
-}}
-
-                      >
-                        <div style={{ position: "relative", width: "100%", height: "70%", background: "#dbeafe" }}>
-                          {imageUrl && (
-                            <Image src={imageUrl} alt={anyCard.name ?? "place"} fill style={{ objectFit: "cover" }} />
-                          )}
-                        </div>
-
-                        <div style={{ padding: 16, textAlign: "left" }}>
-                          <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 6 }}>
-                            {anyCard.name}
-                          </div>
-
-                          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
-                            {anyCard.categoryLabel ?? anyCard.category}
-                          </div>
-
-                          <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>
-                            {anyCard.mood ?? anyCard.moodText ?? ""}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+              {/* ✅ 좌/우 스택: 있을 때만 보여줌 (첫 카드면 왼쪽 없음) */}
+              {!isHomeLoading && prevCard && renderCardButton(prevCard, "prev")}
+              {!isHomeLoading && currCard && renderCardButton(currCard, "curr")}
+              {!isHomeLoading && nextCard && renderCardButton(nextCard, "next")}
             </div>
           </div>
 
-          {/* 인디케이터 */}
+          {/* 인디케이터 (총 개수 그대로) */}
           <div
             style={{
               marginTop: 18,
@@ -1106,7 +1140,8 @@ const shadow =
                         marginBottom: 10,
                       }}
                     >
-                      {(selectedCard as any).name} · {(selectedCard as any).categoryLabel ?? (selectedCard as any).category}
+                      {(selectedCard as any).name} ·{" "}
+                      {(selectedCard as any).categoryLabel ?? (selectedCard as any).category}
                     </div>
 
                     <div style={{ fontSize: 14, color: "#e5e7eb" }}>
