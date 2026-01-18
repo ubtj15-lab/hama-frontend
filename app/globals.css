@@ -30,3 +30,58 @@ body {
 :root {
   color-scheme: light;
 }
+:root {
+  /* Color */
+  --bg-top: #f8fafc;
+  --bg-bottom: #eef2ff;
+  --surface: #ffffff;
+  --surface-2: rgba(255, 255, 255, 0.78);
+  --stroke: rgba(148, 163, 184, 0.22);
+
+  --text: #0f172a;
+  --muted: rgba(15, 23, 42, 0.55);
+  --brand: #2563eb;
+
+  /* Radius */
+  --r-lg: 20px;
+  --r-xl: 28px;
+
+  /* Shadow (고급 느낌 핵심) */
+  --shadow-sm: 0 8px 20px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 14px 34px rgba(15, 23, 42, 0.14);
+  --shadow-lg: 0 22px 55px rgba(15, 23, 42, 0.18);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  color: var(--text);
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* 살짝 “유리” 느낌 */
+.hama-glass {
+  background: var(--surface-2);
+  border: 1px solid var(--stroke);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* 버튼 눌림 감(고급 UX 핵심) */
+.hama-press {
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease), opacity 160ms var(--ease);
+}
+.hama-press:active {
+  transform: scale(0.98);
+}

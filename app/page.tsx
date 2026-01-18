@@ -718,19 +718,24 @@ export default function HomePage() {
 
   return (
     <main
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 100%)",
-        paddingBottom: 110,
-      }}
-    >
+  style={{
+    minHeight: "100vh",
+    paddingBottom: 110,
+    background: "transparent",
+  }}
+>
+
       <div
-        style={{
-          maxWidth: 430,
-          margin: "0 auto",
-          padding: "20px 18px 0",
-        }}
-      >
+  style={{
+    maxWidth: 430,
+    margin: "0 auto",
+    padding: "22px 18px 0",
+    display: "flex",
+    flexDirection: "column",
+    gap: 14, // ✅ 섹션 간격 리듬
+  }}
+>
+
         {/* ===================== 상단 바 ===================== */}
         <header
           style={{
@@ -838,48 +843,56 @@ export default function HomePage() {
         )}
 
         {/* ===================== 검색 바 ===================== */}
-        <form
-          onSubmit={handleSearchSubmit}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: "#ffffff",
-            borderRadius: 999,
-            padding: "10px 12px",
-            boxShadow: "0 10px 30px rgba(15,23,42,0.10)",
-            marginBottom: 12,
-          }}
-        >
-          <span style={{ fontSize: 16 }}>🔎</span>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="근처 카페 찾아줘 / 점심 뭐 먹지"
-            style={{
-              flex: 1,
-              border: "none",
-              outline: "none",
-              fontSize: 14,
-              background: "transparent",
-            }}
-          />
-          <button
-            type="submit"
-            style={{
-              height: 36,
-              padding: "0 16px",
-              borderRadius: 999,
-              border: "none",
-              cursor: "pointer",
-              background: "linear-gradient(135deg, #38bdf8, #2563eb)",
-              color: "#ffffff",
-              fontWeight: 800,
-            }}
-          >
-            검색
-          </button>
-        </form>
+<form
+  className="hama-glass"
+  onSubmit={handleSearchSubmit}
+  style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 999,
+    padding: "12px 12px",
+    boxShadow: "var(--shadow-sm)",
+    border: "1px solid var(--stroke)",
+  }}
+>
+  <span style={{ fontSize: 16, opacity: 0.7 }}>🔎</span>
+
+  <input
+    value={query}
+    onChange={(e) => setQuery(e.target.value)}
+    placeholder="근처 카페 찾아줘 / 점심 뭐 먹지"
+    style={{
+      flex: 1,
+      border: "none",
+      outline: "none",
+      fontSize: 14,
+      background: "transparent",
+      color: "var(--text)",
+      padding: "2px 2px",
+    }}
+  />
+
+  <button
+    type="submit"
+    className="hama-press"
+    style={{
+      height: 38,
+      padding: "0 18px",
+      borderRadius: 999,
+      border: "1px solid rgba(255,255,255,0.35)",
+      cursor: "pointer",
+      background: "linear-gradient(135deg, #2563eb, #38bdf8)",
+      color: "#ffffff",
+      fontWeight: 900,
+      letterSpacing: 0.2,
+      boxShadow: "0 10px 22px rgba(37,99,235,0.22)",
+    }}
+  >
+    검색
+  </button>
+</form>
+
 
         {/* ===================== 카테고리 탭 ===================== */}
         <div
