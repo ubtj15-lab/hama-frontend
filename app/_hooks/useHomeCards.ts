@@ -1,103 +1,123 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { HomeCard } from "@lib/storeTypes";
-import { fetchStores } from "@lib/storeRepository";
+import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
+import { fetchHomeCardsByTab } from "@lib/storeRepository";
+import { logEvent } from "@/lib/logEvent";
 
-
-const FALLBACK_HOME_CARDS: HomeCard[] = [
-  {
-    id: "cafe-1",
-    name: "스타벅스 오산점",
-    categoryLabel: "카페",
-    distanceKm: 0.5,
-    moodText: "조용한 분위기",
-    imageUrl: "/images/sample-cafe-1.jpg",
-    tags: ["조용", "커피", "작업"],
-    withKids: false,
-    forWork: true,
-    priceLevel: 2,
-  } as HomeCard,
-  {
-    id: "food-1",
-    name: "소담소담 한식당",
-    categoryLabel: "식당",
-    distanceKm: 0.7,
-    moodText: "가족 외식하기 좋은 밥집",
-    imageUrl: "/images/sample-dining-1.jpg",
-    tags: ["한식", "가족", "든든"],
-    withKids: true,
-    forWork: false,
-    priceLevel: 2,
-  } as HomeCard,
-  {
-    id: "beauty-1",
-    name: "해온 헤어",
-    categoryLabel: "미용실",
-    distanceKm: 1.2,
-    moodText: "예약하면 빨라요",
-    imageUrl: "/images/sample-beauty-1.jpg",
-    tags: ["컷", "펌", "염색"],
-    withKids: false,
-    forWork: false,
-    priceLevel: 3,
-  } as HomeCard,
-  {
-    id: "act-1",
-    name: "국립농업박물관",
-    categoryLabel: "액티비티",
-    distanceKm: 2.3,
-    moodText: "아이랑 가기 좋아요",
-    imageUrl: "/images/sample-activity-1.jpg",
-    tags: ["박물관", "체험", "키즈"],
-    withKids: true,
-    forWork: false,
-    priceLevel: 1,
-  } as HomeCard,
-  {
-    id: "cafe-2",
-    name: "라운지 83",
-    categoryLabel: "카페",
-    distanceKm: 0.8,
-    moodText: "햇살 잘 들어오는 브런치",
-    imageUrl: "/images/sample-cafe-2.jpg",
-    tags: ["브런치", "감성", "사진"],
-    withKids: false,
-    forWork: false,
-    priceLevel: 3,
-  } as HomeCard,
-];
-
-export function useHomeCards() {
-  const [cards, setCards] = useState<HomeCard[]>(FALLBACK_HOME_CARDS);
-  const [activeIndex, setActiveIndex] = useState(0);
+export function useHomeCards(homeTab: HomeTabKey) {
+  const [cards, setCards] = useState<HomeCard[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
 
-    (async () => {
+    async function load() {
+      setIsLoading(true);
       try {
-        const data = await fetchStores(); // 너 storeRepository.ts 그대로 사용
-        if (!mounted) return;
+        let next: HomeCard[] = [];
 
-        if (data && data.length > 0) {
-          setCards(data);
-          setActiveIndex(0);
+        if (homeTab === "all") {
+          const all = (await fetchHomeCardsByTab("all")) ?? [];
+
+          const getKey = (c: any) =>
+            (
+              c?.tab ??
+              c?.homeTab ??
+              c?.type ??
+              c?.categoryKey ??
+              c?.category ??
+              c?.categoryCode ??
+              c?.categoryLabel ??
+              ""
+            )
+              .toString()
+              .toLowerCase();
+
+          const restaurants = all.filter((c: any) => {
+            const k = getKey(c);
+            return k === "restaurant" || k === "food" || k === "fd6";
+          });
+
+          const cafes = all.filter((c: any) => {
+            const k = getKey(c);
+            return k === "cafe" || k === "ce7";
+          });
+
+          const beauty = all.filter((c: any) => {
+            const k = getKey(c);
+            return k === "salon" || k === "beauty" || k === "bk9";
+          });
+
+          const activity = all.filter((c: any) => {
+            const k = getKey(c);
+            return k === "activity" || k === "at4";
+          });
+
+          const takeN = (arr: HomeCard[], n: number) => {
+            const out: HomeCard[] = [];
+            const seen = new Set<string>();
+            for (const item of arr) {
+              const id = String((item as any).id ?? "");
+              if (!id) continue;
+              if (seen.has(id)) continue;
+              out.push(item);
+              seen.add(id);
+              if (out.length >= n) break;
+            }
+            return out;
+          };
+
+          const q1 = takeN(restaurants as any, 4);
+          const q2 = takeN(cafes as any, 4);
+          const q3 = takeN(beauty as any, 2);
+          const q4 = takeN(activity as any, 2);
+
+          const picked: HomeCard[] = [];
+          const pickedSet = new Set<string>();
+          for (const x of [...q1, ...q2, ...q3, ...q4]) {
+            const id = String((x as any).id ?? "");
+            if (!id) continue;
+            if (pickedSet.has(id)) continue;
+            picked.push(x);
+            pickedSet.add(id);
+          }
+
+          if (picked.length < 12) {
+            for (const item of all as any) {
+              const id = String(item?.id ?? "");
+              if (!id) continue;
+              if (pickedSet.has(id)) continue;
+              picked.push(item);
+              pickedSet.add(id);
+              if (picked.length >= 12) break;
+            }
+          }
+
+          next = picked.slice(0, 12);
         } else {
-          setCards(FALLBACK_HOME_CARDS);
-          setActiveIndex(0);
+          next = (await fetchHomeCardsByTab(homeTab, { count: 5 })) ?? [];
+          next = next.slice(0, 5);
         }
+
+        if (!alive) return;
+
+        setCards(next);
+        logEvent("home_tab_loaded", { tab: homeTab, count: next.length });
       } catch {
-        if (!mounted) return;
-        setCards(FALLBACK_HOME_CARDS);
-        setActiveIndex(0);
+        if (!alive) return;
+        setCards([]);
+      } finally {
+        if (!alive) return;
+        setIsLoading(false);
       }
-    })();
+    }
 
+    load();
     return () => {
-      mounted = false;
+      alive = false;
     };
-  }, []);
+  }, [homeTab]);
 
-  return { cards, activeIndex, setActiveIndex };
+  return { cards, isLoading };
 }

@@ -85,3 +85,50 @@ body {
 .hama-press:active {
   transform: scale(0.98);
 }
+/* globals.css (아래쪽 아무데나 추가) */
+
+:root{
+  --shadow-sm: 0 10px 26px rgba(15,23,42,0.10);
+  --shadow-md: 0 16px 40px rgba(15,23,42,0.14);
+  --line: rgba(255,255,255,0.55);
+  --glass: rgba(255,255,255,0.72);
+  --text: #0f172a;
+  --muted: #64748b;
+  --primary: #2563eb;
+}
+
+/* ✅ 고급 글래스 바 */
+.hama-glass{
+  background: var(--glass);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* ✅ 아이콘 캡슐 */
+.hama-icon-chip{
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255,255,255,0.6);
+}
+
+/* ✅ 프라이머리 버튼 */
+.hama-primary-btn{
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.4);
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 10px 22px rgba(37,99,235,0.22);
+}
+
+.hama-primary-btn:active{
+  transform: translateY(1px);
+}
