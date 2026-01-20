@@ -13,36 +13,45 @@ type Props = {
   onAddPoints: (amount: number, reason: string) => void;
 };
 
-export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, onAddPoints }: Props) {
+export default function HomeSwipeDeck({
+  cards,
+  homeTab,
+  isLoading,
+  onOpenCard,
+  onAddPoints,
+}: Props) {
   const total = cards.length;
 
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // --- swipe state
+  // 드래그 상태
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const startXRef = useRef(0);
+  const movedRef = useRef(false);
 
   const SWIPE_THRESHOLD = 60;
-  const DRAG_CLAMP = 140;
+  const MOVE_DEADZONE = 6;
 
-  // activeIndex 보정(데이터 갱신으로 길이 줄었을 때)
-  React.useEffect(() => {
-    const max = Math.max(0, total - 1);
-    if (activeIndex > max) setActiveIndex(max);
-    if (activeIndex < 0) setActiveIndex(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [total]);
+  // activeIndex 안전 보정
+  if (activeIndex > Math.max(0, total - 1)) {
+    // 렌더 중 setState는 피하려고 memo로 처리
+  }
 
-  const hasPrev = total > 0 && activeIndex > 0;
-  const hasNext = total > 0 && activeIndex < total - 1;
+  const safeIndex = useMemo(() => {
+    if (total <= 0) return 0;
+    return Math.min(Math.max(activeIndex, 0), total - 1);
+  }, [activeIndex, total]);
 
-  const prevCard = hasPrev ? cards[activeIndex - 1] : null;
-  const currCard = total > 0 ? cards[activeIndex] : null;
-  const nextCard = hasNext ? cards[activeIndex + 1] : null;
+  const hasPrev = total > 0 && safeIndex > 0;
+  const hasNext = total > 0 && safeIndex < total - 1;
 
-  const goNext = () => setActiveIndex((v) => Math.min(total - 1, v + 1));
+  const prevCard = hasPrev ? cards[safeIndex - 1] : null;
+  const currCard = total > 0 ? cards[safeIndex] : null;
+  const nextCard = hasNext ? cards[safeIndex + 1] : null;
+
   const goPrev = () => setActiveIndex((v) => Math.max(0, v - 1));
+  const goNext = () => setActiveIndex((v) => Math.min(total - 1, v + 1));
 
   const getImageUrl = (card: HomeCard | null) => {
     if (!card) return undefined;
@@ -50,44 +59,41 @@ export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, o
     return (anyCard.imageUrl ?? anyCard.image ?? undefined) as string | undefined;
   };
 
-  const dragRatio = Math.max(-1, Math.min(1, dragX / 140));
-  const currDrag = dragX;
-  const sideDrag = dragX * 0.25;
+  const baseShadow = "0 22px 45px rgba(15,23,42,0.26)";
+  const sideShadow = "0 14px 30px rgba(15,23,42,0.18)";
 
   const renderCard = (card: HomeCard, mode: "prev" | "curr" | "next") => {
     const anyCard = card as any;
     const imageUrl = getImageUrl(card);
-
-    const baseShadow = "0 22px 45px rgba(15,23,42,0.26)";
-    const sideShadow = "0 14px 30px rgba(15,23,42,0.18)";
-    const transition = isDragging ? "none" : "transform 0.22s ease, opacity 0.22s ease";
 
     const styleByMode: React.CSSProperties =
       mode === "curr"
         ? {
             zIndex: 30,
             opacity: 1,
-            transform: `translateX(${currDrag}px) rotate(${dragRatio * 1.2}deg) scale(1)`,
+            transform: `translateX(${dragX}px) scale(1)`,
             boxShadow: baseShadow,
           }
         : mode === "prev"
         ? {
             zIndex: 20,
             opacity: 0.55,
-            transform: `translateX(${-56 + sideDrag}px) scale(0.92)`,
+            transform: "translateX(-56px) scale(0.92)",
             boxShadow: sideShadow,
           }
         : {
             zIndex: 10,
             opacity: 0.55,
-            transform: `translateX(${56 + sideDrag}px) scale(0.92)`,
+            transform: "translateX(56px) scale(0.92)",
             boxShadow: sideShadow,
           };
 
     const onClick = () => {
+      // prev/next는 "옆으로 넘기기"
       if (mode === "prev") return goPrev();
       if (mode === "next") return goNext();
 
+      // curr는 디테일 열기
       onOpenCard(card);
       logEvent("home_card_open", { id: anyCard.id, name: anyCard.name, tab: homeTab });
       onAddPoints(2, "홈 추천 카드 열람");
@@ -95,7 +101,7 @@ export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, o
 
     return (
       <button
-        key={String(anyCard.id ?? `${mode}-${activeIndex}`)}
+        key={String(anyCard.id ?? `${mode}-${safeIndex}`)}
         type="button"
         onClick={onClick}
         style={{
@@ -109,7 +115,7 @@ export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, o
           cursor: "pointer",
           background: "#ffffff",
           overflow: "hidden",
-          transition,
+          transition: isDragging ? "none" : "transform 0.22s ease, opacity 0.22s ease",
           ...styleByMode,
         }}
       >
@@ -121,58 +127,62 @@ export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, o
           <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 6 }}>
             {anyCard.name}
           </div>
-
-          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: "#6B7280" }}>
             {anyCard.categoryLabel ?? anyCard.category}
-          </div>
-
-          <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>
-            {anyCard.mood ?? anyCard.moodText ?? ""}
           </div>
         </div>
       </button>
     );
   };
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (total <= 1) return;
-
-    setIsDragging(true);
-    startXRef.current = e.clientX;
-    setDragX(0);
-
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    } catch {}
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
-    const dx = e.clientX - startXRef.current;
-    const clamped = Math.max(-DRAG_CLAMP, Math.min(DRAG_CLAMP, dx));
-    setDragX(clamped);
-  };
-
-  const finish = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-
-    const dx = dragX;
-    if (Math.abs(dx) >= SWIPE_THRESHOLD) {
-      if (dx < 0 && hasNext) goNext();
-      if (dx > 0 && hasPrev) goPrev();
-    }
-    setDragX(0);
-  };
-
   return (
     <section style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div style={{ width: "100%", overflow: "visible" }}>
         <div
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={finish}
-          onPointerCancel={finish}
+          // ✅ 스와이프 핸들러는 “드래그로 판정될 때만” 개입
+          onPointerDown={(e) => {
+            if (total <= 1) return;
+
+            setIsDragging(true);
+            movedRef.current = false;
+            startXRef.current = e.clientX;
+
+            // 모바일/터치에서 스와이프 안정성 위해 캡처
+            try {
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            } catch {}
+          }}
+          onPointerMove={(e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startXRef.current;
+
+            if (Math.abs(dx) > MOVE_DEADZONE) movedRef.current = true;
+
+            const clamped = Math.max(-140, Math.min(140, dx));
+            setDragX(clamped);
+          }}
+          onPointerUp={() => {
+            if (!isDragging) return;
+            setIsDragging(false);
+
+            // ✅ 움직임 거의 없으면 “클릭”로 보고 스와이프 처리 안 함
+            if (!movedRef.current) {
+              setDragX(0);
+              return;
+            }
+
+            const dx = dragX;
+            if (Math.abs(dx) >= SWIPE_THRESHOLD) {
+              if (dx < 0) goNext();
+              else goPrev();
+            }
+
+            setDragX(0);
+          }}
+          onPointerCancel={() => {
+            setIsDragging(false);
+            setDragX(0);
+          }}
           style={{
             width: "100%",
             maxWidth: 320,
@@ -180,11 +190,11 @@ export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, o
             position: "relative",
             overflow: "visible",
             margin: "0 auto",
-            touchAction: "pan-y",
+            touchAction: "pan-y", // 세로 스크롤은 살리고, 가로는 우리가 처리
             userSelect: "none",
-            WebkitUserSelect: "none",
           }}
         >
+          {/* 로딩 */}
           {isLoading && (
             <div
               style={{
@@ -204,6 +214,7 @@ export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, o
             </div>
           )}
 
+          {/* 비어있음 */}
           {!isLoading && total === 0 && (
             <div
               style={{
@@ -223,12 +234,14 @@ export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, o
             </div>
           )}
 
+          {/* 카드 */}
           {!isLoading && prevCard && renderCard(prevCard, "prev")}
           {!isLoading && currCard && renderCard(currCard, "curr")}
           {!isLoading && nextCard && renderCard(nextCard, "next")}
         </div>
       </div>
 
+      {/* 인디케이터 */}
       <div
         style={{
           marginTop: 18,
@@ -244,12 +257,12 @@ export default function HomeSwipeDeck({ cards, homeTab, isLoading, onOpenCard, o
             type="button"
             onClick={() => setActiveIndex(idx)}
             style={{
-              width: idx === activeIndex ? 16 : 8,
+              width: idx === safeIndex ? 16 : 8,
               height: 8,
               borderRadius: 999,
               border: "none",
               padding: 0,
-              background: idx === activeIndex ? "#2563EB" : "rgba(148,163,184,0.6)",
+              background: idx === safeIndex ? "#2563EB" : "rgba(148,163,184,0.6)",
               cursor: "pointer",
               transition: "all 0.2s ease",
             }}

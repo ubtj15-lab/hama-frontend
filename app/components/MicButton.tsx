@@ -1,142 +1,116 @@
-'use client';
+"use client";
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from "react";
+
+declare global {
+  interface Window {
+    webkitSpeechRecognition?: any;
+    SpeechRecognition?: any;
+  }
+}
 
 type Props = {
-  onResult: (text: string) => void;
+  // ✅ 홈에서 쓰는 방식
+  isListening?: boolean;
+  onClick?: () => void;
+
+  // ✅ 지도(map)에서 쓰는 기존 방식 (호환)
+  onResult?: (text: string) => void;
+
   size?: number;
   style?: React.CSSProperties;
 };
 
-// ✅ 브라우저 SpeechRecognition을 대신할 커스텀 타입
-type LocalSpeechRecognition = {
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
+export default function MicButton({
+  isListening: controlledListening,
+  onClick,
+  onResult,
+  size = 92,
+  style,
+}: Props) {
+  const [internalListening, setInternalListening] = useState(false);
+  const recognitionRef = useRef<any | null>(null);
 
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
+  const isControlled = typeof onClick === "function";
+  const isListening = typeof controlledListening === "boolean" ? controlledListening : internalListening;
 
-  onstart: (() => void) | null;
-  onend: (() => void) | null;
-  onerror: ((event: any) => void) | null;
-  onresult: ((event: any) => void) | null;
-};
-
-const MicButton: React.FC<Props> = ({ onResult, size = 96, style }) => {
-  const [listening, setListening] = useState(false);
-  const recogRef = useRef<LocalSpeechRecognition | null>(null);
-
-  // 🎙 음성 인식 준비
+  // ✅ onResult가 들어오면(지도 페이지) 여기서 음성인식까지 처리해줌
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
-    const SpeechRecognitionCtor =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
 
-    if (!SpeechRecognitionCtor) {
-      console.warn('이 브라우저는 음성 인식을 지원하지 않아요 ㅠㅠ');
-      return;
-    }
+    const rec = new SpeechRecognition();
+    rec.lang = "ko-KR";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
 
-    const recognition = new SpeechRecognitionCtor() as LocalSpeechRecognition;
-    recognition.lang = 'ko-KR';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    rec.onstart = () => setInternalListening(true);
+    rec.onend = () => setInternalListening(false);
+    rec.onerror = () => setInternalListening(false);
 
-    recognition.onstart = () => {
-      setListening(true);
+    rec.onresult = (event: any) => {
+      const text = event?.results?.[0]?.[0]?.transcript?.trim?.() ?? "";
+      if (text && onResult) onResult(text);
     };
 
-    recognition.onend = () => {
-      setListening(false);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('SpeechRecognition error:', event);
-      setListening(false);
-    };
-
-    recognition.onresult = (event: any) => {
-      const res = event.results?.[0]?.[0];
-      if (res && typeof res.transcript === 'string') {
-        onResult(res.transcript);
-      }
-    };
-
-    recogRef.current = recognition;
-
+    recognitionRef.current = rec;
     return () => {
-      recognition.onstart = null;
-      recognition.onend = null;
-      recognition.onerror = null;
-      recognition.onresult = null;
       try {
-        recognition.abort();
-      } catch {
-        // ignore
-      }
+        rec.stop();
+      } catch {}
+      recognitionRef.current = null;
     };
   }, [onResult]);
 
-  const handleClick = () => {
-    const recog = recogRef.current;
-    if (!recog) {
-      alert('이 브라우저에서는 음성 인식을 사용할 수 없어요 ㅠㅠ');
+  const handlePress = () => {
+    // ✅ 홈(page.tsx) 방식: 외부에서 클릭 핸들링
+    if (isControlled && onClick) {
+      onClick();
+      return;
+    }
+
+    // ✅ 지도(map) 방식: 컴포넌트 내부에서 음성인식 처리
+    if (!onResult) return;
+
+    const rec = recognitionRef.current;
+    if (!rec) {
+      alert("이 브라우저는 음성 인식을 지원하지 않아요 (크롬 권장)");
       return;
     }
 
     try {
-      if (listening) {
-        recog.stop();
-      } else {
-        recog.start();
-      }
-    } catch (e) {
-      console.error(e);
-    }
+      if (internalListening) rec.stop();
+      else rec.start();
+    } catch {}
   };
-
-  const buttonSize = size;
-  const iconSize = size * 0.4;
 
   return (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={handlePress}
+      aria-label="음성 검색"
       style={{
-        width: buttonSize,
-        height: buttonSize,
-        borderRadius: 999,
-        border: 'none',
-        outline: 'none',
-        cursor: 'pointer',
-        background: listening ? '#2563eb' : '#ffffff',
-        boxShadow: listening
-          ? '0 14px 30px rgba(37,99,235,0.48)'
-          : '0 10px 22px rgba(15,23,42,0.18)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition:
-          'background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease',
-        transform: listening ? 'translateY(2px)' : 'translateY(0)',
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        border: "6px solid rgba(255,255,255,0.6)",
+        background: isListening
+          ? "linear-gradient(135deg, #1d4ed8, #1e40af)"
+          : "linear-gradient(135deg, #38bdf8, #2563eb)",
+        boxShadow:
+          "0 18px 40px rgba(37, 99, 235, 0.45), 0 0 0 4px rgba(191, 219, 254, 0.9)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        transition: "background 0.18s ease, transform 0.1s ease, box-shadow 0.18s ease",
+        transform: isListening ? "scale(1.06)" : "scale(1)",
         ...style,
       }}
     >
-      {/* 마이크 아이콘 (간단한 SVG) */}
-      <svg
-        width={iconSize}
-        height={iconSize}
-        viewBox="0 0 24 24"
-        fill={listening ? '#ffffff' : '#2563eb'}
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path d="M12 14C13.66 14 15 12.66 15 11V5C15 3.34 13.66 2 12 2C10.34 2 9 3.34 9 5V11C9 12.66 10.34 14 12 14ZM17.3 11C17.3 13.89 14.99 16.2 12.1 16.2C9.21 16.2 6.9 13.89 6.9 11H5C5 14.16 7.42 16.86 10.5 17.39V20H13.5V17.39C16.58 16.86 19 14.16 19 11H17.3Z" />
-      </svg>
+      <span style={{ fontSize: Math.max(28, Math.floor(size * 0.35)), color: "#ffffff" }}>🎙</span>
     </button>
   );
-};
-
-export default MicButton;
+}
