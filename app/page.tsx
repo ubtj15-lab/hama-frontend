@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -14,16 +14,10 @@ import HomeSearchBar from "./_components/HomeSearchBar";
 import HomeSwipeDeck from "./_components/HomeSwipeDeck";
 import { useHomeCards } from "./_hooks/useHomeCards";
 
-// ---- Web Speech API 타입 선언 (빌드 에러 방지) ----
-declare global {
-  interface Window {
-    webkitSpeechRecognition?: any;
-    SpeechRecognition?: any;
-  }
-}
+import MicButton from "@/app/components/MicButton";
 
 // ======================
-// 🧩 포인트 / 로그 저장 (기존 그대로)
+// 🧩 포인트 / 로그 저장
 // ======================
 interface HamaUser {
   nickname: string;
@@ -119,12 +113,28 @@ export default function HomePage() {
     });
   };
 
+  const handleSearch = (raw?: string) => {
+    const q = (raw ?? query).trim();
+    if (!q) return;
+
+    logEvent("search", { query: q });
+    addPoints(5, "검색");
+    router.push(`/search?query=${encodeURIComponent(q)}`);
+  };
+
   const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const q = query.trim();
-    if (!q) return;
-    logEvent("search", { query: q });
-    router.push(`/search?query=${encodeURIComponent(q)}`);
+    handleSearch();
+  };
+
+  const handleVoiceResult = (text: string) => {
+    const t = (text ?? "").trim();
+    if (!t) return;
+
+    setQuery(t);
+    logEvent("voice_search", { query: t });
+    addPoints(10, "음성 검색");
+    router.push(`/search?query=${encodeURIComponent(t)}`);
   };
 
   const handleKakaoButtonClick = () => {
@@ -153,11 +163,12 @@ export default function HomePage() {
     <main
       style={{
         minHeight: "100vh",
-        paddingBottom: 110,
+        paddingBottom: 140, // ✅ 하단탭 + 여유
         background: "linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 100%)",
       }}
     >
       <div style={{ maxWidth: 430, margin: "0 auto", padding: "20px 18px 0" }}>
+        {/* 상단바 */}
         <HomeTopBar
           isLoggedIn={isLoggedIn}
           nickname={user.nickname}
@@ -167,9 +178,10 @@ export default function HomePage() {
           onGoBeta={() => router.push("/beta-info")}
         />
 
+        {/* 검색바 */}
         <HomeSearchBar query={query} onChange={setQuery} onSubmit={handleSearchSubmit} />
 
-        {/* 탭 버튼은 기존 그대로 두고 싶으면 여기서 렌더 */}
+        {/* 카테고리 탭 */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginBottom: 22 }}>
           {[
             { key: "all", label: "종합" },
@@ -183,7 +195,10 @@ export default function HomePage() {
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setHomeTab(t.key as HomeTabKey)}
+                onClick={() => {
+                  setHomeTab(t.key as HomeTabKey);
+                  addPoints(1, "홈 탭 변경");
+                }}
                 style={{
                   border: "none",
                   cursor: "pointer",
@@ -202,15 +217,37 @@ export default function HomePage() {
           })}
         </div>
 
+        {/* 카드 덱 */}
         <HomeSwipeDeck
           cards={homeCards}
           homeTab={homeTab}
           isLoading={isHomeLoading}
-          onOpenCard={(c) => setSelectedCard(c)}
+          onOpenCard={(c) => {
+            setSelectedCard(c);
+            addPoints(2, "홈 추천 카드 열람");
+          }}
           onAddPoints={addPoints}
         />
 
-        {/* 디테일 오버레이는 너 기존 코드 그대로 여기 아래에 붙이면 됨 */}
+        {/* 마이크 섹션 */}
+        <section
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 14,
+            marginTop: 10,
+            marginBottom: 40,
+          }}
+        >
+          <MicButton onResult={handleVoiceResult} size={92} />
+
+          <p style={{ fontSize: 12, color: "#6b7280", textAlign: "center", lineHeight: 1.6 }}>
+            “카페 찾아줘 / 식당 찾아줘 / 미용실 찾아줘” 처럼 말해보세요!
+          </p>
+        </section>
+
+        {/* 디테일 오버레이 (현재는 최소 유지) */}
         {selectedCard && (
           <div
             style={{
@@ -284,6 +321,72 @@ export default function HomePage() {
 
         {!selectedCard && <FeedbackFab />}
       </div>
+
+      {/* 하단 탭바 */}
+      <nav
+        style={{
+          position: "fixed",
+          left: "50%",
+          bottom: 18,
+          transform: "translateX(-50%)",
+          width: "100%",
+          maxWidth: 430,
+          padding: "6px 26px 8px",
+          boxSizing: "border-box",
+          zIndex: 1500,
+        }}
+      >
+        <div
+          style={{
+            background: "#ffffff",
+            borderRadius: 999,
+            boxShadow: "0 10px 25px rgba(15,23,42,0.2), 0 0 0 1px rgba(148,163,184,0.18)",
+            display: "flex",
+            justifyContent: "space-around",
+            padding: "8px 12px",
+            fontSize: 12,
+          }}
+        >
+          <button
+            type="button"
+            style={{
+              border: "none",
+              background: "transparent",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 2,
+              color: "#2563EB",
+              fontWeight: 700,
+              cursor: "default",
+            }}
+          >
+            <span>🏠</span>
+            <span>홈</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              logEvent("page_view", { page: "mypage" });
+              router.push("/mypage/points");
+            }}
+            style={{
+              border: "none",
+              background: "transparent",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 2,
+              color: "#9CA3AF",
+              cursor: "pointer",
+            }}
+          >
+            <span>👤</span>
+            <span>마이페이지</span>
+          </button>
+        </div>
+      </nav>
     </main>
   );
 }
