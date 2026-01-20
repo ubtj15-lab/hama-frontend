@@ -14,7 +14,9 @@ import HomeSearchBar from "./_components/HomeSearchBar";
 import HomeSwipeDeck from "./_components/HomeSwipeDeck";
 import { useHomeCards } from "./_hooks/useHomeCards";
 
-import MicButton from "@/app/components/MicButton";
+import MicButton from "./components/MicButton";
+
+
 
 // ======================
 // 🧩 포인트 / 로그 저장
