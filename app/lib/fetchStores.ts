@@ -1,7 +1,7 @@
 // app/lib/fetchStores.ts
 import { supabase } from "@lib/supabaseClient";
 import type { StoreRecord, HomeCard } from "@lib/storeTypes";
-import { mapStoreToHomeCard } from "@lib/storeMappers";
+import { storeToHomeCard } from "@/lib/storeMappers";
 
 export async function fetchStores(): Promise<HomeCard[]> {
   const { data, error } = await supabase
@@ -18,5 +18,7 @@ export async function fetchStores(): Promise<HomeCard[]> {
   }
 
   const rows = data as StoreRecord[];
-  return rows.map((s) => mapStoreToHomeCard(s, 0));
+  return rows.map((s) => storeToHomeCard(s));
 }
+
+export const mapStoreToHomeCard = storeToHomeCard;
