@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import type { HomeCard } from "@lib/storeTypes";
-import { fetchStores } from "@lib/storeRepository";
+import { fetchHomeCardsByTab } from "@/lib/storeRepository";
 
 import {
   inferPreferenceFromText,
@@ -14,6 +14,7 @@ const FALLBACK_CARDS: HomeCard[] = [
   {
     id: "cafe-1",
     name: "스타벅스 오산점",
+    category: "cafe",
     categoryLabel: "카페",
     distanceKm: 0.5,
     moodText: "조용한 분위기",
@@ -23,7 +24,8 @@ const FALLBACK_CARDS: HomeCard[] = [
   {
     id: "cafe-2",
     name: "라운지 83",
-    categoryLabel: "브런치 · 카페",
+    category: "cafe",
+    categoryLabel: "카페",
     distanceKm: 0.8,
     moodText: "햇살 잘 들어오는 브런치",
     imageUrl: "/images/sample-cafe-2.jpg",
@@ -31,14 +33,16 @@ const FALLBACK_CARDS: HomeCard[] = [
   },
   {
     id: "kids-1",
-    name: "하마키즈 플레이룸",
-    categoryLabel: "키즈카페",
+    name: "하마키즈 플레이존",
+    category: "activity",
+    categoryLabel: "액티비티",
     distanceKm: 1.2,
     moodText: "아이와 가기 좋은 놀이터",
     imageUrl: "/images/sample-kids-1.jpg",
     quickQuery: "키즈카페",
   },
 ];
+
 
 type Props = {
   query: string;
@@ -78,7 +82,8 @@ const RecommendSection: React.FC<Props> = ({
 
       // 1) Supabase에서 매장 불러오기 (실패하면 로그만 찍고 넘어감)
       try {
-        const stores = await fetchStores();
+        const stores = await fetchHomeCardsByTab("all", { count: 12 })
+
         if (cancelled) return;
 
         if (stores && stores.length > 0) {
