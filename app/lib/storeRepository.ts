@@ -1,131 +1,127 @@
 // lib/storeRepository.ts
-import type { HomeCard, HomeTabKey } from "@lib/storeTypes";
+import type { HomeCard } from "@/lib/storeTypes";
 
-/** Fisher–Yates shuffle */
-function shuffle<T>(arr: readonly T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+// ----------------------
+// category 유틸
+// ----------------------
+type CanonCategory = "restaurant" | "cafe" | "salon" | "activity";
+
+function normalizeCategory(v: unknown): CanonCategory {
+  const s = String(v ?? "").toLowerCase().trim();
+
+  if (s === "restaurant" || s.includes("rest") || s.includes("식당") || s.includes("레스토랑"))
+    return "restaurant";
+  if (s === "cafe" || s.includes("caf") || s.includes("카페")) return "cafe";
+  if (s === "salon" || s.includes("beauty") || s.includes("미용") || s.includes("헤어"))
+    return "salon";
+  if (s === "activity" || s.includes("activ") || s.includes("액티") || s.includes("체험"))
+    return "activity";
+
+  // 서버가 tab으로 내려주거나 type/kind가 비어있는 경우가 있어서 기본값
+  return "restaurant";
 }
 
-/**
- * 카테고리 정규화:
- * - beauty => salon
- * - 한글/코드/영문 혼용 방어
- */
-function normalizeCategory(cat: string | null | undefined): string {
-  const c = (cat ?? "").toLowerCase().trim();
-
-  // 과거 호환
-  if (c === "beauty") return "salon";
-
-  // 한글 라벨 방어
-  if (c.includes("미용") || c.includes("헤어") || c.includes("이발")) return "salon";
-  if (c.includes("카페") || c.includes("커피")) return "cafe";
-  if (c.includes("식당") || c.includes("음식") || c.includes("레스토랑") || c.includes("밥")) return "restaurant";
-  if (c.includes("액티비") || c.includes("활동") || c.includes("체험")) return "activity";
-
-  // 카카오 코드 방어 (혹시 들어오는 경우)
-  if (c === "bk9") return "salon";
-  if (c === "ce7") return "cafe";
-  if (c === "fd6") return "restaurant";
-  if (c === "at4") return "activity";
-
-  return c;
+function labelOfCategory(c: CanonCategory) {
+  if (c === "restaurant") return "식당";
+  if (c === "cafe") return "카페";
+  if (c === "salon") return "미용실";
+  return "액티비티";
 }
 
-/**
- * 카드에서 카테고리 후보를 최대한 찾아서 반환
- */
-function getCardCategory(card: HomeCard): string {
-  const anyCard = card as unknown as Record<string, unknown>;
+// ----------------------
+// ✅ nearBy/추천/혼합 응답 다 받는 매퍼
+// ----------------------
+export function toHomeCard(r: any): HomeCard {
+  const id = String(
+    r?.id ??
+      r?.store_id ??
+      r?.storeId ??
+      r?.place_id ??
+      r?.placeId ??
+      r?.uuid ??
+      ""
+  ).trim();
 
-  const category = anyCard["category"];
-  if (typeof category === "string" && category.trim()) return category;
+  const name = String(
+    r?.name ??
+      r?.store_name ??
+      r?.storeName ??
+      r?.title ??
+      r?.place_name ??
+      ""
+  ).trim();
 
-  const categoryLabel = anyCard["categoryLabel"];
-  if (typeof categoryLabel === "string" && categoryLabel.trim()) return categoryLabel;
+  const categoryRaw =
+    r?.category ??
+    r?.categoryNorm ??
+    r?.category_norm ??
+    r?.tab ??
+    r?.type ??
+    r?.kind ??
+    "";
 
-  const categoryCode = anyCard["categoryCode"];
-  if (typeof categoryCode === "string" && categoryCode.trim()) return categoryCode;
+  const category = normalizeCategory(categoryRaw);
 
-  const category_code = anyCard["category_code"];
-  if (typeof category_code === "string" && category_code.trim()) return category_code;
+  const imageUrl = String(
+    r?.imageUrl ?? r?.image_url ?? r?.image ?? r?.thumbnail ?? r?.thumb ?? ""
+  );
 
-  return "";
+  const lat =
+    typeof r?.lat === "number"
+      ? r.lat
+      : typeof r?.latitude === "number"
+      ? r.latitude
+      : typeof r?.lat === "string"
+      ? Number(r.lat)
+      : null;
+
+  const lng =
+    typeof r?.lng === "number"
+      ? r.lng
+      : typeof r?.longitude === "number"
+      ? r.longitude
+      : typeof r?.lng === "string"
+      ? Number(r.lng)
+      : null;
+
+  return {
+    id,
+    name,
+    category, // ✅ HomeCard.required
+    categoryLabel: String(r?.categoryLabel ?? r?.category_label ?? labelOfCategory(category)),
+    distanceKm:
+      typeof r?.distanceKm === "number"
+        ? r.distanceKm
+        : typeof r?.distance_km === "number"
+        ? r.distance_km
+        : 0,
+    moodText: String(r?.moodText ?? r?.mood_text ?? r?.mood ?? ""),
+    imageUrl,
+    lat: Number.isFinite(lat as number) ? (lat as number) : null,
+    lng: Number.isFinite(lng as number) ? (lng as number) : null,
+    mood: r?.mood ?? null,
+    withKids: r?.withKids ?? r?.with_kids ?? null,
+    forWork: r?.forWork ?? r?.for_work ?? null,
+    priceLevel: r?.priceLevel ?? r?.price_level ?? null,
+    tags: r?.tags ?? null,
+  };
 }
 
-type HomeRecommendResponse = {
-  items?: unknown;
-  data?: unknown;
-};
+// ----------------------
+// ✅ 탭별 홈 추천 fetch
+// ----------------------
+export async function fetchHomeCardsByTab(tab: string, options?: { count?: number }) {
+  const count = options?.count ?? 12;
 
-function asHomeCardArray(v: unknown): HomeCard[] {
-  // 런타임에서는 구조가 완벽히 동일하다는 보장이 없어서,
-  // 최소한 "배열"인지 확인 후 HomeCard[]로 캐스팅
-  if (!Array.isArray(v)) return [];
-  return v as HomeCard[];
+  const res = await fetch(
+    `/api/home-recommend?tab=${encodeURIComponent(tab)}&count=${count}`,
+    { cache: "no-store" }
+  );
+
+  if (!res.ok) throw new Error("failed to fetch home cards");
+
+  const json = await res.json();
+  const items = Array.isArray(json?.items) ? json.items : Array.isArray(json) ? json : [];
+
+  return items.map(toHomeCard);
 }
-
-/**
- * 홈 추천 API(/api/home-recommend) 호출
- * - all: 12개
- * - 카테고리 탭: 무조건 5개
- */
-export async function fetchHomeCardsByTab(
-  tab: HomeTabKey,
-  opts?: { lat?: number; lng?: number; limit?: number; count?: number }
-): Promise<HomeCard[]> {
-  try {
-    const lat = opts?.lat ?? 0;
-    const lng = opts?.lng ?? 0;
-
-    const normalizedTab = normalizeCategory(String(tab));
-
-    // ✅ UI 고정 규칙
-    const wantCount = normalizedTab === "all" ? (opts?.count ?? opts?.limit ?? 12) : 5;
-
-    // ✅ 서버에는 넉넉히 요청
-    const serverCount = Math.max(100, wantCount * 20);
-
-    const qs = new URLSearchParams();
-    qs.set("lat", String(lat));
-    qs.set("lng", String(lng));
-    qs.set("tab", String(tab));
-    qs.set("count", String(serverCount));
-
-    const res = await fetch(`/api/home-recommend?${qs.toString()}`, {
-      cache: "no-store",
-    });
-
-    if (!res.ok) return [];
-
-    const json = (await res.json()) as HomeRecommendResponse;
-
-    // ✅ items / data 둘 다 방어적으로 처리
-    const items: HomeCard[] = asHomeCardArray(json.items ?? json.data);
-
-    if (!items.length) return [];
-
-    const filtered: HomeCard[] =
-      normalizedTab === "all"
-        ? items
-        : items.filter((c: HomeCard) => normalizeCategory(getCardCategory(c)) === normalizedTab);
-
-    if (!filtered.length) return [];
-
-    return shuffle(filtered).slice(0, wantCount);
-  } catch {
-    return [];
-  }
-}
-
-/** 기존 코드 호환 */
-export async function fetchStores(): Promise<HomeCard[]> {
-  return fetchHomeCardsByTab("all", { count: 12 });
-}
-
-export type { HomeTabKey };

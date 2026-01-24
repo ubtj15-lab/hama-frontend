@@ -1,150 +1,202 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { logEvent } from "@/lib/logEvent";
+
+type Mode = "recommend" | "explore";
 
 type Props = {
   cards: HomeCard[];
   homeTab: HomeTabKey;
+  mode: Mode;
   isLoading: boolean;
-
   onOpenCard: (card: HomeCard) => void;
   onAddPoints?: (amount: number, reason: string) => void;
-
-  // 옵션: 외부에서 activeIndex 제어하고 싶으면 추후 확장 가능
 };
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const SWIPE_THRESHOLD = 60;
+const DRAG_LIMIT = 140;
 
 export default function HomeSwipeDeck({
   cards,
   homeTab,
+  mode,
   isLoading,
   onOpenCard,
   onAddPoints,
 }: Props) {
-  const total = cards.length;
+  /**
+   * ✅ 핵심: cards가 순간적으로 []가 되거나(탭 전환/리렌더)
+   * 부모에서 값이 흔들려도 “마지막 정상 카드”를 유지해서
+   * 1초 뜨고 사라지는 현상을 방지한다.
+   */
+  const [stableCards, setStableCards] = useState<HomeCard[]>([]);
 
+  useEffect(() => {
+    if (Array.isArray(cards) && cards.length > 0) {
+      setStableCards(cards);
+    }
+  }, [cards]);
+
+  // 렌더용 리스트: 로딩 중이면 스켈레톤, 로딩 끝났으면 stable 우선
+  const list = useMemo<HomeCard[]>(() => {
+    if (isLoading) return [];
+    return stableCards.length > 0 ? stableCards : Array.isArray(cards) ? cards : [];
+  }, [isLoading, stableCards, cards]);
+
+  const total = list.length;
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // 드래그 상태
   const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const pointerIdRef = useRef<number | null>(null);
-  const capturedRef = useRef(false);
-  const dragMovedRef = useRef(false);
-  const dragStartXRef = useRef(0);
+  const startXRef = useRef(0);
+  const movedRef = useRef(false);
 
-  const SWIPE_THRESHOLD = 60;
-
-  // activeIndex 보정
-  React.useEffect(() => {
-    const max = Math.max(0, total - 1);
-    setActiveIndex((prev) => {
-      if (prev > max) return max;
-      if (prev < 0) return 0;
-      return prev;
-    });
-  }, [total]);
-
-  // 탭 바뀔 때 첫 카드로
-  React.useEffect(() => {
+  // 탭/모드 바뀌면 리셋
+  useEffect(() => {
     setActiveIndex(0);
     setDragX(0);
-  }, [homeTab]);
+    setIsDragging(false);
+    movedRef.current = false;
+  }, [homeTab, mode]);
+
+  // total이 줄어들면 인덱스 보정 (렌더 중 setState 금지)
+  useEffect(() => {
+    if (total <= 0) return;
+    setActiveIndex((idx) => Math.min(idx, total - 1));
+  }, [total]);
 
   const hasPrev = total > 0 && activeIndex > 0;
   const hasNext = total > 0 && activeIndex < total - 1;
 
-  const prevCard = hasPrev ? cards[activeIndex - 1] : null;
-  const currCard = total > 0 ? cards[activeIndex] : null;
-  const nextCard = hasNext ? cards[activeIndex + 1] : null;
+  const prevCard = hasPrev ? list[activeIndex - 1] : null;
+  const currCard = total > 0 ? list[activeIndex] : null;
+  const nextCard = hasNext ? list[activeIndex + 1] : null;
 
-  const getImageUrl = (card: HomeCard | null) => {
-    if (!card) return undefined;
-    const anyCard = card as any;
-    return (anyCard.imageUrl ?? anyCard.image ?? undefined) as string | undefined;
+  const deckLabel = useMemo(() => {
+    if (mode === "explore") return "지금 있는 곳 기준으로 가까운 장소를 보여드릴게요.";
+    return "하마가 자신 있는 지역 추천이에요.";
+  }, [mode]);
+
+  const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+  const goPrev = () => {
+    if (!hasPrev) return;
+    setActiveIndex((v) => Math.max(0, v - 1));
+    onAddPoints?.(1, "카드 넘김");
+    logEvent("home_card_swipe", { dir: "prev", tab: homeTab, mode, index: activeIndex - 1 });
   };
 
   const goNext = () => {
     if (!hasNext) return;
     setActiveIndex((v) => Math.min(total - 1, v + 1));
+    onAddPoints?.(1, "카드 넘김");
+    logEvent("home_card_swipe", { dir: "next", tab: homeTab, mode, index: activeIndex + 1 });
   };
 
-  const goPrev = () => {
-    if (!hasPrev) return;
-    setActiveIndex((v) => Math.max(0, v - 1));
+  const getImageUrl = (card: HomeCard | null) => {
+    if (!card) return undefined;
+    const anyCard = card as any;
+    return (anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? undefined) as string | undefined;
   };
 
-  const stackStyles = useMemo(() => {
-    const baseShadow = "0 22px 45px rgba(15,23,42,0.26)";
-    const sideShadow = "0 14px 30px rgba(15,23,42,0.18)";
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (isLoading) return;
+    if (total <= 1) return;
 
-    // 현재 카드 드래그(이동) 효과: 살짝 따라오게
-    // dragX가 음수면 다음 쪽으로 밀기, 양수면 이전 쪽으로 밀기
-    const currTranslate = clamp(dragX * 0.9, -120, 120);
-    const currScale = 1 - Math.min(Math.abs(dragX) / 1200, 0.03);
+    setIsDragging(true);
+    movedRef.current = false;
+    startXRef.current = e.clientX;
 
-    // 옆 카드가 조금 더 보이게: dragX에 따라 약간 더 등장
-    const sidePeek = clamp(Math.abs(dragX) * 0.12, 0, 12);
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+  };
 
-    return {
-      baseShadow,
-      sideShadow,
-      curr: {
-        zIndex: 30,
-        opacity: 1,
-        transform: `translateX(${currTranslate}px) scale(${currScale})`,
-        boxShadow: baseShadow,
-      } as React.CSSProperties,
-      prev: {
-        zIndex: 20,
-        opacity: hasPrev ? 0.55 : 0,
-        transform: `translateX(-56px - ${sidePeek}px) scale(0.92)`,
-        boxShadow: sideShadow,
-        pointerEvents: hasPrev ? ("auto" as const) : ("none" as const),
-      } as unknown as React.CSSProperties,
-      next: {
-        zIndex: 10,
-        opacity: hasNext ? 0.55 : 0,
-        transform: `translateX(56px + ${sidePeek}px) scale(0.92)`,
-        boxShadow: sideShadow,
-        pointerEvents: hasNext ? ("auto" as const) : ("none" as const),
-      } as unknown as React.CSSProperties,
-    };
-  }, [dragX, hasPrev, hasNext]);
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!isDragging) return;
 
-  const renderCard = (card: HomeCard, mode: "prev" | "curr" | "next") => {
+    const dx = e.clientX - startXRef.current;
+    if (Math.abs(dx) > 6) movedRef.current = true;
+
+    setDragX(clamp(dx, -DRAG_LIMIT, DRAG_LIMIT));
+  };
+
+  const finishDrag = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    const dx = dragX;
+    if (Math.abs(dx) >= SWIPE_THRESHOLD) {
+      if (dx < 0) goNext();
+      else goPrev();
+    }
+    setDragX(0);
+  };
+
+  const onPointerUp = () => finishDrag();
+  const onPointerCancel = () => {
+    setIsDragging(false);
+    setDragX(0);
+  };
+
+  const renderCard = (card: HomeCard, pos: "prev" | "curr" | "next") => {
     const anyCard = card as any;
     const imageUrl = getImageUrl(card);
 
-    const styleByMode =
-      mode === "curr" ? stackStyles.curr : mode === "prev" ? stackStyles.prev : stackStyles.next;
+    const baseShadow = "0 22px 45px rgba(15,23,42,0.26)";
+    const sideShadow = "0 14px 30px rgba(15,23,42,0.18)";
+
+    const isCurr = pos === "curr";
+    const isPrev = pos === "prev";
+
+    const currTranslate = isCurr ? dragX : 0;
+
+    const sideOffset = 56;
+    const sideTranslate = isPrev ? -sideOffset : sideOffset;
+
+    const sideNudge = clamp(dragX / 10, -8, 8);
+    const nudgedSideTranslate =
+      pos === "prev" ? sideTranslate + sideNudge : pos === "next" ? sideTranslate + sideNudge : 0;
+
+    const styleByPos: React.CSSProperties =
+      pos === "curr"
+        ? {
+            zIndex: 30,
+            opacity: 1,
+            transform: `translateX(${currTranslate}px) scale(1)`,
+            boxShadow: baseShadow,
+          }
+        : pos === "prev"
+        ? {
+            zIndex: 20,
+            opacity: 0.55,
+            transform: `translateX(${nudgedSideTranslate}px) scale(0.92)`,
+            boxShadow: sideShadow,
+          }
+        : {
+            zIndex: 10,
+            opacity: 0.55,
+            transform: `translateX(${nudgedSideTranslate}px) scale(0.92)`,
+            boxShadow: sideShadow,
+          };
 
     const onClick = () => {
-      // ✅ 드래그로 움직였으면 클릭 무시 (PC에서 클릭 오작동 방지)
-      if (mode === "curr" && dragMovedRef.current) return;
+      if (movedRef.current) return;
 
-      if (mode === "prev") {
-        goPrev();
-        return;
-      }
-      if (mode === "next") {
-        goNext();
-        return;
-      }
+      if (pos === "prev") return goPrev();
+      if (pos === "next") return goNext();
 
-      // curr 오픈
       onOpenCard(card);
-      logEvent("home_card_open", { id: anyCard.id, name: anyCard.name, tab: homeTab });
-      onAddPoints?.(2, "홈 추천 카드 열람");
     };
 
     return (
       <button
-        key={String(anyCard.id ?? `${mode}-${activeIndex}`)}
+        key={String(anyCard?.id ?? `${pos}-${activeIndex}`)}
         type="button"
         onClick={onClick}
         style={{
@@ -158,34 +210,42 @@ export default function HomeSwipeDeck({
           cursor: "pointer",
           background: "#ffffff",
           overflow: "hidden",
-          transition: "transform 0.22s ease, opacity 0.22s ease, box-shadow 0.22s ease",
-          ...styleByMode,
+          transition: isDragging ? "none" : "transform 220ms ease, opacity 220ms ease, box-shadow 220ms ease",
+          touchAction: "none",
+          ...styleByPos,
         }}
       >
-        <div style={{ position: "relative", width: "100%", height: "70%", background: "#dbeafe" }}>
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "70%",
+            background: "#dbeafe",
+          }}
+        >
           {imageUrl && (
             <Image
               src={imageUrl}
-              alt={anyCard.name ?? "place"}
+              alt={anyCard?.name ?? "place"}
               fill
-              sizes="(max-width: 430px) 320px, 320px"
               style={{ objectFit: "cover" }}
-              priority={mode === "curr"}
+              sizes="(max-width: 430px) 320px, 320px"
+              priority={pos === "curr"}
             />
           )}
         </div>
 
         <div style={{ padding: 16, textAlign: "left" }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 6 }}>
-            {anyCard.name}
+            {anyCard?.name}
           </div>
 
           <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
-            {anyCard.categoryLabel ?? anyCard.category}
+            {anyCard?.categoryLabel ?? anyCard?.category}
           </div>
 
           <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>
-            {anyCard.mood ?? anyCard.moodText ?? ""}
+            {anyCard?.mood ?? anyCard?.moodText ?? ""}
           </div>
         </div>
       </button>
@@ -194,63 +254,27 @@ export default function HomeSwipeDeck({
 
   return (
     <section style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 430,
+          padding: "0 2px",
+          marginBottom: 10,
+          color: "#475569",
+          fontSize: 12,
+          fontWeight: 700,
+          textAlign: "center",
+        }}
+      >
+        {deckLabel}
+      </div>
+
       <div style={{ width: "100%", overflow: "visible" }}>
         <div
-          // ✅ 포인터 캡처를 "드래그라고 확정"되면 그때만 잡는다 (PC 클릭 살리기 핵심)
-          onPointerDown={(e) => {
-            if (total <= 1) return;
-
-            pointerIdRef.current = e.pointerId;
-            capturedRef.current = false;
-            dragMovedRef.current = false;
-            dragStartXRef.current = e.clientX;
-
-            setDragX(0);
-          }}
-          onPointerMove={(e) => {
-            if (pointerIdRef.current === null) return;
-
-            const dx = e.clientX - dragStartXRef.current;
-
-            // ✅ 드래그 확정(몇 px 이상) 되었을 때만 capture
-            if (!capturedRef.current && Math.abs(dx) > 6) {
-              capturedRef.current = true;
-              dragMovedRef.current = true;
-              try {
-                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-              } catch {}
-            }
-
-            // 캡처된 상태에서만 dragX 반영
-            if (capturedRef.current) {
-              setDragX(clamp(dx, -140, 140));
-            }
-          }}
-          onPointerUp={(e) => {
-            if (pointerIdRef.current === null) return;
-
-            if (capturedRef.current) {
-              const dx = dragX;
-
-              if (Math.abs(dx) >= SWIPE_THRESHOLD) {
-                if (dx < 0) goNext();
-                else goPrev();
-              }
-
-              try {
-                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-              } catch {}
-            }
-
-            pointerIdRef.current = null;
-            capturedRef.current = false;
-            setDragX(0);
-          }}
-          onPointerCancel={() => {
-            pointerIdRef.current = null;
-            capturedRef.current = false;
-            setDragX(0);
-          }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
           style={{
             width: "100%",
             maxWidth: 320,
@@ -261,7 +285,6 @@ export default function HomeSwipeDeck({
             touchAction: "pan-y",
           }}
         >
-          {/* 로딩 */}
           {isLoading && (
             <div
               style={{
@@ -281,7 +304,6 @@ export default function HomeSwipeDeck({
             </div>
           )}
 
-          {/* 비어있음 */}
           {!isLoading && total === 0 && (
             <div
               style={{
@@ -301,41 +323,42 @@ export default function HomeSwipeDeck({
             </div>
           )}
 
-          {/* 카드 스택 */}
           {!isLoading && prevCard && renderCard(prevCard, "prev")}
           {!isLoading && currCard && renderCard(currCard, "curr")}
           {!isLoading && nextCard && renderCard(nextCard, "next")}
         </div>
       </div>
 
-      {/* 인디케이터 */}
-      <div
-        style={{
-          marginTop: 18,
-          marginBottom: 28,
-          display: "flex",
-          justifyContent: "center",
-          gap: 6,
-        }}
-      >
-        {cards.map((_, idx) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => setActiveIndex(idx)}
-            style={{
-              width: idx === activeIndex ? 16 : 8,
-              height: 8,
-              borderRadius: 999,
-              border: "none",
-              padding: 0,
-              background: idx === activeIndex ? "#2563EB" : "rgba(148,163,184,0.6)",
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-            }}
-          />
-        ))}
-      </div>
+      {!isLoading && total > 0 && (
+        <div
+          style={{
+            marginTop: 18,
+            marginBottom: 28,
+            display: "flex",
+            justifyContent: "center",
+            gap: 6,
+          }}
+        >
+          {list.map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setActiveIndex(idx)}
+              style={{
+                width: idx === activeIndex ? 16 : 8,
+                height: 8,
+                borderRadius: 999,
+                border: "none",
+                padding: 0,
+                background: idx === activeIndex ? "#2563EB" : "rgba(148,163,184,0.6)",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+              aria-label={`카드 ${idx + 1}`}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

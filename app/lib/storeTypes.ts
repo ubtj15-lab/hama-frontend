@@ -32,6 +32,11 @@ export interface StoreRecord {
 export interface HomeCard {
   id: string;
   name: string;
+
+  // ✅ 핵심: 원본 카테고리 키(영문) 저장
+  // - all 탭에서 4/4/2/2 분해하려면 이 값이 있어야 안정적임
+  category: "restaurant" | "cafe" | "salon" | "activity" | string;
+
   categoryLabel: string;
   distanceKm: number;
 
@@ -69,6 +74,6 @@ export type Place = {
   imageUrl?: string | null;
   phone?: string | null;
 
-  distance?: number | null;   // meters
+  distance?: number | null; // meters
   placeUrl?: string | null;
 };

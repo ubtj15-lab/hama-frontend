@@ -1,3 +1,4 @@
+// app/api/home-recommend/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -15,9 +16,10 @@ function normalizeTab(tab: string) {
   return t;
 }
 
-type PlanItem = { category: "restaurant" | "cafe" | "salon" | "activity"; n: number };
+type CategoryKey = "restaurant" | "cafe" | "salon" | "activity";
+type PlanItem = { category: CategoryKey; n: number };
 
-// ✅ 종합 탭 기본 플랜: 12장 = 4/4/2/2 (식당→카페→미용실→액티비티)
+// ✅ 종합 탭 기본 플랜: 12장 = 4/4/2/2
 const BASE_PLAN: PlanItem[] = [
   { category: "restaurant", n: 4 },
   { category: "cafe", n: 4 },
@@ -35,7 +37,6 @@ function makeScaledPlan(totalCount: number): PlanItem[] {
     n: Math.max(1, Math.round(p.n * scale)),
   }));
 
-  // 합이 totalCount보다 커질 수 있어도 최종 slice로 맞출 예정
   return scaled;
 }
 
@@ -46,9 +47,6 @@ export async function GET(req: Request) {
     const tabRaw = url.searchParams.get("tab") || "all";
     const tab = normalizeTab(tabRaw);
 
-    // 클라에서 count를 보내면 우선 사용
-    // - all: 기본 12
-    // - 카테고리: 기본 5
     const count = toInt(url.searchParams.get("count"), tab === "all" ? 12 : 5);
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -64,13 +62,15 @@ export async function GET(req: Request) {
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-    // ✅ 카테고리 탭: 해당 카테고리에서 무조건 5개(또는 count)
+    // ✅ 카테고리 탭: 해당 카테고리에서 count개
     if (tab !== "all") {
       const { data, error } = await supabase
         .from("stores")
         .select("*")
         .eq("category", tab)
-        // 랜덤 대체(단순 반복 방지용): id 정렬
+        // ✅ 핵심: name 없는 레코드 제거 (프론트에서 전부 필터링되어 "0개" 되는 문제 방지)
+        .not("name", "is", null)
+        .neq("name", "")
         .order("id", { ascending: false })
         .limit(count);
 
@@ -85,15 +85,17 @@ export async function GET(req: Request) {
       return NextResponse.json({ items: data ?? [] }, { status: 200 });
     }
 
-    // ✅ all 탭: 카테고리별로 가져오고 "식당→카페→미용실→액티비티" 순서로 합치기
+    // ✅ all 탭: 카테고리별로 가져와서 합치기
     const plan = makeScaledPlan(count);
 
-    // ⚠️ 중요: 이 순서가 곧 merged 순서가 됨 (식당→카페→미용실→액티비티)
     const queries = plan.map((p) =>
       supabase
         .from("stores")
         .select("*")
         .eq("category", p.category)
+        // ✅ 여기도 동일하게 name 필터
+        .not("name", "is", null)
+        .neq("name", "")
         .order("id", { ascending: false })
         .limit(p.n)
     );
@@ -110,10 +112,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // ✅ 계획 순서대로 합침 = 식당→카페→미용실→액티비티
     const merged = results.flatMap((r) => r.data ?? []);
-
-    // 최종 안전장치: count만큼만 반환
     return NextResponse.json({ items: merged.slice(0, count) }, { status: 200 });
   } catch (e: any) {
     console.error("[home-recommend] unexpected error:", e);

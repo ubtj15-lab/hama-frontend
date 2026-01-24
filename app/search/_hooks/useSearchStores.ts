@@ -24,18 +24,15 @@ export type Store = {
   kakao_place_url: string | null;
   source: string | null;
 
-  // DB is ARRAY (per your schema)
   mood: string[] | null;
   tags: string[] | null;
 
-  // DB is text (per your schema)
   price_level: string | null;
 
   with_kids: boolean | null;
   for_work: boolean | null;
   reservation_required: boolean | null;
 
-  // stores table doesn't have it, keep for UI fallback flow
   image_url: string | null;
 };
 
@@ -52,25 +49,21 @@ function toStringArrayOrNull(v: unknown): string[] | null {
   return null;
 }
 
-// DB category 정규화: CE7/FD6/BK9 + 영문/한글 + beauty/salon 호환
+// DB category 정규화
 export function normalizeCategory(raw: unknown): Category | null {
   const c0 = String(raw ?? "").trim();
   const c = c0.toLowerCase();
 
-  // canonical
   if (c === "cafe" || c === "restaurant" || c === "salon" || c === "activity") {
     return c as Category;
   }
 
-  // legacy/compat
   if (c === "beauty") return "salon";
 
-  // kakao codes
   if (c0 === "CE7") return "cafe";
   if (c0 === "FD6") return "restaurant";
   if (c0 === "BK9") return "salon";
 
-  // korean labels
   if (c0 === "카페") return "cafe";
   if (c0 === "식당") return "restaurant";
   if (c0 === "미용실") return "salon";
@@ -99,54 +92,33 @@ export function mapUrlCategoryToCategory(c: string | null): Category | null {
   return null;
 }
 
-// 검색어로 카테고리 추론 (category param 없을 때)
+// 검색어로 카테고리 추론
 export function inferCategoryFromQuery(q: string): Category {
   const t = String(q ?? "").toLowerCase();
 
-  if (
-    t.includes("미용") ||
-    t.includes("헤어") ||
-    t.includes("뷰티") ||
-    t.includes("살롱") ||
-    t.includes("salon") ||
-    t.includes("beauty")
-  ) {
+  if (t.includes("미용") || t.includes("헤어") || t.includes("뷰티") || t.includes("살롱") || t.includes("salon") || t.includes("beauty")) {
     return "salon";
   }
-
-  if (
-    t.includes("식당") ||
-    t.includes("밥") ||
-    t.includes("한식") ||
-    t.includes("레스토랑") ||
-    t.includes("맛집")
-  ) {
+  if (t.includes("식당") || t.includes("밥") || t.includes("한식") || t.includes("레스토랑") || t.includes("맛집")) {
     return "restaurant";
   }
-
-  if (
-    t.includes("박물관") ||
-    t.includes("공원") ||
-    t.includes("체험") ||
-    t.includes("활동") ||
-    t.includes("놀") ||
-    t.includes("키즈")
-  ) {
+  if (t.includes("박물관") || t.includes("공원") || t.includes("체험") || t.includes("활동") || t.includes("놀") || t.includes("키즈")) {
     return "activity";
   }
-
   return "cafe";
 }
 
 export function useSearchStores() {
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
 
     const run = async () => {
       setLoading(true);
+      setErrorMsg(null);
 
       const { data, error } = await supabase
         .from("stores")
@@ -157,9 +129,15 @@ export function useSearchStores() {
 
       if (!alive) return;
 
+      // ✅ 진단 로그(이게 핵심)
+      console.log("[useSearchStores] error:", error);
+      console.log("[useSearchStores] raw data length:", (data ?? []).length);
+      if (data?.[0]) console.log("[useSearchStores] sample row:", data[0]);
+
       if (error) {
         console.error("Supabase stores fetch error:", error);
         setStores([]);
+        setErrorMsg(error.message ?? "Supabase error");
         setLoading(false);
         return;
       }
@@ -201,6 +179,8 @@ export function useSearchStores() {
         })
         .filter(Boolean) as Store[];
 
+      console.log("[useSearchStores] cleaned length:", cleaned.length);
+
       setStores(cleaned);
       setLoading(false);
     };
@@ -211,5 +191,5 @@ export function useSearchStores() {
     };
   }, []);
 
-  return { stores, loading };
+  return { stores, loading, errorMsg };
 }

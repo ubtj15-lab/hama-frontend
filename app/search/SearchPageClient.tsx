@@ -21,55 +21,52 @@ export default function SearchPageClient() {
   const params = useSearchParams();
 
   const query = params.get("query") || "";
-  const rawCategory = params.get("category");
+  const rawCategory = params.get("category"); // 탭/URL에서 넘어오는 값
 
   // 내 위치
   const myLat = Number(params.get("lat"));
   const myLng = Number(params.get("lng"));
   const hasMyLocation = Number.isFinite(myLat) && Number.isFinite(myLng);
 
-  // 카테고리 결정
-  const paramCategory = mapUrlCategoryToCategory(rawCategory);
-  const activeCategory: Category = paramCategory ?? inferCategoryFromQuery(query);
+  // ✅ 핵심: "종합"은 activeCategory = null
+  // - category 파라미터가 없으면 => 종합(null)
+  // - all/total/종합이면 => 종합(null)
+  // - 그 외에만 매핑해서 카테고리 필터
+  const activeCategory: Category | null = useMemo(() => {
+    if (!rawCategory) return null;
+
+    const t = String(rawCategory).trim();
+    const tl = t.toLowerCase();
+
+    if (tl === "all" || tl === "total" || t === "종합") return null;
+
+    const mapped = mapUrlCategoryToCategory(t);
+    if (mapped) return mapped;
+
+    // 혹시 이상한 값이면(예: tab이 query만 바꾼 경우) 안전하게 "추론" fallback
+    // 단, 이 fallback도 "종합" UX를 깨기 쉬우니까 rawCategory가 있을 때만 허용
+    return inferCategoryFromQuery(query);
+  }, [rawCategory, query]);
 
   // 데이터 로딩
   const { stores, loading } = useSearchStores();
 
-  useEffect(() => {
-    console.log("DEBUG loading:", loading, "stores:", stores?.length);
-    if (!stores || stores.length === 0) return;
-
-    const byRaw: Record<string, number> = {};
-    const byNorm: Record<string, number> = {};
-
-    for (const s of stores) {
-      const raw = String((s as any).category ?? "");
-      const norm = String((s as any).categoryNorm ?? "");
-      byRaw[raw] = (byRaw[raw] ?? 0) + 1;
-      byNorm[norm] = (byNorm[norm] ?? 0) + 1;
-    }
-
-    console.log("RAW category counts:", byRaw);
-    console.log("NORM category counts:", byNorm);
-    console.table(byRaw);
-    console.table(byNorm);
-  }, [loading, stores]);
-
   // 필터/정렬/페이지
   const { categoryStores, pages } = useCardPaging({
-    stores,
-    activeCategory,
+    stores: stores as any,
+    activeCategory, // Category | null
     query,
     hasMyLocation,
     myLat,
     myLng,
   });
 
-  // ✅ pages를 무조건 CardInfo[][] 로 “안전 변환”
+  // ✅ pages를 무조건 CardInfo[][] 로 안전 변환 (3페이지 고정)
   const safePages: CardInfo[][] = useMemo(() => {
-    if (!Array.isArray(pages)) return [[], [], []];
-    const normalized = pages.map((p) => (Array.isArray(p) ? p : []));
-    return [normalized[0] ?? [], normalized[1] ?? [], normalized[2] ?? []];
+    const p0 = Array.isArray(pages?.[0]) ? pages[0] : [];
+    const p1 = Array.isArray(pages?.[1]) ? pages[1] : [];
+    const p2 = Array.isArray(pages?.[2]) ? pages[2] : [];
+    return [p0, p1, p2];
   }, [pages]);
 
   // 페이지 상태
@@ -89,32 +86,59 @@ export default function SearchPageClient() {
   const [reserveDate, setReserveDate] = useState<string | null>(null);
   const [reserveTime, setReserveTime] = useState<string | null>(null);
 
-  // 스와이프
-  const touchStartXRef = useRef<number | null>(null);
-  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(
-    null
-  );
-
-  // 현재 selected / others
-  const selected: CardInfo | null =
-    (currentCards.find((c) => c.id === selectedId) ?? currentCards[0] ?? null) ||
-    null;
-
-  const others: CardInfo[] = selected
-    ? currentCards.filter((c) => c.id !== selected.id)
-    : currentCards;
-
   const resetReserve = () => {
     setReserveStep(0);
     setReserveDate(null);
     setReserveTime(null);
   };
 
+  // 스와이프
+  const touchStartXRef = useRef<number | null>(null);
+  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(
+    null
+  );
+
+  // ✅ selected / others
+  const selected: CardInfo | null = useMemo(() => {
+    if (selectedId) {
+      const found = currentCards.find((c) => c.id === selectedId);
+      if (found) return found;
+    }
+    return currentCards[0] ?? null;
+  }, [currentCards, selectedId]);
+
+  const others: CardInfo[] = useMemo(() => {
+    if (!selected) return currentCards;
+    return currentCards.filter((c) => c.id !== selected.id);
+  }, [currentCards, selected]);
+
+  // ✅ “상태 리셋”을 query/category 변화가 아니라,
+  //    실제 결과 집합 키가 바뀌었을 때만 수행해서 깜빡임 줄이기
+  const resultKey = useMemo(() => {
+    const catKey = activeCategory ?? "all";
+    const locKey = hasMyLocation ? `${myLat.toFixed(5)},${myLng.toFixed(5)}` : "noloc";
+    return `${query}__${catKey}__${locKey}`;
+  }, [query, activeCategory, hasMyLocation, myLat, myLng]);
+
+  // 결과가 바뀌면: page 0으로 보내고, 첫 카드로 selectedId 맞추기
+  useEffect(() => {
+    setPageIndex(0);
+    setOverlayVisible(false);
+    setExpanded(false);
+    setDetailOpen(false);
+    resetReserve();
+
+    // safePages[0]가 생긴 뒤에 selectedId 세팅
+    const first = safePages[0]?.[0];
+    setSelectedId(first?.id ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultKey]);
+
   // 페이지 이동
   const goToPage = (index: number) => {
     if (index < 0 || index >= safePages.length) return;
     const nextCards = safePages[index];
-    if (!nextCards || !nextCards.length) return;
+    if (!nextCards || nextCards.length === 0) return;
 
     setPageIndex(index);
     setSelectedId(nextCards[0].id);
@@ -229,25 +253,6 @@ export default function SearchPageClient() {
     touchStartXRef.current = null;
   };
 
-  // 첫 렌더에서 selectedId 세팅
-  useEffect(() => {
-    if (!selectedId && currentCards.length > 0) {
-      setSelectedId(currentCards[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageIndex, currentCards.length]);
-
-  // 검색/카테고리 바뀌면 page 0으로 리셋
-  useEffect(() => {
-    setPageIndex(0);
-    setSelectedId(null);
-    setOverlayVisible(false);
-    setExpanded(false);
-    setDetailOpen(false);
-    resetReserve();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, activeCategory]);
-
   // ✅ map에서 돌아오면 복구
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -273,6 +278,39 @@ export default function SearchPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safePages]);
 
+  // ✅ 좌상단 디버그 패널 (항상 보이게)
+  const DebugPanel = (
+    <div
+      style={{
+        position: "fixed",
+        top: 12,
+        left: 12,
+        zIndex: 99999,
+        padding: "8px 10px",
+        borderRadius: 10,
+        background: "rgba(0,0,0,0.75)",
+        color: "white",
+        fontSize: 12,
+        lineHeight: 1.4,
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        whiteSpace: "pre",
+      }}
+    >
+      {[
+        `loading: ${loading ? "true" : "false"}`,
+        `query: ${JSON.stringify(query)}`,
+        `rawCategory: ${JSON.stringify(rawCategory)}`,
+        `activeCategory: ${JSON.stringify(activeCategory)}`,
+        `stores: ${stores?.length ?? 0}`,
+        `categoryStores: ${categoryStores?.length ?? 0}`,
+        `pages: [${safePages.map((p) => p.length).join(", ")}]`,
+        `pageIndex: ${pageIndex}`,
+        `selectedId: ${JSON.stringify(selectedId)}`,
+        `hasMyLocation: ${hasMyLocation ? "true" : "false"}`,
+      ].join("\n")}
+    </div>
+  );
+
   // 로딩/빈 결과
   if (loading) {
     return (
@@ -286,28 +324,14 @@ export default function SearchPageClient() {
           fontFamily: "Noto Sans KR, system-ui, sans-serif",
         }}
       >
+        {DebugPanel}
         불러오는 중...
       </main>
     );
   }
 
-  if (!categoryStores.length) {
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "#eef5fb",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontFamily: "Noto Sans KR, system-ui, sans-serif",
-        }}
-      >
-        결과가 없어요
-      </main>
-    );
-  }
-
+  // 여기서 categoryStores가 0이어도 SearchCards가 empty UI 보여주도록 이미 바꿨으니,
+  // SearchPageClient에서 "결과가 없어요"로 일찍 리턴하지 않는다.
   return (
     <main
       style={{
@@ -320,6 +344,8 @@ export default function SearchPageClient() {
         gap: 18,
       }}
     >
+      {DebugPanel}
+
       {/* 기본 카드 UI */}
       {!overlayVisible && (
         <SearchCards

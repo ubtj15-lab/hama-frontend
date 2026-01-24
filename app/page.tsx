@@ -1,28 +1,20 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
-import type { HomeTabKey, HomeCard } from "@/lib/storeTypes";
+import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { logEvent } from "@/lib/logEvent";
-
 import FeedbackFab from "@/components/FeedbackFab";
 
 import HomeTopBar from "./_components/HomeTopBar";
 import HomeSearchBar from "./_components/HomeSearchBar";
 import HomeSwipeDeck from "./_components/HomeSwipeDeck";
-import CardDetailOverlay from "./_components/CardDetailOverlay";
-import MicButton from "./components/MicButton";
 
 import { useHomeCards } from "./_hooks/useHomeCards";
-
-// ---- Web Speech API 타입 선언 (빌드 에러 방지) ----
-declare global {
-  interface Window {
-    webkitSpeechRecognition?: any;
-    SpeechRecognition?: any;
-  }
-}
+import { useHomeMode } from "./_hooks/useHomeMode";
+import { useNearbyCards } from "./_hooks/useNearbyCards";
 
 // ======================
 // 🧩 포인트 / 로그 저장
@@ -90,15 +82,22 @@ export default function HomePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const [homeTab, setHomeTab] = useState<HomeTabKey>("all");
-  const { cards: homeCards, isLoading: isHomeLoading } = useHomeCards(homeTab);
 
+  // ✅ 모드 판별: 오산/동탄=추천, 그 외=탐색
+  const { mode, loc, isLocLoading } = useHomeMode();
+
+  // ✅ 추천 카드
+  const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(homeTab);
+
+  // ✅ 탐색 카드(근처)
+  const { cards: nearbyCards, isLoading: isNearbyLoading } = useNearbyCards(homeTab, loc);
+
+  // ✅ 디테일 오버레이
   const [selectedCard, setSelectedCard] = useState<HomeCard | null>(null);
 
-  // ---- 음성 인식 ----
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any | null>(null);
-
+  // ======================
   // 로그인 상태 동기화
+  // ======================
   useEffect(() => {
     const sync = () => {
       const loaded = loadUserFromStorage();
@@ -114,47 +113,18 @@ export default function HomePage() {
     sync();
     window.addEventListener("focus", sync);
     window.addEventListener("storage", sync);
+    window.addEventListener("pageshow", sync);
+
     return () => {
       window.removeEventListener("focus", sync);
       window.removeEventListener("storage", sync);
+      window.removeEventListener("pageshow", sync);
     };
   }, []);
 
-  // Web Speech API setup (기존 홈 UX 유지: 마이크 버튼 + 음성 결과 반영)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "ko-KR";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
-
-    recognition.onresult = (event: any) => {
-      const transcript = String(event?.results?.[0]?.[0]?.transcript ?? "").trim();
-      if (!transcript) return;
-      setQuery(transcript);
-      addPoints(10, "음성 검색");
-      logEvent("voice_success", { text: transcript });
-      router.push(`/search?query=${encodeURIComponent(transcript)}`);
-    };
-
-    recognitionRef.current = recognition;
-    return () => {
-      try {
-        recognition.stop();
-      } catch {}
-      recognitionRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // ======================
+  // 포인트
+  // ======================
   const addPoints = (amount: number, reason: string) => {
     setUser((prev) => {
       const updated = { ...prev, points: prev.points + amount };
@@ -164,17 +134,26 @@ export default function HomePage() {
     });
   };
 
+  // ======================
+  // 검색
+  // ======================
   const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
+
     addPoints(5, "검색");
-    logEvent("search", { query: q });
+    logEvent("search", { query: q, page: "home" });
+
     router.push(`/search?query=${encodeURIComponent(q)}`);
   };
 
+  // ======================
+  // 카카오 로그인/로그아웃
+  // ======================
   const handleKakaoButtonClick = () => {
     if (isLoggedIn) {
+      logEvent("logout", { page: "home" });
       if (typeof window !== "undefined") {
         window.localStorage.removeItem(USER_KEY);
         window.localStorage.removeItem(LOG_KEY);
@@ -183,19 +162,36 @@ export default function HomePage() {
       setUser({ nickname: "게스트", points: 0 });
       setIsLoggedIn(false);
       window.location.href = "/api/auth/kakao/logout";
-    } else {
-      if (typeof window !== "undefined") {
-        const newUser: HamaUser = { nickname: "카카오 사용자", points: user.points };
-        window.localStorage.setItem(USER_KEY, JSON.stringify(newUser));
-        window.localStorage.setItem(LOGIN_FLAG_KEY, "1");
-        setUser(newUser);
-        setIsLoggedIn(true);
-      }
-      window.location.href = "/api/auth/kakao/login";
+      return;
     }
+
+    logEvent("login_start", { page: "home" });
+    if (typeof window !== "undefined") {
+      const newUser: HamaUser = { nickname: "카카오 사용자", points: user.points };
+      window.localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+      window.localStorage.setItem(LOGIN_FLAG_KEY, "1");
+      setUser(newUser);
+      setIsLoggedIn(true);
+    }
+    window.location.href = "/api/auth/kakao/login";
   };
 
-  // ✅ 디테일 액션 (예약/길안내/평점/메뉴)
+  // ======================
+  // 추천 vs 탐색 분기
+  // ======================
+  const deckCards =
+  mode === "explore"
+    ? (nearbyCards.length > 0 ? nearbyCards : recommendCards)
+    : recommendCards;
+
+const deckLoading =
+  mode === "explore"
+    ? (isLocLoading || isNearbyLoading) && recommendCards.length === 0
+    : isRecommendLoading;
+
+  // ======================
+  // 디테일 액션 (예약/길안내/평점/메뉴)
+  // ======================
   const openInNewTab = (url: string) => {
     try {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -219,14 +215,12 @@ export default function HomePage() {
     return { lat, lng };
   };
 
-  const handlePlaceDetailAction = (
-    card: HomeCard,
-    action: "예약" | "길안내" | "평점" | "메뉴"
-  ) => {
-    const name = ((card as any)?.name ?? "").trim();
+  const handlePlaceDetailAction = (card: HomeCard, action: "예약" | "길안내" | "평점" | "메뉴") => {
+    const anyCard = card as any;
+    const name = String(anyCard?.name ?? "").trim();
     if (!name) return;
 
-    logEvent("place_detail_action", { id: (card as any).id, name, action });
+    logEvent("place_detail_action", { id: anyCard.id, name, action, mode, tab: homeTab });
 
     if (action === "길안내") {
       const { lat, lng } = getCardLatLng(card);
@@ -257,24 +251,6 @@ export default function HomePage() {
     );
   };
 
-  // ---- 마이크 버튼 동작 ----
-  const handleMicClick = () => {
-    const recognition = recognitionRef.current;
-    if (!recognition) {
-      alert("이 브라우저는 음성 인식을 지원하지 않아요 (크롬 권장)");
-      return;
-    }
-    if (isListening) {
-      try {
-        recognition.stop();
-      } catch {}
-    } else {
-      try {
-        recognition.start();
-      } catch {}
-    }
-  };
-
   const tabButtons: { key: HomeTabKey; label: string }[] = [
     { key: "all", label: "종합" },
     { key: "restaurant", label: "식당" },
@@ -303,8 +279,17 @@ export default function HomePage() {
 
         <HomeSearchBar query={query} onChange={setQuery} onSubmit={handleSearchSubmit} />
 
-        {/* ✅ 카테고리 탭 */}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginBottom: 22 }}>
+        {/* 탭 */}
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            rowGap: 10,
+            flexWrap: "wrap",
+            justifyContent: "center",
+            marginBottom: 18,
+          }}
+        >
           {tabButtons.map((t) => {
             const active = t.key === homeTab;
             return (
@@ -314,6 +299,7 @@ export default function HomePage() {
                 onClick={() => {
                   setHomeTab(t.key);
                   addPoints(1, "홈 탭 변경");
+                  logEvent("home_tab_click", { tab: t.key, mode });
                 }}
                 style={{
                   border: "none",
@@ -324,7 +310,9 @@ export default function HomePage() {
                   background: active ? "#dbeafe" : "#ffffff",
                   color: active ? "#1d4ed8" : "#111827",
                   fontWeight: active ? 900 : 700,
-                  boxShadow: active ? "0 8px 22px rgba(37,99,235,0.18)" : "0 6px 16px rgba(15,23,42,0.08)",
+                  boxShadow: active
+                    ? "0 8px 22px rgba(37,99,235,0.18)"
+                    : "0 6px 16px rgba(15,23,42,0.08)",
                 }}
               >
                 {t.label}
@@ -333,112 +321,177 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* ✅ 메인 추천 카드 (스와이프/클릭 가능) */}
+        {/* 카드 덱 */}
         <HomeSwipeDeck
-          cards={homeCards}
+          key={`${mode}-${homeTab}`}
+          cards={deckCards}
           homeTab={homeTab}
-          isLoading={isHomeLoading}
-          onOpenCard={(c) => setSelectedCard(c)}
+          mode={mode}
+          isLoading={deckLoading}
+          onOpenCard={(c) => {
+            setSelectedCard(c);
+            addPoints(2, "홈 추천 카드 열람");
+            logEvent("home_card_open", {
+              id: c.id,
+              name: c.name,
+              tab: homeTab,
+              mode,
+            });
+          }}
           onAddPoints={addPoints}
         />
 
-        {/* ✅ 마이크 버튼 + 안내 문구 */}
-        <section
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 14,
-            marginBottom: 34,
-          }}
-        >
-          <MicButton
-            isListening={isListening}
-            onClick={handleMicClick}
-            size={92}
-          />
-
-          <p style={{ fontSize: 12, color: "#6b7280", textAlign: "center", lineHeight: 1.6 }}>
-            “카페 찾아줘 / 식당 찾아줘 / 미용실 찾아줘” 처럼 말해보세요!
-          </p>
-        </section>
-
-        {/* ✅ 디테일 오버레이 (하단 버튼 포함) */}
+        {/* 디테일 오버레이 */}
         {selectedCard && (
-          <CardDetailOverlay
-            card={selectedCard}
-            onClose={() => setSelectedCard(null)}
-            onAction={(card, action) => handlePlaceDetailAction(card, action)}
-          />
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 2000,
+              background: "rgba(15,23,42,0.9)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <div onClick={() => setSelectedCard(null)} style={{ position: "absolute", inset: 0 }} />
+
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                maxWidth: 430,
+                height: "100%",
+                maxHeight: 820,
+                padding: "16px 12px 96px",
+                boxSizing: "border-box",
+              }}
+            >
+              <div
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  height: "100%",
+                  borderRadius: 32,
+                  overflow: "hidden",
+                  background: "#111827",
+                  boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+                }}
+              >
+                <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                  {(() => {
+                    const anyCard = selectedCard as any;
+                    const imageUrl: string | undefined = anyCard.imageUrl ?? anyCard.image ?? undefined;
+                    if (!imageUrl) return null;
+                    return (
+                      <Image
+                        src={imageUrl}
+                        alt={anyCard.name ?? "place"}
+                        fill
+                        style={{ objectFit: "cover" }}
+                      />
+                    );
+                  })()}
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCard(null)}
+                    style={{
+                      position: "absolute",
+                      top: 16,
+                      left: 16,
+                      width: 36,
+                      height: 36,
+                      borderRadius: 999,
+                      border: "none",
+                      background: "rgba(15,23,42,0.65)",
+                      color: "#f9fafb",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    ←
+                  </button>
+
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      padding: "20px 20px 20px",
+                      background:
+                        "linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(15,23,42,0.85) 100%)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        background: "rgba(15,23,42,0.75)",
+                        color: "#f9fafb",
+                        fontSize: 11,
+                        marginBottom: 10,
+                      }}
+                    >
+                      {(selectedCard as any).name} ·{" "}
+                      {(selectedCard as any).categoryLabel ?? (selectedCard as any).category}
+                    </div>
+
+                    <div style={{ fontSize: 14, color: "#e5e7eb" }}>
+                      {(selectedCard as any).mood ?? (selectedCard as any).moodText ?? ""}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 하단 액션 버튼 (예약/길안내/평점/메뉴) */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 16,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  padding: "0 20px",
+                  boxSizing: "border-box",
+                }}
+              >
+                {(["예약", "길안내", "평점", "메뉴"] as const).map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePlaceDetailAction(selectedCard, label);
+                    }}
+                    style={{
+                      flex: 1,
+                      height: 40,
+                      borderRadius: 999,
+                      border: "none",
+                      background: "#f9fafb",
+                      color: "#111827",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
 
         {!selectedCard && <FeedbackFab />}
-
-        {/* ✅ 하단 탭바 (홈/마이페이지) */}
-        <nav
-          style={{
-            position: "fixed",
-            left: "50%",
-            bottom: 18,
-            transform: "translateX(-50%)",
-            width: "100%",
-            maxWidth: 430,
-            padding: "6px 26px 8px",
-            boxSizing: "border-box",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              background: "#ffffff",
-              borderRadius: 999,
-              boxShadow: "0 10px 25px rgba(15,23,42,0.2), 0 0 0 1px rgba(148,163,184,0.18)",
-              display: "flex",
-              justifyContent: "space-around",
-              padding: "8px 12px",
-              fontSize: 12,
-            }}
-          >
-            <button
-              type="button"
-              style={{
-                border: "none",
-                background: "transparent",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 2,
-                color: "#2563EB",
-                fontWeight: 700,
-                cursor: "default",
-              }}
-            >
-              <span>🏠</span>
-              <span>홈</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                logEvent("page_view", { page: "mypage" });
-                alert("마이페이지는 베타에서 준비 중이에요!");
-              }}
-              style={{
-                border: "none",
-                background: "transparent",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 2,
-                color: "#9CA3AF",
-                cursor: "pointer",
-              }}
-            >
-              <span>👤</span>
-              <span>마이페이지</span>
-            </button>
-          </div>
-        </nav>
       </div>
     </main>
   );

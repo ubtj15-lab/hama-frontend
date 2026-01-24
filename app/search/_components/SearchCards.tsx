@@ -51,7 +51,7 @@ export default function SearchCards(props: Props) {
     onTouchEnd,
   } = props;
 
-  if (!selected) return null;
+  const hasCards = !!selected;
 
   return (
     <>
@@ -97,7 +97,11 @@ export default function SearchCards(props: Props) {
             whiteSpace: "nowrap",
           }}
         >
-          {query ? `“${query}” 검색 결과 · ${labelOfCategory(selected.categoryNorm)}${hasMyLocation ? " · 내 위치 기준" : ""}` : "하마 추천 장소"}
+          {query
+            ? `“${query}” 검색 결과${
+                hasCards ? ` · ${labelOfCategory(selected!.categoryNorm)}` : ""
+              }${hasMyLocation ? " · 내 위치 기준" : ""}`
+            : "하마 추천 장소"}
         </div>
       </div>
 
@@ -119,77 +123,35 @@ export default function SearchCards(props: Props) {
           transition: "transform 0.22s ease-out",
         }}
       >
-        {/* 큰 카드 1 */}
-        <div
-          onClick={() => onOpenExpanded(selected.id)}
-          style={{
-            width: 316,
-            height: 269,
-            borderRadius: 24,
-            overflow: "hidden",
-            position: "relative",
-            boxShadow: "0 6px 18px rgba(0, 0, 0, 0.2)",
-            cursor: "pointer",
-            background: "#dbeafe",
-          }}
-        >
-          <Image
-            src={selected.image_url || fallbackImageByCategory(selected.categoryNorm)}
-            alt={selected.name}
-            fill
-            sizes="316px"
-            style={{ objectFit: "cover" }}
-          />
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenKakaoPlace(selected);
-            }}
-            style={{
-              position: "absolute",
-              top: 10,
-              right: 10,
-              border: "none",
-              borderRadius: 9999,
-              padding: "6px 10px",
-              background: "rgba(255,255,255,0.95)",
-              cursor: "pointer",
-              fontSize: 12,
-              fontFamily: "Noto Sans KR, system-ui, sans-serif",
-              boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
-            }}
-          >
-            {labelOfCategory(selected.categoryNorm)}정보보기
-          </button>
-
+        {/* 카드가 없으면 Empty 카드 표시 */}
+        {!hasCards ? (
           <div
             style={{
-              position: "absolute",
-              left: 12,
-              bottom: 12,
-              padding: "6px 10px",
-              borderRadius: 9999,
-              background: "rgba(15,23,42,0.75)",
-              color: "#f9fafb",
-              fontSize: 12,
+              width: 316,
+              height: 269,
+              borderRadius: 24,
+              overflow: "hidden",
+              position: "relative",
+              boxShadow: "0 6px 18px rgba(0, 0, 0, 0.18)",
+              background: "#ffffff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               fontFamily: "Noto Sans KR, system-ui, sans-serif",
+              color: "#6b7280",
+              fontSize: 14,
             }}
           >
-            {selected.name} · {labelOfCategory(selected.categoryNorm)}
-            {selected.distanceKm != null ? ` · ${selected.distanceKm.toFixed(1)}km` : ""}
+            추천 카드가 없어요
           </div>
-        </div>
-
-        {/* 작은 카드 2 */}
-        <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-          {others.slice(0, 2).map((card) => (
+        ) : (
+          <>
+            {/* 큰 카드 1 */}
             <div
-              key={card.id}
-              onClick={() => onOpenExpanded(card.id)}
+              onClick={() => onOpenExpanded(selected!.id)}
               style={{
-                width: 156,
-                height: 165,
+                width: 316,
+                height: 269,
                 borderRadius: 24,
                 overflow: "hidden",
                 position: "relative",
@@ -199,78 +161,160 @@ export default function SearchCards(props: Props) {
               }}
             >
               <Image
-                src={card.image_url || fallbackImageByCategory(card.categoryNorm)}
-                alt={card.name}
+                src={
+                  selected!.image_url ||
+                  fallbackImageByCategory(selected!.categoryNorm)
+                }
+                alt={selected!.name}
                 fill
-                sizes="156px"
+                sizes="316px"
                 style={{ objectFit: "cover" }}
               />
 
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onOpenKakaoPlace(card);
+                  onOpenKakaoPlace(selected!);
                 }}
                 style={{
                   position: "absolute",
-                  top: 8,
-                  right: 8,
+                  top: 10,
+                  right: 10,
                   border: "none",
                   borderRadius: 9999,
-                  padding: "5px 8px",
+                  padding: "6px 10px",
                   background: "rgba(255,255,255,0.95)",
                   cursor: "pointer",
-                  fontSize: 11,
+                  fontSize: 12,
                   fontFamily: "Noto Sans KR, system-ui, sans-serif",
                   boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
                 }}
               >
-                {labelOfCategory(card.categoryNorm)}정보보기
+                {labelOfCategory(selected!.categoryNorm)}정보보기
               </button>
 
               <div
                 style={{
                   position: "absolute",
-                  left: 10,
-                  bottom: 10,
-                  padding: "4px 8px",
+                  left: 12,
+                  bottom: 12,
+                  padding: "6px 10px",
                   borderRadius: 9999,
                   background: "rgba(15,23,42,0.75)",
                   color: "#f9fafb",
+                  fontSize: 12,
                   fontFamily: "Noto Sans KR, system-ui, sans-serif",
-                  fontSize: 11,
                 }}
               >
-                {card.name}
-                {card.distanceKm != null ? ` · ${card.distanceKm.toFixed(1)}km` : ""}
+                {selected!.name} · {labelOfCategory(selected!.categoryNorm)}
+                {selected!.distanceKm != null
+                  ? ` · ${selected!.distanceKm.toFixed(1)}km`
+                  : ""}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* 페이지 점(3개) */}
-      <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-        {[0, 1, 2].map((i) => (
-          <button
-            key={i}
-            onClick={() => onGoToPage(i)}
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              border: "none",
-              cursor: pages[i]?.length ? "pointer" : "default",
-              background: pages[i]?.length
-                ? i === pageIndex
-                  ? "#2563eb"
-                  : "rgba(148,163,184,0.7)"
-                : "rgba(209,213,219,0.8)",
-              transform: i === pageIndex && pages[i]?.length ? "scale(1.2)" : "scale(1)",
-              transition: "background 0.2s ease, transform 0.2s ease",
-            }}
-          />
-        ))}
+            {/* 작은 카드 2 */}
+            <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
+              {others.slice(0, 2).map((card) => (
+                <div
+                  key={card.id}
+                  onClick={() => onOpenExpanded(card.id)}
+                  style={{
+                    width: 156,
+                    height: 165,
+                    borderRadius: 24,
+                    overflow: "hidden",
+                    position: "relative",
+                    boxShadow: "0 6px 18px rgba(0, 0, 0, 0.2)",
+                    cursor: "pointer",
+                    background: "#dbeafe",
+                  }}
+                >
+                  <Image
+                    src={
+                      card.image_url ||
+                      fallbackImageByCategory(card.categoryNorm)
+                    }
+                    alt={card.name}
+                    fill
+                    sizes="156px"
+                    style={{ objectFit: "cover" }}
+                  />
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenKakaoPlace(card);
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      border: "none",
+                      borderRadius: 9999,
+                      padding: "5px 8px",
+                      background: "rgba(255,255,255,0.95)",
+                      cursor: "pointer",
+                      fontSize: 11,
+                      fontFamily: "Noto Sans KR, system-ui, sans-serif",
+                      boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
+                    }}
+                  >
+                    {labelOfCategory(card.categoryNorm)}정보보기
+                  </button>
+
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 10,
+                      bottom: 10,
+                      padding: "4px 8px",
+                      borderRadius: 9999,
+                      background: "rgba(15,23,42,0.75)",
+                      color: "#f9fafb",
+                      fontFamily: "Noto Sans KR, system-ui, sans-serif",
+                      fontSize: 11,
+                    }}
+                  >
+                    {card.name}
+                    {card.distanceKm != null
+                      ? ` · ${card.distanceKm.toFixed(1)}km`
+                      : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ✅ 페이지 점(3개) — 반드시 return 내부에 있어야 함 */}
+        <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+          {[0, 1, 2].map((i) => {
+            const hasPage = (pages?.[i]?.length ?? 0) > 0;
+            return (
+              <button
+                key={i}
+                onClick={() => onGoToPage(i)}
+                disabled={!hasPage}
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  border: "none",
+                  cursor: hasPage ? "pointer" : "default",
+                  background: hasPage
+                    ? i === pageIndex
+                      ? "#2563eb"
+                      : "rgba(148,163,184,0.7)"
+                    : "rgba(209,213,219,0.8)",
+                  transform: i === pageIndex && hasPage ? "scale(1.2)" : "scale(1)",
+                  transition: "background 0.2s ease, transform 0.2s ease",
+                }}
+                aria-label={`page-${i + 1}`}
+              />
+            );
+          })}
+        </div>
       </div>
     </>
   );
