@@ -9,6 +9,7 @@ export function useHomeCards(homeTab: HomeTabKey) {
   const [cards, setCards] = useState<HomeCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // ✅ 탭 바뀔 때 이전 요청 무시(레이스 방지)
   const reqIdRef = useRef(0);
 
   useEffect(() => {
@@ -24,11 +25,13 @@ export function useHomeCards(homeTab: HomeTabKey) {
             ? await fetchHomeCardsByTab("all", { count: 12 })
             : await fetchHomeCardsByTab(homeTab, { count: 5 });
 
+        // ✅ 최신 요청만 반영
         if (!alive) return;
         if (reqId !== reqIdRef.current) return;
 
         const safe = Array.isArray(next) ? next : [];
         setCards(safe);
+
         logEvent("home_tab_loaded", { tab: homeTab, count: safe.length });
       } catch (e) {
         if (!alive) return;
