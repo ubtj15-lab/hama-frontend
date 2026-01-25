@@ -18,13 +18,6 @@ function fallbackImageByCategory(category: Category) {
   return "/images/fallback/activity.jpg";
 }
 
-function getDetailButtonLabel(place: CardInfo | null): string {
-  if (!place) return "정보";
-  if (place.categoryNorm === "salon") return "시술";
-  if (place.categoryNorm === "cafe" || place.categoryNorm === "restaurant") return "메뉴";
-  return "정보";
-}
-
 type Props = {
   visible: boolean;
   expanded: boolean;
@@ -48,7 +41,6 @@ export default function SearchOverlay(props: Props) {
   const {
     visible,
     expanded,
-    detailOpen,
     reserveStep,
     reserveDate,
     reserveTime,
@@ -56,9 +48,6 @@ export default function SearchOverlay(props: Props) {
     onClose,
     onOpenKakaoPlace,
     onGoToMap,
-    onReserveClick,
-    onRate,
-    onToggleDetail,
     onOverlayScroll,
     setReserveDate,
     setReserveTime,
@@ -66,13 +55,28 @@ export default function SearchOverlay(props: Props) {
 
   if (!visible || !selected) return null;
 
-  const detailLabel = getDetailButtonLabel(selected);
   const dateOptions = [
     { label: "오늘", value: "오늘" },
     { label: "내일", value: "내일" },
     { label: "모레", value: "모레" },
   ];
   const timeOptions = ["11:00", "13:00", "15:00", "17:00", "19:00"];
+
+  const openInNewTab = (url: string) => {
+    try {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {}
+  };
+
+  const openNaver = (name: string) => {
+    const q = encodeURIComponent(name);
+    const isMobile =
+      typeof window !== "undefined" && window.matchMedia?.("(max-width: 768px)")?.matches;
+    const url = isMobile
+      ? `https://m.search.naver.com/search.naver?query=${q}`
+      : `https://search.naver.com/search.naver?query=${q}`;
+    openInNewTab(url);
+  };
 
   return (
     <div
@@ -178,7 +182,7 @@ export default function SearchOverlay(props: Props) {
           </div>
         </div>
 
-        {/* 버튼 4개 */}
+        {/* 버튼 2개 (길안내 / 네이버로 보기) */}
         <div
           style={{
             width: "100%",
@@ -192,36 +196,46 @@ export default function SearchOverlay(props: Props) {
             transition: "opacity 0.3s ease 0.03s, transform 0.3s ease 0.03s",
           }}
         >
-          {[
-            {
-              label: reserveStep === 0 ? "예약" : reserveStep === 1 ? "예약 확정" : "다른 시간 예약",
-              onClick: onReserveClick,
-            },
-            { label: "길안내", onClick: () => onGoToMap(selected) },
-            { label: "평점", onClick: onRate },
-            { label: detailLabel, onClick: onToggleDetail },
-          ].map((btn) => (
-            <button
-              key={btn.label}
-              onClick={btn.onClick}
-              style={{
-                flex: 1,
-                border: "none",
-                borderRadius: 9999,
-                padding: "9px 0",
-                background: "#f3f4f6",
-                fontSize: 13,
-                fontFamily: "Noto Sans KR, system-ui, sans-serif",
-                cursor: "pointer",
-                color: "#111827",
-              }}
-            >
-              {btn.label}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => onGoToMap(selected)}
+            style={{
+              flex: 1,
+              border: "none",
+              borderRadius: 9999,
+              padding: "11px 0",
+              background: "#f3f4f6",
+              fontSize: 14,
+              fontFamily: "Noto Sans KR, system-ui, sans-serif",
+              cursor: "pointer",
+              color: "#111827",
+              fontWeight: 800,
+            }}
+          >
+            길안내
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openNaver(selected.name)}
+            style={{
+              flex: 1,
+              border: "none",
+              borderRadius: 9999,
+              padding: "11px 0",
+              background: "#f3f4f6",
+              fontSize: 14,
+              fontFamily: "Noto Sans KR, system-ui, sans-serif",
+              cursor: "pointer",
+              color: "#111827",
+              fontWeight: 800,
+            }}
+          >
+            네이버로 보기
+          </button>
         </div>
 
-        {/* 예약 패널 */}
+        {/* (기존 예약 패널은 남겨둠: 지금은 버튼이 없어서 안 열릴 뿐, 나중에 예약요청 붙일 때 다시 사용 가능) */}
         {reserveStep > 0 && (
           <div
             style={{

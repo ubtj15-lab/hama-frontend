@@ -16,7 +16,7 @@ import { useHomeCards } from "./_hooks/useHomeCards";
 import { useHomeMode } from "./_hooks/useHomeMode";
 import { useNearbyCards } from "./_hooks/useNearbyCards";
 import { useUIOverlay } from "./_providers/UIOverlayProvider";
-
+import { openDirections } from "@/lib/openDirections";
 
 // ======================
 // 🧩 포인트 / 로그 저장
@@ -97,13 +97,11 @@ export default function HomePage() {
   // ✅ 디테일 오버레이
   const [selectedCard, setSelectedCard] = useState<HomeCard | null>(null);
 
+  // ✅ 전역 오버레이 상태(마이크/플로팅 UI 숨김용)
   const { setOverlayOpen } = useUIOverlay();
-
-useEffect(() => {
-  setOverlayOpen(!!selectedCard);
-}, [selectedCard, setOverlayOpen]);
-
-
+  useEffect(() => {
+    setOverlayOpen(!!selectedCard);
+  }, [selectedCard, setOverlayOpen]);
 
   // ======================
   // 로그인 상태 동기화
@@ -188,24 +186,33 @@ useEffect(() => {
 
   // ======================
   // 추천 vs 탐색 분기
+  // - explore인데 nearby가 비어 있으면 recommend fallback
   // ======================
   const deckCards =
-  mode === "explore"
-    ? (nearbyCards.length > 0 ? nearbyCards : recommendCards)
-    : recommendCards;
+    mode === "explore" ? (nearbyCards.length > 0 ? nearbyCards : recommendCards) : recommendCards;
 
-const deckLoading =
-  mode === "explore"
-    ? (isLocLoading || isNearbyLoading) && recommendCards.length === 0
-    : isRecommendLoading;
+  const deckLoading =
+    mode === "explore"
+      ? (isLocLoading || isNearbyLoading) && recommendCards.length === 0
+      : isRecommendLoading;
 
   // ======================
-  // 디테일 액션 (예약/길안내/평점/메뉴)
+  // 디테일 액션 (길안내 / 네이버로 보기)
   // ======================
   const openInNewTab = (url: string) => {
     try {
       window.open(url, "_blank", "noopener,noreferrer");
     } catch {}
+  };
+
+  const openNaver = (name: string) => {
+    const q = encodeURIComponent(name);
+    const isMobile =
+      typeof window !== "undefined" && window.matchMedia?.("(max-width: 768px)")?.matches;
+    const url = isMobile
+      ? `https://m.search.naver.com/search.naver?query=${q}`
+      : `https://search.naver.com/search.naver?query=${q}`;
+    openInNewTab(url);
   };
 
   const getCardLatLng = (card: HomeCard): { lat?: number; lng?: number } => {
@@ -216,16 +223,18 @@ const deckLoading =
         : typeof anyCard.latitude === "number"
         ? anyCard.latitude
         : undefined;
+
     const lng =
       typeof anyCard.lng === "number"
         ? anyCard.lng
         : typeof anyCard.longitude === "number"
         ? anyCard.longitude
         : undefined;
+
     return { lat, lng };
   };
 
-  const handlePlaceDetailAction = (card: HomeCard, action: "예약" | "길안내" | "평점" | "메뉴") => {
+  const handlePlaceDetailAction = (card: HomeCard, action: "길안내" | "네이버") => {
     const anyCard = card as any;
     const name = String(anyCard?.name ?? "").trim();
     if (!name) return;
@@ -234,31 +243,12 @@ const deckLoading =
 
     if (action === "길안내") {
       const { lat, lng } = getCardLatLng(card);
-      if (typeof lat === "number" && typeof lng === "number") {
-        openInNewTab(`https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`);
-      } else {
-        openInNewTab(`https://map.kakao.com/?q=${encodeURIComponent(name)}`);
-      }
+      openDirections({ name, lat: lat ?? null, lng: lng ?? null });
       return;
     }
 
-    if (action === "예약") {
-      openInNewTab(
-        `https://m.search.naver.com/search.naver?query=${encodeURIComponent(`${name} 예약`)}`
-      );
-      return;
-    }
-
-    if (action === "평점") {
-      openInNewTab(
-        `https://m.search.naver.com/search.naver?query=${encodeURIComponent(`${name} 리뷰`)}`
-      );
-      return;
-    }
-
-    openInNewTab(
-      `https://m.search.naver.com/search.naver?query=${encodeURIComponent(`${name} 메뉴`)}`
-    );
+    // "네이버"
+    openNaver(name);
   };
 
   const tabButtons: { key: HomeTabKey; label: string }[] = [
@@ -391,7 +381,8 @@ const deckLoading =
                 <div style={{ position: "relative", width: "100%", height: "100%" }}>
                   {(() => {
                     const anyCard = selectedCard as any;
-                    const imageUrl: string | undefined = anyCard.imageUrl ?? anyCard.image ?? undefined;
+                    const imageUrl: string | undefined =
+                      anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? undefined;
                     if (!imageUrl) return null;
                     return (
                       <Image
@@ -459,7 +450,7 @@ const deckLoading =
                 </div>
               </div>
 
-              {/* 하단 액션 버튼 (예약/길안내/평점/메뉴) */}
+              {/* 하단 액션 버튼 (2개로 통일) */}
               <div
                 style={{
                   position: "absolute",
@@ -473,7 +464,7 @@ const deckLoading =
                   boxSizing: "border-box",
                 }}
               >
-                {(["예약", "길안내", "평점", "메뉴"] as const).map((label) => (
+                {(["길안내", "네이버"] as const).map((label) => (
                   <button
                     key={label}
                     type="button"
@@ -483,17 +474,17 @@ const deckLoading =
                     }}
                     style={{
                       flex: 1,
-                      height: 40,
+                      height: 44,
                       borderRadius: 999,
                       border: "none",
                       background: "#f9fafb",
                       color: "#111827",
-                      fontSize: 13,
-                      fontWeight: 700,
+                      fontSize: 14,
+                      fontWeight: 800,
                       cursor: "pointer",
                     }}
                   >
-                    {label}
+                    {label === "네이버" ? "네이버로 보기" : label}
                   </button>
                 ))}
               </div>
