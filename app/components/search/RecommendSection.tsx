@@ -44,6 +44,7 @@ const FALLBACK_CARDS: HomeCard[] = [
 ];
 
 
+
 type Props = {
   query: string;
   category: string;

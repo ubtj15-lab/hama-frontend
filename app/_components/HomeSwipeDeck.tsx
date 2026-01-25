@@ -28,11 +28,6 @@ export default function HomeSwipeDeck({
   onOpenCard,
   onAddPoints,
 }: Props) {
-  /**
-   * ✅ 핵심: cards가 순간적으로 []가 되거나(탭 전환/리렌더)
-   * 부모에서 값이 흔들려도 “마지막 정상 카드”를 유지해서
-   * 1초 뜨고 사라지는 현상을 방지한다.
-   */
   const [stableCards, setStableCards] = useState<HomeCard[]>([]);
 
   useEffect(() => {
@@ -41,7 +36,6 @@ export default function HomeSwipeDeck({
     }
   }, [cards]);
 
-  // 렌더용 리스트: 로딩 중이면 스켈레톤, 로딩 끝났으면 stable 우선
   const list = useMemo<HomeCard[]>(() => {
     if (isLoading) return [];
     return stableCards.length > 0 ? stableCards : Array.isArray(cards) ? cards : [];
@@ -56,7 +50,6 @@ export default function HomeSwipeDeck({
   const startXRef = useRef(0);
   const movedRef = useRef(false);
 
-  // 탭/모드 바뀌면 리셋
   useEffect(() => {
     setActiveIndex(0);
     setDragX(0);
@@ -64,7 +57,6 @@ export default function HomeSwipeDeck({
     movedRef.current = false;
   }, [homeTab, mode]);
 
-  // total이 줄어들면 인덱스 보정 (렌더 중 setState 금지)
   useEffect(() => {
     if (total <= 0) return;
     setActiveIndex((idx) => Math.min(idx, total - 1));
@@ -106,15 +98,13 @@ export default function HomeSwipeDeck({
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (isLoading) return;
-    if (total <= 1) return;
+    if (total <= 1) return; // 1장이면 스와이프 의미 없음
 
     setIsDragging(true);
     movedRef.current = false;
     startXRef.current = e.clientX;
 
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {}
+    // ❌ setPointerCapture 제거 (PC 클릭 죽는 주범)
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -142,6 +132,7 @@ export default function HomeSwipeDeck({
   const onPointerCancel = () => {
     setIsDragging(false);
     setDragX(0);
+    movedRef.current = false;
   };
 
   const renderCard = (card: HomeCard, pos: "prev" | "curr" | "next") => {
@@ -186,6 +177,7 @@ export default function HomeSwipeDeck({
           };
 
     const onClick = () => {
+      // 드래그로 조금이라도 움직였으면 클릭 취소
       if (movedRef.current) return;
 
       if (pos === "prev") return goPrev();
@@ -210,8 +202,11 @@ export default function HomeSwipeDeck({
           cursor: "pointer",
           background: "#ffffff",
           overflow: "hidden",
-          transition: isDragging ? "none" : "transform 220ms ease, opacity 220ms ease, box-shadow 220ms ease",
-          touchAction: "none",
+          transition: isDragging
+            ? "none"
+            : "transform 220ms ease, opacity 220ms ease, box-shadow 220ms ease",
+          userSelect: "none",
+          WebkitTapHighlightColor: "transparent",
           ...styleByPos,
         }}
       >
@@ -282,7 +277,8 @@ export default function HomeSwipeDeck({
             position: "relative",
             overflow: "visible",
             margin: "0 auto",
-            touchAction: "pan-y",
+            // 스와이프를 pointer로 받기 위해 none 권장
+            touchAction: "none",
           }}
         >
           {isLoading && (
