@@ -14,14 +14,14 @@ export default function FloatingMic() {
     <div
       style={{
         position: "fixed",
-        right: 20,
-        bottom: 20,
+        left: "50%",
+        bottom: 24,
+        transform: "translateX(-50%)",
         zIndex: 9999,
 
-        // ✅ 핵심: wrapper는 클릭을 절대 먹지 않게
+        // ✅ wrapper는 클릭 절대 먹지 않음
         pointerEvents: "none",
 
-        // ✅ 전체 화면 덮는 스타일 방지
         width: "auto",
         height: "auto",
       }}
@@ -35,13 +35,17 @@ export default function FloatingMic() {
 
           width: 72,
           height: 72,
-          borderRadius: 9999,
+          borderRadius: "50%",
           border: "none",
           cursor: "pointer",
 
-          // 보기 스타일(원하면 유지/수정)
-          background: "white",
+          background: "#ffffff",
           boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
+
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 28,
         }}
         aria-label="voice input"
       >
