@@ -1,79 +1,34 @@
-// app/lib/storeTypes.ts
+export type HomeTabKey = "all" | "restaurant" | "cafe" | "salon" | "activity";
 
-export type HomeTabKey =
-  | "all"
-  | "cafe"
-  | "restaurant"
-  | "activity"
-  | "salon"
-  | "beauty";
-
-export interface StoreRecord {
-  id: string;
-  name: string;
-  category: string;
-  area: string | null;
-  address: string | null;
-  lat: number | null;
-  lng: number | null;
-  phone: string | null;
-
-  image_url?: string | null;
-  distance_hint?: string | null;
-  is_active?: boolean;
-
-  mood?: string | null;
-  with_kids?: boolean | null;
-  for_work?: boolean | null;
-  price_level?: number | null;
-  tags?: string[] | null;
-}
-
-export interface HomeCard {
+export type HomeCard = {
   id: string;
   name: string;
 
-  // ✅ 핵심: 원본 카테고리 키(영문) 저장
-  // - all 탭에서 4/4/2/2 분해하려면 이 값이 있어야 안정적임
-  category: "restaurant" | "cafe" | "salon" | "activity" | string;
-
-  categoryLabel: string;
-  distanceKm: number;
-
-  moodText: string;
-  imageUrl: string;
-  quickQuery?: string;
-
-  lat?: number | null;
-  lng?: number | null;
-
-  mood?: string | null;
-  withKids?: boolean | null;
-  forWork?: boolean | null;
-  priceLevel?: number | null;
-  tags?: string[] | null;
-}
-
-export type HamaUser = {
-  id: string;
-  nickname?: string | null;
-  email?: string | null;
-  avatarUrl?: string | null;
-  role?: "user" | "admin" | null;
-  points?: number | null;
-};
-
-// 검색/추천 카드 공용 타입 (중요: export type Place)
-export type Place = {
-  id: string;
-  name: string;
   category?: string | null;
+  area?: string | null;
   address?: string | null;
+
   lat?: number | null;
   lng?: number | null;
-  imageUrl?: string | null;
+
   phone?: string | null;
 
-  distance?: number | null; // meters
-  placeUrl?: string | null;
+  image_url?: string | null;
+
+  kakao_place_url?: string | null;
+
+  // ✅ 추가: 네이버 플레이스 상세로 바로 보내기 위한 id
+  naver_place_id?: string | null;
+
+  mood?: string[] | null;
+  tags?: string[] | null;
+
+  with_kids?: boolean | null;
+  for_work?: boolean | null;
+  price_level?: string | null;
+  reservation_required?: boolean | null;
+
+  // UI에서 쓰는 값들이 섞여 있을 수도 있어서 optional로 열어둠
+  categoryLabel?: string | null;
+  moodText?: string | null;
 };

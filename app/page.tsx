@@ -17,6 +17,7 @@ import { useHomeMode } from "./_hooks/useHomeMode";
 import { useNearbyCards } from "./_hooks/useNearbyCards";
 import { useUIOverlay } from "./_providers/UIOverlayProvider";
 import { openDirections } from "@/lib/openDirections";
+import { openNaverPlace } from "@/lib/openNaverPlace";
 
 // ======================
 // 🧩 포인트 / 로그 저장
@@ -85,27 +86,19 @@ export default function HomePage() {
 
   const [homeTab, setHomeTab] = useState<HomeTabKey>("all");
 
-  // ✅ 모드 판별: 오산/동탄=추천, 그 외=탐색
   const { mode, loc, isLocLoading } = useHomeMode();
 
-  // ✅ 추천 카드
   const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(homeTab);
 
-  // ✅ 탐색 카드(근처)
   const { cards: nearbyCards, isLoading: isNearbyLoading } = useNearbyCards(homeTab, loc);
 
-  // ✅ 디테일 오버레이
   const [selectedCard, setSelectedCard] = useState<HomeCard | null>(null);
 
-  // ✅ 전역 오버레이 상태(마이크/플로팅 UI 숨김용)
   const { setOverlayOpen } = useUIOverlay();
   useEffect(() => {
     setOverlayOpen(!!selectedCard);
   }, [selectedCard, setOverlayOpen]);
 
-  // ======================
-  // 로그인 상태 동기화
-  // ======================
   useEffect(() => {
     const sync = () => {
       const loaded = loadUserFromStorage();
@@ -130,9 +123,6 @@ export default function HomePage() {
     };
   }, []);
 
-  // ======================
-  // 포인트
-  // ======================
   const addPoints = (amount: number, reason: string) => {
     setUser((prev) => {
       const updated = { ...prev, points: prev.points + amount };
@@ -142,9 +132,6 @@ export default function HomePage() {
     });
   };
 
-  // ======================
-  // 검색
-  // ======================
   const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const q = query.trim();
@@ -156,9 +143,6 @@ export default function HomePage() {
     router.push(`/search?query=${encodeURIComponent(q)}`);
   };
 
-  // ======================
-  // 카카오 로그인/로그아웃
-  // ======================
   const handleKakaoButtonClick = () => {
     if (isLoggedIn) {
       logEvent("logout", { page: "home" });
@@ -184,10 +168,6 @@ export default function HomePage() {
     window.location.href = "/api/auth/kakao/login";
   };
 
-  // ======================
-  // 추천 vs 탐색 분기
-  // - explore인데 nearby가 비어 있으면 recommend fallback
-  // ======================
   const deckCards =
     mode === "explore" ? (nearbyCards.length > 0 ? nearbyCards : recommendCards) : recommendCards;
 
@@ -195,25 +175,6 @@ export default function HomePage() {
     mode === "explore"
       ? (isLocLoading || isNearbyLoading) && recommendCards.length === 0
       : isRecommendLoading;
-
-  // ======================
-  // 디테일 액션 (길안내 / 네이버로 보기)
-  // ======================
-  const openInNewTab = (url: string) => {
-    try {
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {}
-  };
-
-  const openNaver = (name: string) => {
-    const q = encodeURIComponent(name);
-    const isMobile =
-      typeof window !== "undefined" && window.matchMedia?.("(max-width: 768px)")?.matches;
-    const url = isMobile
-      ? `https://m.search.naver.com/search.naver?query=${q}`
-      : `https://search.naver.com/search.naver?query=${q}`;
-    openInNewTab(url);
-  };
 
   const getCardLatLng = (card: HomeCard): { lat?: number; lng?: number } => {
     const anyCard = card as any;
@@ -234,12 +195,18 @@ export default function HomePage() {
     return { lat, lng };
   };
 
-  const handlePlaceDetailAction = (card: HomeCard, action: "길안내" | "네이버") => {
+  const handlePlaceDetailAction = (card: HomeCard, action: "길안내" | "네이버로 보기") => {
     const anyCard = card as any;
     const name = String(anyCard?.name ?? "").trim();
     if (!name) return;
 
-    logEvent("place_detail_action", { id: anyCard.id, name, action, mode, tab: homeTab });
+    logEvent("place_detail_action", {
+      id: anyCard.id,
+      name,
+      action,
+      mode,
+      tab: homeTab,
+    });
 
     if (action === "길안내") {
       const { lat, lng } = getCardLatLng(card);
@@ -247,8 +214,10 @@ export default function HomePage() {
       return;
     }
 
-    // "네이버"
-    openNaver(name);
+    openNaverPlace({
+      name,
+      naverPlaceId: anyCard?.naver_place_id ?? null,
+    });
   };
 
   const tabButtons: { key: HomeTabKey; label: string }[] = [
@@ -258,6 +227,14 @@ export default function HomePage() {
     { key: "salon", label: "미용실" },
     { key: "activity", label: "액티비티" },
   ];
+
+  const getImageUrl = (card: HomeCard | null) => {
+    if (!card) return undefined;
+    const anyCard = card as any;
+    return (anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? anyCard.image_url ?? undefined) as
+      | string
+      | undefined;
+  };
 
   return (
     <main
@@ -279,7 +256,6 @@ export default function HomePage() {
 
         <HomeSearchBar query={query} onChange={setQuery} onSubmit={handleSearchSubmit} />
 
-        {/* 탭 */}
         <div
           style={{
             display: "flex",
@@ -321,7 +297,6 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* 카드 덱 */}
         <HomeSwipeDeck
           key={`${mode}-${homeTab}`}
           cards={deckCards}
@@ -341,7 +316,6 @@ export default function HomePage() {
           onAddPoints={addPoints}
         />
 
-        {/* 디테일 오버레이 */}
         {selectedCard && (
           <div
             style={{
@@ -380,18 +354,9 @@ export default function HomePage() {
               >
                 <div style={{ position: "relative", width: "100%", height: "100%" }}>
                   {(() => {
-                    const anyCard = selectedCard as any;
-                    const imageUrl: string | undefined =
-                      anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? undefined;
+                    const imageUrl = getImageUrl(selectedCard);
                     if (!imageUrl) return null;
-                    return (
-                      <Image
-                        src={imageUrl}
-                        alt={anyCard.name ?? "place"}
-                        fill
-                        style={{ objectFit: "cover" }}
-                      />
-                    );
+                    return <Image src={imageUrl} alt={selectedCard.name ?? "place"} fill style={{ objectFit: "cover" }} />;
                   })()}
 
                   <button
@@ -439,18 +404,16 @@ export default function HomePage() {
                         marginBottom: 10,
                       }}
                     >
-                      {(selectedCard as any).name} ·{" "}
-                      {(selectedCard as any).categoryLabel ?? (selectedCard as any).category}
+                      {(selectedCard as any).name} · {(selectedCard as any).categoryLabel ?? (selectedCard as any).category}
                     </div>
 
                     <div style={{ fontSize: 14, color: "#e5e7eb" }}>
-                      {(selectedCard as any).mood ?? (selectedCard as any).moodText ?? ""}
+                      {(selectedCard as any).mood?.[0] ?? (selectedCard as any).moodText ?? ""}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 하단 액션 버튼 (2개로 통일) */}
               <div
                 style={{
                   position: "absolute",
@@ -464,7 +427,7 @@ export default function HomePage() {
                   boxSizing: "border-box",
                 }}
               >
-                {(["길안내", "네이버"] as const).map((label) => (
+                {(["길안내", "네이버로 보기"] as const).map((label) => (
                   <button
                     key={label}
                     type="button"
@@ -474,17 +437,17 @@ export default function HomePage() {
                     }}
                     style={{
                       flex: 1,
-                      height: 44,
+                      height: 40,
                       borderRadius: 999,
                       border: "none",
                       background: "#f9fafb",
                       color: "#111827",
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: 800,
                       cursor: "pointer",
                     }}
                   >
-                    {label === "네이버" ? "네이버로 보기" : label}
+                    {label}
                   </button>
                 ))}
               </div>
