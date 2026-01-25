@@ -13,6 +13,7 @@ export default function FloatingMic() {
     e.preventDefault();
     e.stopPropagation();
     console.log("mic click");
+    // TODO: mic action
   };
 
   return (
@@ -23,7 +24,10 @@ export default function FloatingMic() {
         bottom: 24,
         transform: "translateX(-50%)",
         zIndex: 9999,
+
+        // ✅ wrapper는 클릭을 먹지 않게
         pointerEvents: "none",
+
         width: "auto",
         height: "auto",
       }}

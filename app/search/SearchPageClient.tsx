@@ -15,6 +15,7 @@ import {
 
 import { useSearchStores } from "./_hooks/useSearchStores";
 import { useCardPaging } from "./_hooks/useCardPaging";
+import { useUIOverlay } from "../_providers/UIOverlayProvider";
 
 export default function SearchPageClient() {
   const router = useRouter();
@@ -28,10 +29,7 @@ export default function SearchPageClient() {
   const myLng = Number(params.get("lng"));
   const hasMyLocation = Number.isFinite(myLat) && Number.isFinite(myLng);
 
-  // ✅ 핵심: "종합"은 activeCategory = null
-  // - category 파라미터가 없으면 => 종합(null)
-  // - all/total/종합이면 => 종합(null)
-  // - 그 외에만 매핑해서 카테고리 필터
+  // ✅ "종합"은 activeCategory = null
   const activeCategory: Category | null = useMemo(() => {
     if (!rawCategory) return null;
 
@@ -43,8 +41,7 @@ export default function SearchPageClient() {
     const mapped = mapUrlCategoryToCategory(t);
     if (mapped) return mapped;
 
-    // 혹시 이상한 값이면(예: tab이 query만 바꾼 경우) 안전하게 "추론" fallback
-    // 단, 이 fallback도 "종합" UX를 깨기 쉬우니까 rawCategory가 있을 때만 허용
+    // rawCategory가 있을 때만 fallback 허용
     return inferCategoryFromQuery(query);
   }, [rawCategory, query]);
 
@@ -81,6 +78,12 @@ export default function SearchPageClient() {
   const [expanded, setExpanded] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  // ✅ FloatingMic 숨김 연동 (가장 중요)
+  const { setOverlayOpen } = useUIOverlay();
+  useEffect(() => {
+    setOverlayOpen(overlayVisible);
+  }, [overlayVisible, setOverlayOpen]);
+
   // 예약 상태
   const [reserveStep, setReserveStep] = useState<0 | 1 | 2>(0);
   const [reserveDate, setReserveDate] = useState<string | null>(null);
@@ -112,23 +115,24 @@ export default function SearchPageClient() {
     return currentCards.filter((c) => c.id !== selected.id);
   }, [currentCards, selected]);
 
-  // ✅ “상태 리셋”을 query/category 변화가 아니라,
-  //    실제 결과 집합 키가 바뀌었을 때만 수행해서 깜빡임 줄이기
+  // ✅ 결과 집합 키
   const resultKey = useMemo(() => {
     const catKey = activeCategory ?? "all";
-    const locKey = hasMyLocation ? `${myLat.toFixed(5)},${myLng.toFixed(5)}` : "noloc";
+    const locKey = hasMyLocation
+      ? `${myLat.toFixed(5)},${myLng.toFixed(5)}`
+      : "noloc";
     return `${query}__${catKey}__${locKey}`;
   }, [query, activeCategory, hasMyLocation, myLat, myLng]);
 
-  // 결과가 바뀌면: page 0으로 보내고, 첫 카드로 selectedId 맞추기
+  // 결과가 바뀌면: page 0 + 첫 카드 + 오버레이 닫기
   useEffect(() => {
     setPageIndex(0);
+
     setOverlayVisible(false);
     setExpanded(false);
     setDetailOpen(false);
     resetReserve();
 
-    // safePages[0]가 생긴 뒤에 selectedId 세팅
     const first = safePages[0]?.[0];
     setSelectedId(first?.id ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,6 +146,7 @@ export default function SearchPageClient() {
 
     setPageIndex(index);
     setSelectedId(nextCards[0].id);
+
     setOverlayVisible(false);
     setExpanded(false);
     setDetailOpen(false);
@@ -191,7 +196,8 @@ export default function SearchPageClient() {
     }
   };
 
-  const handleRate = () => alert("평점 기능은 추후 버전에서 제공될 예정입니다!");
+  const handleRate = () =>
+    alert("평점 기능은 추후 버전에서 제공될 예정입니다!");
   const handleDetailClick = () => {
     resetReserve();
     setDetailOpen((prev) => !prev);
@@ -202,6 +208,7 @@ export default function SearchPageClient() {
     setSelectedId(id);
     setDetailOpen(false);
     resetReserve();
+
     setExpanded(false);
     setOverlayVisible(true);
     setTimeout(() => setExpanded(true), 10);
@@ -260,7 +267,9 @@ export default function SearchPageClient() {
     const savedId = window.sessionStorage.getItem("hama_search_last_id");
     if (!savedId) return;
 
-    const foundIndex = safePages.findIndex((p) => p.some((c) => c.id === savedId));
+    const foundIndex = safePages.findIndex((p) =>
+      p.some((c) => c.id === savedId)
+    );
     if (foundIndex === -1) {
       window.sessionStorage.removeItem("hama_search_last_id");
       return;
@@ -268,6 +277,7 @@ export default function SearchPageClient() {
 
     setPageIndex(foundIndex);
     setSelectedId(savedId);
+
     setOverlayVisible(true);
     setExpanded(false);
     setDetailOpen(false);
@@ -278,40 +288,7 @@ export default function SearchPageClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safePages]);
 
-  // ✅ 좌상단 디버그 패널 (항상 보이게)
-  const DebugPanel = (
-    <div
-      style={{
-        position: "fixed",
-        top: 12,
-        left: 12,
-        zIndex: 99999,
-        padding: "8px 10px",
-        borderRadius: 10,
-        background: "rgba(0,0,0,0.75)",
-        color: "white",
-        fontSize: 12,
-        lineHeight: 1.4,
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        whiteSpace: "pre",
-      }}
-    >
-      {[
-        `loading: ${loading ? "true" : "false"}`,
-        `query: ${JSON.stringify(query)}`,
-        `rawCategory: ${JSON.stringify(rawCategory)}`,
-        `activeCategory: ${JSON.stringify(activeCategory)}`,
-        `stores: ${stores?.length ?? 0}`,
-        `categoryStores: ${categoryStores?.length ?? 0}`,
-        `pages: [${safePages.map((p) => p.length).join(", ")}]`,
-        `pageIndex: ${pageIndex}`,
-        `selectedId: ${JSON.stringify(selectedId)}`,
-        `hasMyLocation: ${hasMyLocation ? "true" : "false"}`,
-      ].join("\n")}
-    </div>
-  );
-
-  // 로딩/빈 결과
+  // 로딩
   if (loading) {
     return (
       <main
@@ -324,14 +301,11 @@ export default function SearchPageClient() {
           fontFamily: "Noto Sans KR, system-ui, sans-serif",
         }}
       >
-        {DebugPanel}
         불러오는 중...
       </main>
     );
   }
 
-  // 여기서 categoryStores가 0이어도 SearchCards가 empty UI 보여주도록 이미 바꿨으니,
-  // SearchPageClient에서 "결과가 없어요"로 일찍 리턴하지 않는다.
   return (
     <main
       style={{
@@ -344,8 +318,6 @@ export default function SearchPageClient() {
         gap: 18,
       }}
     >
-      {DebugPanel}
-
       {/* 기본 카드 UI */}
       {!overlayVisible && (
         <SearchCards

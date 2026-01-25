@@ -15,6 +15,8 @@ import HomeSwipeDeck from "./_components/HomeSwipeDeck";
 import { useHomeCards } from "./_hooks/useHomeCards";
 import { useHomeMode } from "./_hooks/useHomeMode";
 import { useNearbyCards } from "./_hooks/useNearbyCards";
+import { useUIOverlay } from "./_providers/UIOverlayProvider";
+
 
 // ======================
 // 🧩 포인트 / 로그 저장
@@ -94,6 +96,14 @@ export default function HomePage() {
 
   // ✅ 디테일 오버레이
   const [selectedCard, setSelectedCard] = useState<HomeCard | null>(null);
+
+  const { setOverlayOpen } = useUIOverlay();
+
+useEffect(() => {
+  setOverlayOpen(!!selectedCard);
+}, [selectedCard, setOverlayOpen]);
+
+
 
   // ======================
   // 로그인 상태 동기화
