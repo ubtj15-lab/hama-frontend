@@ -1,47 +1,46 @@
-type OpenDirectionsArgs = {
-  name: string;
-  lat: number | null;
-  lng: number | null;
-};
+"use client";
 
-export function openDirections({ name, lat, lng }: OpenDirectionsArgs) {
-  const safeName = (name || "").trim();
+export function openDirections(opts: { name: string; lat?: number | null; lng?: number | null }) {
+  const name = (opts.name ?? "").trim();
+  const lat = typeof opts.lat === "number" ? opts.lat : null;
+  const lng = typeof opts.lng === "number" ? opts.lng : null;
 
-  const isMobile =
-    typeof window !== "undefined" && window.matchMedia?.("(max-width: 768px)")?.matches;
+  if (typeof window === "undefined") return;
 
-  const open = (url: string) => {
-    try {
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      // ignore
-    }
-  };
+  const ua = navigator.userAgent || "";
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
 
-  // ✅ 좌표 있으면: 지도 앱/웹을 "길찾기"로
-  if (typeof lat === "number" && typeof lng === "number") {
-    if (isMobile) {
-      // 모바일: 카카오맵 앱 딥링크 시도 (실패해도 웹이 열리도록 web fallback 같이 제공)
-      // iOS/Android 공통으로 동작하는 스킴 위주
-      const kakaoApp = `kakaomap://route?sp=&ep=${lat},${lng}&by=CAR`;
-      const kakaoWeb = `https://map.kakao.com/link/to/${encodeURIComponent(safeName || "목적지")},${lat},${lng}`;
-      // 대부분 모바일은 스킴이 막히는 경우가 있으니 web도 같이 열리게
-      open(kakaoApp);
-      setTimeout(() => open(kakaoWeb), 250);
-      return;
-    }
+  // 좌표 있으면: 앱 딥링크 우선
+  if (isMobile && lat != null && lng != null) {
+    // 카카오맵 앱 딥링크 (to)
+    const kakao = `kakaomap://route?ep=${lat},${lng}&by=CAR`;
+    // 실패 대비: 웹 fallback
+    const fallback = `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`;
 
-    // PC: 카카오맵 웹
-    const kakaoWeb = `https://map.kakao.com/link/to/${encodeURIComponent(safeName || "목적지")},${lat},${lng}`;
-    open(kakaoWeb);
+    // 딥링크 시도
+    window.location.href = kakao;
+
+    // 앱이 없으면 웹으로 보내기
+    setTimeout(() => {
+      try {
+        window.location.href = fallback;
+      } catch {}
+    }, 700);
     return;
   }
 
-  // ✅ 좌표 없으면: 네이버/카카오 검색으로 보냄 (최소한 행동 가능)
-  const q = encodeURIComponent(safeName);
-  if (isMobile) {
-    open(`https://m.search.naver.com/search.naver?query=${q}`);
+  // 모바일인데 좌표가 없거나, PC면 웹으로
+  if (lat != null && lng != null) {
+    window.open(
+      `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   } else {
-    open(`https://search.naver.com/search.naver?query=${q}`);
+    window.open(
+      `https://map.kakao.com/?q=${encodeURIComponent(name)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   }
 }
