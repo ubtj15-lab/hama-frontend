@@ -1,13 +1,18 @@
 "use client";
 
 import React from "react";
+import { useUIOverlay } from "../_providers/UIOverlayProvider";
 
 export default function FloatingMic() {
+  const { overlayOpen } = useUIOverlay();
+
+  // ✅ 카드 상세/오버레이 떠 있으면 마이크 숨김
+  if (overlayOpen) return null;
+
   const onMicClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
     console.log("mic click");
-    // TODO: mic action
   };
 
   return (
@@ -18,10 +23,7 @@ export default function FloatingMic() {
         bottom: 24,
         transform: "translateX(-50%)",
         zIndex: 9999,
-
-        // ✅ wrapper는 클릭 절대 먹지 않음
         pointerEvents: "none",
-
         width: "auto",
         height: "auto",
       }}
@@ -30,22 +32,14 @@ export default function FloatingMic() {
         type="button"
         onClick={onMicClick}
         style={{
-          // ✅ 버튼만 클릭 허용
           pointerEvents: "auto",
-
           width: 72,
           height: 72,
-          borderRadius: "50%",
+          borderRadius: 9999,
           border: "none",
           cursor: "pointer",
-
-          background: "#ffffff",
+          background: "white",
           boxShadow: "0 10px 30px rgba(0,0,0,0.18)",
-
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 28,
         }}
         aria-label="voice input"
       >
