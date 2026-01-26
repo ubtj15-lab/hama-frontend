@@ -1,28 +1,34 @@
 // app/api/stores/route.ts
 
 import { NextResponse } from "next/server";
-import type { StoreRecord } from "@lib/storeTypes";
+import type { StoreRecord } from "@/lib/storeTypes";
 
-const DUMMY_STORES: StoreRecord[] = [
+type ApiStoreItem = StoreRecord & {
+  distance_hint?: string;
+};
+
+const DUMMY_STORES: ApiStoreItem[] = [
   {
     id: "store-1",
     name: "스타벅스 오산점",
     category: "cafe",
-    area: "오산",            // ✅ 추가
+    area: "오산",
     address: "경기 오산시 ...",
     lat: null,
     lng: null,
-    phone: null,            // ✅ 추가 (모르면 null)
-    image_url: "",
-    distance_hint: "",
-    is_active: true,
-    mood: null,
+    phone: null,
+    image_url: null,
+    kakao_place_url: null,
+    naver_place_id: null,
+    mood: [],
+    tags: [],
     with_kids: null,
     for_work: null,
+    reservation_required: null,
     price_level: null,
-    tags: [],
+    updated_at: null,
+    distance_hint: "",
   },
-  // 다른 더미들도 동일하게 area, phone 넣기
 ];
 
 export async function GET() {

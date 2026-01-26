@@ -4,19 +4,15 @@ import React, { useEffect, useState } from "react";
 import type { HomeCard } from "@lib/storeTypes";
 import { fetchHomeCardsByTab } from "@/lib/storeRepository";
 
-import {
-  inferPreferenceFromText,
-  rankStoresByPreference,
-} from "@lib/recommendEngine";
+import { inferPreferenceFromText, rankStoresByPreference } from "@lib/recommendEngine";
 
-// Supabase에서 실패하거나 데이터가 없을 때 쓸 비상용 카드 3장
-const FALLBACK_CARDS: HomeCard[] = [
+// Supabase 실패/데이터 부족 시 비상용 (타입 엄격해서 any로 두고, 사용할 때 HomeCard[]로 캐스팅)
+const FALLBACK_CARDS_ANY: any[] = [
   {
     id: "cafe-1",
     name: "스타벅스 오산점",
     category: "cafe",
     categoryLabel: "카페",
-    distanceKm: 0.5,
     moodText: "조용한 분위기",
     imageUrl: "/images/sample-cafe-1.jpg",
     quickQuery: "스타벅스 오산점",
@@ -26,7 +22,6 @@ const FALLBACK_CARDS: HomeCard[] = [
     name: "라운지 83",
     category: "cafe",
     categoryLabel: "카페",
-    distanceKm: 0.8,
     moodText: "햇살 잘 들어오는 브런치",
     imageUrl: "/images/sample-cafe-2.jpg",
     quickQuery: "오산 브런치 카페",
@@ -36,14 +31,11 @@ const FALLBACK_CARDS: HomeCard[] = [
     name: "하마키즈 플레이존",
     category: "activity",
     categoryLabel: "액티비티",
-    distanceKm: 1.2,
     moodText: "아이와 가기 좋은 놀이터",
     imageUrl: "/images/sample-kids-1.jpg",
     quickQuery: "키즈카페",
   },
 ];
-
-
 
 type Props = {
   query: string;
@@ -59,9 +51,16 @@ type RecommendState =
   | {
       mode: "cards";
       cards: HomeCard[];
-      // preference는 나중에 로그/디버깅용으로만 사용
       preferenceText?: string;
     };
+
+function renderMood(card: any): string {
+  const moodArr = card?.mood;
+  if (Array.isArray(moodArr) && moodArr.length > 0) return moodArr.join(" · ");
+  if (typeof card?.moodText === "string" && card.moodText) return card.moodText;
+  if (typeof card?.mood === "string" && card.mood) return card.mood;
+  return "";
+}
 
 const RecommendSection: React.FC<Props> = ({
   query,
@@ -72,7 +71,6 @@ const RecommendSection: React.FC<Props> = ({
 }) => {
   const [state, setState] = useState<RecommendState>({ mode: "loading" });
 
-    // 🔥 Supabase + 추천엔진 + 비상용 카드
   useEffect(() => {
     let cancelled = false;
 
@@ -81,30 +79,35 @@ const RecommendSection: React.FC<Props> = ({
 
       let baseStores: HomeCard[] = [];
 
-      // 1) Supabase에서 매장 불러오기 (실패하면 로그만 찍고 넘어감)
+      // 1) Supabase에서 매장 불러오기
       try {
-        const stores = await fetchHomeCardsByTab("all", { count: 12 })
+        const stores = await fetchHomeCardsByTab("all", { count: 12 });
 
         if (cancelled) return;
 
-        if (stores && stores.length > 0) {
+        if (Array.isArray(stores) && stores.length > 0) {
           baseStores = stores;
         } else {
           // DB에 없으면 비상용 카드 사용
-          baseStores = FALLBACK_CARDS;
+          baseStores = FALLBACK_CARDS_ANY as HomeCard[];
         }
       } catch (e) {
         console.error("fetchStores error, use fallback cards", e);
-        baseStores = FALLBACK_CARDS;
+        baseStores = FALLBACK_CARDS_ANY as HomeCard[];
       }
 
-      // 2) 선호도 추론 + 정렬 (에러 나면 그냥 원본 순서 사용)
+      // 그래도 비었으면 empty
+      if (!baseStores || baseStores.length === 0) {
+        if (!cancelled) setState({ mode: "empty" });
+        return;
+      }
+
+      // 2) 선호도 추론 + 정렬 (에러 나면 원본 순서 유지)
       let ranked: HomeCard[] = baseStores;
       let preferenceText: string | undefined;
 
       try {
         const pref = inferPreferenceFromText(query || category);
-
         if (pref) {
           ranked = rankStoresByPreference(baseStores, pref);
           preferenceText = JSON.stringify(pref);
@@ -113,7 +116,7 @@ const RecommendSection: React.FC<Props> = ({
         console.error("recommendEngine error, use base order", e);
       }
 
-      // 3) 상위 3개만 사용 (큰 카드 1 + 작은 카드 2)
+      // 3) 상위 3개만 사용
       const top3 = ranked.slice(0, 3);
 
       if (!cancelled) {
@@ -131,17 +134,11 @@ const RecommendSection: React.FC<Props> = ({
     };
   }, [query, category]);
 
-
   // ======================= 렌더링 =======================
 
   if (state.mode === "loading") {
     return (
-      <section
-        style={{
-          marginTop: 16,
-          marginBottom: 20,
-        }}
-      >
+      <section style={{ marginTop: 16, marginBottom: 20 }}>
         <div
           style={{
             borderRadius: 16,
@@ -158,14 +155,8 @@ const RecommendSection: React.FC<Props> = ({
   }
 
   if (state.mode === "empty") {
-    // ✅ 정말로 Supabase에 데이터가 없을 때만 이 분기
     return (
-      <section
-        style={{
-          marginTop: 16,
-          marginBottom: 20,
-        }}
-      >
+      <section style={{ marginTop: 16, marginBottom: 20 }}>
         <div
           style={{
             borderRadius: 16,
@@ -175,39 +166,19 @@ const RecommendSection: React.FC<Props> = ({
             color: "#64748b",
           }}
         >
-          아직 추천용 매장 데이터가 많지 않아요. 아래 검색 결과에서 마음에 드는 곳을 골라보세요 😊
+          아직 추천용 매장 데이터가 많지 않아요. 아래 검색 결과에서 마음에 드는 곳을 골라보세요.
         </div>
       </section>
     );
   }
 
-  // mode === "cards"
   const { cards } = state;
 
   return (
-    <section
-      style={{
-        marginTop: 16,
-        marginBottom: 20,
-      }}
-    >
-      {/* 상단 타이틀 + 설명 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          marginBottom: 8,
-        }}
-      >
-        <span
-          style={{
-            fontSize: 14,
-            fontWeight: 700,
-            color: "#0f172a",
-          }}
-        >
-          하마가 고른 오늘의 카드 🦛
+    <section style={{ marginTop: 16, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+          하마가 고른 오늘의 카드
         </span>
       </div>
 
@@ -223,18 +194,10 @@ const RecommendSection: React.FC<Props> = ({
       >
         방금 말한 내용을 기준으로 몇 곳을 골라봤어요.
         <br />
-        아래 카드 중에서 마음에 드는 곳을 골라보세요 😊
+        아래 카드 중에서 마음에 드는 곳을 골라보세요.
       </div>
 
-      {/* 큰 카드 + 작은 카드 2개 */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "2fr 1.2fr",
-          gap: 10,
-        }}
-      >
-        {/* 큰 카드 (0번) */}
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr", gap: 10 }}>
         {cards[0] && (
           <button
             type="button"
@@ -251,25 +214,14 @@ const RecommendSection: React.FC<Props> = ({
               flexDirection: "column",
             }}
           >
-            <div
-              style={{
-                padding: "10px 12px 4px",
-                fontSize: 13,
-                color: "#0f172a",
-                fontWeight: 700,
-              }}
-            >
-              {cards[0].name}
+            <div style={{ padding: "10px 12px 4px", fontSize: 13, color: "#0f172a", fontWeight: 700 }}>
+              {(cards[0] as any).name}
             </div>
-            <div
-              style={{
-                padding: "0 12px 6px",
-                fontSize: 11,
-                color: "#6b7280",
-              }}
-            >
-              {cards[0].mood ?? cards[0].moodText}
+
+            <div style={{ padding: "0 12px 6px", fontSize: 11, color: "#6b7280" }}>
+              {renderMood(cards[0] as any)}
             </div>
+
             <div
               style={{
                 padding: "0 12px 10px",
@@ -280,23 +232,15 @@ const RecommendSection: React.FC<Props> = ({
                 gap: 6,
               }}
             >
-              <span>{cards[0].categoryLabel}</span>
-              <span>· {cards[0].distanceKm.toFixed(1)} km</span>
+              <span>{(cards[0] as any).categoryLabel ?? (cards[0] as any).category ?? ""}</span>
             </div>
           </button>
         )}
 
-        {/* 오른쪽 세로 작은 카드 2개 */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
-          {cards.slice(1, 3).map((card) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {cards.slice(1, 3).map((card: any) => (
             <button
-              key={card.id}
+              key={String(card?.id)}
               type="button"
               style={{
                 borderRadius: 14,
@@ -308,70 +252,29 @@ const RecommendSection: React.FC<Props> = ({
                 cursor: "pointer",
               }}
             >
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  marginBottom: 2,
-                  color: "#111827",
-                }}
-              >
-                {card.name}
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2, color: "#111827" }}>
+                {card?.name}
               </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: "#6b7280",
-                }}
-              >
-                {card.mood ?? card.moodText}
-              </div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>{renderMood(card)}</div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* 퀵 필터 / 다시 말하기 버튼 */}
-      <div
-        style={{
-          marginTop: 14,
-          display: "flex",
-          gap: 8,
-          justifyContent: "center",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => onQuickFilter("카페")}
-          style={quickButtonStyle}
-        >
+      <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "center" }}>
+        <button type="button" onClick={() => onQuickFilter("카페")} style={quickButtonStyle}>
           카페만 보기
         </button>
-        <button
-          type="button"
-          onClick={() => onQuickFilter("식당")}
-          style={quickButtonStyle}
-        >
+        <button type="button" onClick={() => onQuickFilter("식당")} style={quickButtonStyle}>
           식당만 보기
         </button>
-        <button
-          type="button"
-          onClick={onRetryVoice}
-          style={quickButtonStyle}
-        >
+        <button type="button" onClick={onRetryVoice} style={quickButtonStyle}>
           다시 말하기
         </button>
       </div>
 
-      {/* 검색 결과 0개 안내 문구 (기존 그대로) */}
       {!hasResults && (
-        <p
-          style={{
-            marginTop: 10,
-            fontSize: 11,
-            color: "#ef4444",
-          }}
-        >
+        <p style={{ marginTop: 10, fontSize: 11, color: "#ef4444" }}>
           딱 맞는 곳은 없어서, 대신 근처 비슷한 장소들을 보여드릴게요.
         </p>
       )}

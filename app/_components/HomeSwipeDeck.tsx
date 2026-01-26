@@ -93,18 +93,26 @@ export default function HomeSwipeDeck({
   const getImageUrl = (card: HomeCard | null) => {
     if (!card) return undefined;
     const anyCard = card as any;
-    return (anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? undefined) as string | undefined;
+    return (anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? undefined) as
+      | string
+      | undefined;
+  };
+
+  // ✅ mood/tags 같은 값이 배열/문자열/nullable 어떤 형태로 와도 안전하게 문자열로 변환
+  const toText = (v: any): string => {
+    if (v == null) return "";
+    if (Array.isArray(v)) return v.filter(Boolean).join(" · ");
+    if (typeof v === "string") return v;
+    return String(v);
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (isLoading) return;
-    if (total <= 1) return; // 1장이면 스와이프 의미 없음
+    if (total <= 1) return;
 
     setIsDragging(true);
     movedRef.current = false;
     startXRef.current = e.clientX;
-
-    // ❌ setPointerCapture 제거 (PC 클릭 죽는 주범)
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -177,7 +185,6 @@ export default function HomeSwipeDeck({
           };
 
     const onClick = () => {
-      // 드래그로 조금이라도 움직였으면 클릭 취소
       if (movedRef.current) return;
 
       if (pos === "prev") return goPrev();
@@ -185,6 +192,14 @@ export default function HomeSwipeDeck({
 
       onOpenCard(card);
     };
+
+    // ✅ category + optional distanceKm 안전 표시
+    const categoryText = toText(anyCard?.categoryLabel ?? anyCard?.category);
+    const distanceKm =
+      typeof anyCard?.distanceKm === "number" ? (anyCard.distanceKm as number) : null;
+
+    // ✅ moodText/mood 어떤 형태로 와도 표시
+    const moodText = toText(anyCard?.moodText ?? anyCard?.mood);
 
     return (
       <button
@@ -236,12 +251,11 @@ export default function HomeSwipeDeck({
           </div>
 
           <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
-            {anyCard?.categoryLabel ?? anyCard?.category}
+            {categoryText}
+            {distanceKm != null && <> · {distanceKm.toFixed(1)} km</>}
           </div>
 
-          <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>
-            {anyCard?.mood ?? anyCard?.moodText ?? ""}
-          </div>
+          <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>{moodText}</div>
         </div>
       </button>
     );
@@ -277,7 +291,6 @@ export default function HomeSwipeDeck({
             position: "relative",
             overflow: "visible",
             margin: "0 auto",
-            // 스와이프를 pointer로 받기 위해 none 권장
             touchAction: "none",
           }}
         >

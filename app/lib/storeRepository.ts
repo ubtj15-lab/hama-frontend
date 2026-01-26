@@ -1,5 +1,7 @@
+// app/lib/storeRepository.ts
+
 import { supabase } from "@/lib/supabaseClient";
-import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
+import type { HomeCard, HomeTabKey, StoreRow } from "@/lib/storeTypes";
 
 type FetchHomeOptions = {
   count?: number;
@@ -13,62 +15,61 @@ type FetchNearbyOptions = {
   limit?: number;
 };
 
-type StoreRow = {
-  id: string;
-  name: string | null;
-  category: string | null;
-  area: string | null;
-  address: string | null;
-
-  lat: number | null;
-  lng: number | null;
-
-  phone: string | null;
-
-  image_url: string | null;
-
-  kakao_place_url: string | null;
-  naver_place_id: string | null;
-
-  mood: string[] | null;
-  tags: string[] | null;
-
-  with_kids: boolean | null;
-  for_work: boolean | null;
-  reservation_required: boolean | null;
-
-  price_level: string | null;
-  updated_at: string | null;
-};
-
-function toHomeCard(row: StoreRow): HomeCard {
-  return {
-    id: row.id,
-    name: row.name ?? "",
-    category: row.category,
-    area: row.area,
-    address: row.address,
-    lat: row.lat,
-    lng: row.lng,
-    phone: row.phone ?? null,
-    image_url: row.image_url ?? null,
-    imageUrl: row.image_url ?? null,
-    kakao_place_url: row.kakao_place_url ?? null,
-    naver_place_id: row.naver_place_id ?? null,
-    mood: row.mood ?? [],
-    tags: row.tags ?? [],
-    with_kids: row.with_kids ?? null,
-    for_work: row.for_work ?? null,
-    reservation_required: row.reservation_required ?? null,
-    price_level: row.price_level ?? null,
-    updated_at: row.updated_at ?? null,
-  };
-}
-
 function tabToCategoryFilter(tab: HomeTabKey): string | null {
   if (tab === "all") return null;
   // DB category 값이 restaurant/cafe/salon/activity 라는 전제
   return tab;
+}
+
+// naver_place_id가 있으면 “모바일 상세”로 바로 열릴 확률이 높음
+function naverMobilePlaceUrl(naver_place_id: string) {
+  return `https://m.place.naver.com/place/${naver_place_id}`;
+}
+
+// mood가 배열이면 UI에서 스트링으로 표시할 때 쓰기 좋게
+function moodArrayToText(mood?: string[] | null) {
+  if (!mood || mood.length === 0) return "";
+  return mood.join(", ");
+}
+
+// ✅ StoreRow -> HomeCard 변환(프로젝트 전체에서 이걸 표준으로 쓰게)
+export function toHomeCard(row: StoreRow): HomeCard {
+  const image = row.image_url ?? null;
+
+  const placeUrl =
+    row.kakao_place_url ??
+    (row.naver_place_id ? naverMobilePlaceUrl(row.naver_place_id) : null);
+
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    category: row.category ?? null,
+
+    area: row.area ?? null,
+    address: row.address ?? null,
+    lat: row.lat ?? null,
+    lng: row.lng ?? null,
+    phone: row.phone ?? null,
+
+    image_url: image,
+    imageUrl: image,
+
+    kakao_place_url: row.kakao_place_url ?? null,
+    naver_place_id: row.naver_place_id ?? null,
+    placeUrl,
+
+    mood: row.mood ?? [],
+    tags: row.tags ?? [],
+
+    moodText: moodArrayToText(row.mood),
+
+    with_kids: row.with_kids ?? null,
+    for_work: row.for_work ?? null,
+    reservation_required: row.reservation_required ?? null,
+
+    price_level: row.price_level ?? null,
+    updated_at: row.updated_at ?? null,
+  };
 }
 
 /**
@@ -109,11 +110,9 @@ export async function fetchHomeCardsByTab(
 
   if (category) q = q.eq("category", category);
 
-  // 추천은 최신 업데이트 우선(원하면 random으로 바꿔도 됨)
   q = q.order("updated_at", { ascending: false, nullsFirst: false });
 
   const { data, error } = await q;
-
   if (error) {
     console.error("[fetchHomeCardsByTab]", error);
     return [];
@@ -124,12 +123,10 @@ export async function fetchHomeCardsByTab(
 }
 
 /**
- * 근처(탐색) 카드: 현재 좌표 기준으로 반경 대략 필터링(바운딩박스)
- * - PostGIS 없이도 돌아가게 만든 버전
+ * 근처(탐색) 카드: PostGIS 없이도 돌아가게 만든 바운딩박스 버전
  */
 export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<HomeCard[]> {
   const { lat, lng, tab, radiusKm = 4, limit = 12 } = options;
-
   const category = tabToCategoryFilter(tab);
 
   // 위도 1도 ≈ 111km
@@ -177,15 +174,11 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
   q = q.order("updated_at", { ascending: false, nullsFirst: false });
 
   const { data, error } = await q;
-
   if (error) {
     console.error("[fetchNearbyStores]", error);
     return [];
   }
 
   const rows = (data ?? []) as StoreRow[];
-
-  // 바운딩박스라서, 마지막에 “대략 거리”로 한 번 더 걸러도 됨(선택)
-  // 지금은 일단 빠르게 오베용으로 통과시킴.
   return rows.map(toHomeCard);
 }

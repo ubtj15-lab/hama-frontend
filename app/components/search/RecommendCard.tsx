@@ -1,22 +1,48 @@
 "use client";
 
 import React from "react";
-import type { Place } from "@lib/storeTypes";
-import { logEvent } from "@lib/logEvent";
+import Image from "next/image";
+import type { HomeCard } from "@/lib/storeTypes";
+import { logEvent } from "@/lib/logEvent";
 
-interface Props {
-  place: Place;
+type Props = {
+  place: HomeCard;
+  onClick?: (place: HomeCard) => void;
+};
+
+function getImageUrl(place: HomeCard): string | null {
+  const anyPlace = place as any;
+  return (anyPlace.imageUrl ?? anyPlace.image_url ?? anyPlace.image ?? null) as string | null;
 }
 
-export default function RecommendCard({ place }: Props) {
-  const handleClick = () => {
-    logEvent("recommend_card_click", {
-      place_id: place.id,
-    });
+function getMoodText(place: HomeCard): string {
+  const anyPlace = place as any;
 
-    if (place.placeUrl) {
-      window.open(place.placeUrl, "_blank", "noopener,noreferrer");
-    }
+  // 우선순위: moodText(문자열) > mood(배열) > "".
+  if (typeof anyPlace.moodText === "string" && anyPlace.moodText.trim()) return anyPlace.moodText.trim();
+
+  const mood = anyPlace.mood;
+  if (Array.isArray(mood)) return mood.filter(Boolean).join(" · ");
+
+  if (typeof mood === "string") return mood;
+
+  return "";
+}
+
+export default function RecommendCard({ place, onClick }: Props) {
+  const anyPlace = place as any;
+
+  const name = anyPlace?.name ?? "";
+  const categoryLabel = anyPlace?.categoryLabel ?? anyPlace?.category ?? "";
+  const area = anyPlace?.area ?? "";
+  const address = anyPlace?.address ?? "";
+  const moodText = getMoodText(place);
+
+  const imageUrl = getImageUrl(place);
+
+  const handleClick = () => {
+    logEvent("search_recommend_card_click", { id: anyPlace?.id ?? null, name });
+    onClick?.(place);
   };
 
   return (
@@ -24,45 +50,87 @@ export default function RecommendCard({ place }: Props) {
       type="button"
       onClick={handleClick}
       style={{
-        minWidth: 180,
-        maxWidth: 200,
-        borderRadius: 18,
+        width: "100%",
         border: "none",
-        background: "#ffffff",
-        padding: 12,
-        boxShadow: "0 6px 14px rgba(15,23,42,0.18)",
-        textAlign: "left",
+        padding: 0,
+        background: "transparent",
         cursor: "pointer",
+        textAlign: "left",
       }}
     >
       <div
         style={{
-          fontSize: 13,
-          fontWeight: 700,
-          color: "#111827",
-          marginBottom: 4,
+          display: "flex",
+          gap: 12,
+          padding: 12,
+          borderRadius: 16,
+          background: "rgba(255,255,255,0.92)",
+          boxShadow: "0 10px 25px rgba(15,23,42,0.12)",
         }}
       >
-        {place.name}
-      </div>
-
-      {place.address && (
         <div
           style={{
-            fontSize: 11,
-            color: "#6b7280",
-            marginBottom: 4,
+            width: 84,
+            height: 84,
+            borderRadius: 14,
+            overflow: "hidden",
+            background: "#e5e7eb",
+            position: "relative",
+            flex: "0 0 auto",
           }}
         >
-          {place.address}
+          {imageUrl ? (
+            <Image
+              src={imageUrl}
+              alt={name || "place"}
+              fill
+              sizes="84px"
+              style={{ objectFit: "cover" }}
+            />
+          ) : null}
         </div>
-      )}
 
-      {place.distance != null && (
-        <div style={{ fontSize: 11, color: "#0f766e" }}>
-          약 {place.distance}m 거리
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 900,
+              color: "#0f172a",
+              lineHeight: 1.2,
+              marginBottom: 6,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {name}
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#475569", marginBottom: 6 }}>
+            {categoryLabel}
+            {area ? ` · ${area}` : ""}
+          </div>
+
+          {address ? (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#64748b",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                marginBottom: moodText ? 6 : 0,
+              }}
+            >
+              {address}
+            </div>
+          ) : null}
+
+          {moodText ? (
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#111827" }}>{moodText}</div>
+          ) : null}
         </div>
-      )}
+      </div>
     </button>
   );
 }

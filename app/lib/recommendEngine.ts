@@ -1,97 +1,122 @@
-// lib/recommendEngine.ts
-import type { HomeCard } from "@lib/storeTypes";
+// app/lib/recommendEngine.ts
 
-// 사용자의 말에서 뽑아낸 선호도 프로필
-export type PreferenceProfile = {
-  withKids?: boolean;      // 아이랑 가기 좋은 곳?
-  forWork?: boolean;       // 작업/공부하기 좋은 곳?
-  priceBias?: number;      // 1(저렴) ~ 3(조금 비싼)
-  requiredTags?: string[]; // "브런치", "키즈카페" 같은 태그
+import type { HomeCard } from "@/lib/storeTypes";
+
+export type Preference = {
+  // 사용자가 아이/가족을 언급했는지
+  withKids?: boolean;
+  // 업무/노트북/미팅 등 언급했는지
+  forWork?: boolean;
+  // 예약/웨이팅 등 언급했는지
+  reservationRequired?: boolean;
+
+  // 카테고리 힌트(있으면 정렬에 가중치)
+  categoryHint?: HomeCard["category"] | null;
+
+  // 키워드 힌트(태그/무드에 매칭)
+  keywords?: string[];
 };
 
 /**
- * 사용자가 말한 문장(쿼리)에서 선호도 뽑기
- * 예: "아이랑 갈 곳 추천해줘" -> withKids: true
+ * 아주 단순한 규칙 기반 선호도 추론
+ * (오베용: 안전하게 "추론 실패"하면 undefined 반환 가능)
  */
-export function inferPreferenceFromText(query: string): PreferenceProfile {
-  const q = query.toLowerCase();
-  const pref: PreferenceProfile = {};
+export function inferPreferenceFromText(text: string): Preference | undefined {
+  const t = (text ?? "").toLowerCase().trim();
+  if (!t) return undefined;
 
-  // 아이랑 / 키즈
-  if (q.includes("아이") || q.includes("키즈") || q.includes("키즈카페")) {
+  const pref: Preference = {};
+
+  // 아이/가족
+  if (
+    t.includes("아이") ||
+    t.includes("키즈") ||
+    t.includes("가족") ||
+    t.includes("유아") ||
+    t.includes("아기")
+  ) {
     pref.withKids = true;
+    pref.keywords = [...(pref.keywords ?? []), "아이동반", "가족"];
   }
 
-  // 카공 / 공부 / 작업
+  // 업무/노트북/미팅
   if (
-    q.includes("카공") ||
-    q.includes("공부") ||
-    q.includes("작업") ||
-    q.includes("노트북")
+    t.includes("노트북") ||
+    t.includes("업무") ||
+    t.includes("회의") ||
+    t.includes("미팅") ||
+    t.includes("작업") ||
+    t.includes("공부")
   ) {
     pref.forWork = true;
+    pref.keywords = [...(pref.keywords ?? []), "업무", "조용함"];
   }
 
-  // 가격 관련 키워드
-  if (q.includes("가성비") || q.includes("저렴") || q.includes("싸")) {
-    pref.priceBias = 1;
-  } else if (q.includes("비싸") || q.includes("프리미엄") || q.includes("분위기")) {
-    pref.priceBias = 3;
+  // 예약/웨이팅
+  if (t.includes("예약") || t.includes("웨이팅") || t.includes("대기")) {
+    pref.reservationRequired = true;
+    pref.keywords = [...(pref.keywords ?? []), "예약필수"];
   }
 
-  const tags: string[] = [];
-
-  if (q.includes("브런치")) tags.push("브런치");
-  if (q.includes("디저트") || q.includes("케이크")) tags.push("디저트");
-  if (q.includes("한식") || q.includes("밥집")) tags.push("한식");
-  if (q.includes("카페")) tags.push("카페");
-  if (tags.length > 0) pref.requiredTags = tags;
+  // 카테고리 힌트
+  if (t.includes("카페") || t.includes("커피") || t.includes("디저트")) pref.categoryHint = "cafe";
+  if (t.includes("식당") || t.includes("맛집") || t.includes("밥") || t.includes("점심") || t.includes("저녁"))
+    pref.categoryHint = "restaurant";
+  if (t.includes("미용") || t.includes("헤어") || t.includes("네일") || t.includes("피부")) pref.categoryHint = "salon";
+  if (t.includes("놀거리") || t.includes("데이트") || t.includes("체험") || t.includes("전시") || t.includes("액티비티"))
+    pref.categoryHint = "activity";
 
   return pref;
 }
 
 /**
- * 선호도 프로필 기준으로 매장 카드들을 점수 매겨서 정렬
+ * 선호도 기반으로 store(HomeCard)를 정렬
+ * - 절대 필드명: with_kids / for_work / reservation_required 를 사용
  */
-export function rankStoresByPreference(
-  cards: HomeCard[],
-  pref: PreferenceProfile
-): HomeCard[] {
-  return cards
-    .map((card) => {
-      let score = 0;
+export function rankStoresByPreference(stores: HomeCard[], pref: Preference): HomeCard[] {
+  const list = Array.isArray(stores) ? [...stores] : [];
+  if (!pref) return list;
 
-      // 아이랑
-      if (pref.withKids) {
-        if (card.withKids) score += 3;
-        else score -= 1;
-      }
+  const kw = (pref.keywords ?? []).map((x) => String(x).toLowerCase());
 
-      // 작업/공부
-      if (pref.forWork) {
-        if (card.forWork) score += 3;
-        else score -= 1;
-      }
+  function score(card: HomeCard): number {
+    let s = 0;
 
-      // 가격 선호 (1~3)
-      if (typeof pref.priceBias === "number" && typeof card.priceLevel === "number") {
-        const diff = Math.abs(card.priceLevel - pref.priceBias);
-        // 차이가 적을수록 점수 높게
-        score += Math.max(0, 3 - diff);
-      }
+    // 카테고리 힌트
+    if (pref.categoryHint && card.category === pref.categoryHint) s += 5;
 
-      // 태그 일치 개수
-      if (pref.requiredTags && pref.requiredTags.length > 0 && card.tags) {
-        const set = new Set(card.tags);
-        let hit = 0;
-        for (const t of pref.requiredTags) {
-          if (set.has(t)) hit += 1;
-        }
-        score += hit * 2;
-      }
+    // 아이/가족 (✅ 여기서 withKids -> with_kids 로 고침)
+    if (pref.withKids) {
+      if ((card as any).with_kids) s += 3;
+      else s -= 1;
+    }
 
-      return { card, score };
-    })
-    .sort((a, b) => b.score - a.score)
-    .map(({ card }) => card);
+    // 업무 (✅ for_work)
+    if (pref.forWork) {
+      if ((card as any).for_work) s += 2;
+      else s -= 1;
+    }
+
+    // 예약 (✅ reservation_required)
+    if (pref.reservationRequired) {
+      if ((card as any).reservation_required) s += 2;
+    }
+
+    // tags/mood 키워드 매칭 (있으면 가산)
+    const tags = Array.isArray((card as any).tags) ? ((card as any).tags as string[]) : [];
+    const mood = Array.isArray((card as any).mood) ? ((card as any).mood as string[]) : [];
+
+    const hay = [...tags, ...mood]
+      .filter(Boolean)
+      .map((x) => String(x).toLowerCase());
+
+    for (const k of kw) {
+      if (hay.some((h) => h.includes(k))) s += 1;
+    }
+
+    return s;
+  }
+
+  list.sort((a, b) => score(b) - score(a));
+  return list;
 }

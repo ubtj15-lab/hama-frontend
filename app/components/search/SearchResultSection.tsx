@@ -15,7 +15,7 @@ export default function SearchResultSection({ results }: Props) {
         검색 결과
       </div>
 
-      <SearchResultList results={results} />
+      <SearchResultList items={results} />
     </section>
   );
 }

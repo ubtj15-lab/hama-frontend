@@ -124,7 +124,9 @@ export default function HomeRecommendSlider({
                     marginBottom: 8,
                   }}
                 >
-                  {card.categoryLabel} · {card.distanceKm.toFixed(1)} km
+                  {card.categoryLabel}
+{typeof (card as any).distanceKm === "number" ? ` · ${(card as any).distanceKm.toFixed(1)} km` : ""}
+
                 </div>
 
                 <div
