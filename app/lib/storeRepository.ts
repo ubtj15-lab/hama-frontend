@@ -1,5 +1,4 @@
 // app/lib/storeRepository.ts
-
 import { supabase } from "@/lib/supabaseClient";
 import type { HomeCard, HomeTabKey, StoreRow } from "@/lib/storeTypes";
 
@@ -17,28 +16,17 @@ type FetchNearbyOptions = {
 
 function tabToCategoryFilter(tab: HomeTabKey): string | null {
   if (tab === "all") return null;
-  // DB category 값이 restaurant/cafe/salon/activity 라는 전제
   return tab;
 }
 
-// naver_place_id가 있으면 “모바일 상세”로 바로 열릴 확률이 높음
-function naverMobilePlaceUrl(naver_place_id: string) {
-  return `https://m.place.naver.com/place/${naver_place_id}`;
-}
-
-// mood가 배열이면 UI에서 스트링으로 표시할 때 쓰기 좋게
 function moodArrayToText(mood?: string[] | null) {
   if (!mood || mood.length === 0) return "";
-  return mood.join(", ");
+  return mood.filter(Boolean).join(" · ");
 }
 
-// ✅ StoreRow -> HomeCard 변환(프로젝트 전체에서 이걸 표준으로 쓰게)
+// ✅ StoreRow -> HomeCard 변환(표준)
 export function toHomeCard(row: StoreRow): HomeCard {
   const image = row.image_url ?? null;
-
-  const placeUrl =
-    row.kakao_place_url ??
-    (row.naver_place_id ? naverMobilePlaceUrl(row.naver_place_id) : null);
 
   return {
     id: row.id,
@@ -56,11 +44,14 @@ export function toHomeCard(row: StoreRow): HomeCard {
 
     kakao_place_url: row.kakao_place_url ?? null,
     naver_place_id: row.naver_place_id ?? null,
-    placeUrl,
+
+    // ⚠️ placeUrl은 “공용 링크”로 쓰면 반드시 꼬임.
+    // - 네이버/카카오 분기는 app/lib/placeLinks.ts가 담당하게 두는 게 안전함.
+    // - 유지하더라도 여기서는 null로 두는 게 사고가 없음.
+    placeUrl: null,
 
     mood: row.mood ?? [],
     tags: row.tags ?? [],
-
     moodText: moodArrayToText(row.mood),
 
     with_kids: row.with_kids ?? null,
@@ -123,15 +114,13 @@ export async function fetchHomeCardsByTab(
 }
 
 /**
- * 근처(탐색) 카드: PostGIS 없이도 돌아가게 만든 바운딩박스 버전
+ * 근처(탐색) 카드: 바운딩박스 버전(PostGIS 없이)
  */
 export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<HomeCard[]> {
   const { lat, lng, tab, radiusKm = 4, limit = 12 } = options;
   const category = tabToCategoryFilter(tab);
 
-  // 위도 1도 ≈ 111km
   const latDelta = radiusKm / 111;
-  // 경도는 위도에 따라 달라짐
   const lngDelta = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
 
   const minLat = lat - latDelta;

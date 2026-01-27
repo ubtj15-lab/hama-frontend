@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import type { HomeCard } from "@/lib/storeTypes";
-import { openNaverPlace } from "@/lib/openNaverPlace";
+import { buildKakaoUrl, buildNaverUrl, openExternal } from "@/lib/placeLinks";
 
 type ActionKey = "예약" | "길안내" | "평점" | "메뉴";
 
@@ -15,41 +15,13 @@ type Props = {
 
 export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
   const anyCard = card as any;
-
   const imageUrl: string | undefined =
     anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? undefined;
 
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
-  const openNaver = () => {
-    const name = String(anyCard?.name ?? "").trim();
-    const naverPlaceId = anyCard?.naver_place_id ? String(anyCard.naver_place_id) : null;
-    const naverPlaceUrl = anyCard?.naver_place_url ? String(anyCard.naver_place_url) : null;
-
-    // 1) URL 있으면 그걸 최우선으로 연다 (naver.me 포함)
-    if (naverPlaceUrl) {
-      window.open(naverPlaceUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    // 2) 없으면 placeId로 시도(실패 가능)
-    openNaverPlace({ name, naverPlaceId });
-  };
-
-  const openKakao = () => {
-    const name = String(anyCard?.name ?? "").trim();
-    const kakaoPlaceUrl = anyCard?.kakao_place_url ? String(anyCard.kakao_place_url) : null;
-
-    // 1) URL 있으면 바로 오픈
-    if (kakaoPlaceUrl) {
-      window.open(kakaoPlaceUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    // 2) 없으면 카카오맵 검색 fallback
-    const q = encodeURIComponent(name || "카카오맵");
-    window.open(`https://map.kakao.com/?q=${q}`, "_blank", "noopener,noreferrer");
-  };
+  const onOpenNaver = () => openExternal(buildNaverUrl(card));
+  const onOpenKakao = () => openExternal(buildKakaoUrl(card));
 
   return (
     <div
@@ -91,12 +63,7 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
           {/* 이미지 */}
           <div style={{ position: "absolute", inset: 0 }}>
             {imageUrl ? (
-              <Image
-                src={imageUrl}
-                alt={anyCard.name ?? "place"}
-                fill
-                style={{ objectFit: "cover" }}
-              />
+              <Image src={imageUrl} alt={anyCard.name ?? "place"} fill style={{ objectFit: "cover" }} />
             ) : (
               <div style={{ width: "100%", height: "100%", background: "#0b1220" }} />
             )}
@@ -145,13 +112,11 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
               {anyCard.name}
             </div>
             <div style={{ fontSize: 12, color: "#cbd5e1" }}>
-              {(anyCard.categoryLabel ?? anyCard.category)
-                ? `${anyCard.categoryLabel ?? anyCard.category}`
-                : ""}
+              {(anyCard.categoryLabel ?? anyCard.category) ? `${anyCard.categoryLabel ?? anyCard.category}` : ""}
             </div>
           </div>
 
-          {/* ✅ 하단 액션바 (네이버/카카오 + 기존 4개) */}
+          {/* ✅ 하단 액션바 */}
           <div
             style={{
               position: "absolute",
@@ -169,7 +134,7 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  openNaver();
+                  onOpenNaver();
                 }}
                 style={{
                   flex: 1,
@@ -192,7 +157,7 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  openKakao();
+                  onOpenKakao();
                 }}
                 style={{
                   flex: 1,
@@ -212,7 +177,7 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
               </button>
             </div>
 
-            {/* 2줄: 기존 4개 액션 */}
+            {/* 2줄: 기존 4개 */}
             <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
               {(["예약", "길안내", "평점", "메뉴"] as const).map((label) => (
                 <button
