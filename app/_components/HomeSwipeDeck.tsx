@@ -5,6 +5,8 @@ import Image from "next/image";
 
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { logEvent } from "@/lib/logEvent";
+import { openNaverPlace } from "@/lib/openNaverPlace";
+import { openKakaoPlace } from "@/lib/openKakaoPlace";
 
 type Mode = "recommend" | "explore";
 
@@ -201,6 +203,31 @@ export default function HomeSwipeDeck({
     // ✅ moodText/mood 어떤 형태로 와도 표시
     const moodText = toText(anyCard?.moodText ?? anyCard?.mood);
 
+    // ✅ 네이버/카카오 분기 (둘 다 없으면 버튼 숨김)
+    const naverPlaceId = toText(anyCard?.naver_place_id);
+    const naverPlaceUrl = toText(anyCard?.naver_place_url);
+    const kakaoPlaceUrl = toText(anyCard?.kakao_place_url);
+
+    const hasNaver = !!naverPlaceId || !!naverPlaceUrl;
+    const hasKakao = !!kakaoPlaceUrl;
+
+    const handleOpenNaver = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      openNaverPlace({
+        name: toText(anyCard?.name),
+        naverPlaceId: naverPlaceId || null,
+        naverPlaceUrl: naverPlaceUrl || null,
+      });
+    };
+
+    const handleOpenKakao = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      openKakaoPlace({
+        name: toText(anyCard?.name),
+        kakaoPlaceUrl: kakaoPlaceUrl || null,
+      });
+    };
+
     return (
       <button
         key={String(anyCard?.id ?? `${pos}-${activeIndex}`)}
@@ -256,6 +283,48 @@ export default function HomeSwipeDeck({
           </div>
 
           <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>{moodText}</div>
+
+          {(hasNaver || hasKakao) && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              {hasNaver && (
+                <button
+                  type="button"
+                  onClick={handleOpenNaver}
+                  style={{
+                    flex: 1,
+                    height: 40,
+                    borderRadius: 999,
+                    border: "none",
+                    background: "#03C75A",
+                    color: "#fff",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  네이버로 보기
+                </button>
+              )}
+
+              {hasKakao && (
+                <button
+                  type="button"
+                  onClick={handleOpenKakao}
+                  style={{
+                    flex: 1,
+                    height: 40,
+                    borderRadius: 999,
+                    border: "none",
+                    background: "#FEE500",
+                    color: "#111827",
+                    fontWeight: 900,
+                    cursor: "pointer",
+                  }}
+                >
+                  카카오로 보기
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </button>
     );
