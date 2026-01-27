@@ -3,6 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import type { HomeCard } from "@/lib/storeTypes";
+import { openNaverPlace } from "@/lib/openNaverPlace";
 
 type ActionKey = "예약" | "길안내" | "평점" | "메뉴";
 
@@ -14,7 +15,41 @@ type Props = {
 
 export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
   const anyCard = card as any;
-  const imageUrl: string | undefined = anyCard.imageUrl ?? anyCard.image ?? undefined;
+
+  const imageUrl: string | undefined =
+    anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? undefined;
+
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  const openNaver = () => {
+    const name = String(anyCard?.name ?? "").trim();
+    const naverPlaceId = anyCard?.naver_place_id ? String(anyCard.naver_place_id) : null;
+    const naverPlaceUrl = anyCard?.naver_place_url ? String(anyCard.naver_place_url) : null;
+
+    // 1) URL 있으면 그걸 최우선으로 연다 (naver.me 포함)
+    if (naverPlaceUrl) {
+      window.open(naverPlaceUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // 2) 없으면 placeId로 시도(실패 가능)
+    openNaverPlace({ name, naverPlaceId });
+  };
+
+  const openKakao = () => {
+    const name = String(anyCard?.name ?? "").trim();
+    const kakaoPlaceUrl = anyCard?.kakao_place_url ? String(anyCard.kakao_place_url) : null;
+
+    // 1) URL 있으면 바로 오픈
+    if (kakaoPlaceUrl) {
+      window.open(kakaoPlaceUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // 2) 없으면 카카오맵 검색 fallback
+    const q = encodeURIComponent(name || "카카오맵");
+    window.open(`https://map.kakao.com/?q=${q}`, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div
@@ -27,10 +62,8 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
         alignItems: "center",
         justifyContent: "center",
       }}
+      onClick={onClose}
     >
-      {/* 바깥 클릭 닫기 */}
-      <div onClick={onClose} style={{ position: "absolute", inset: 0 }} />
-
       <div
         style={{
           position: "relative",
@@ -42,6 +75,7 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
           boxSizing: "border-box",
           pointerEvents: "auto",
         }}
+        onClick={stop}
       >
         <div
           style={{
@@ -53,12 +87,16 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
             background: "#111827",
             boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
           }}
-          onClick={(e) => e.stopPropagation()}
         >
           {/* 이미지 */}
           <div style={{ position: "absolute", inset: 0 }}>
             {imageUrl ? (
-              <Image src={imageUrl} alt={anyCard.name ?? "place"} fill style={{ objectFit: "cover" }} />
+              <Image
+                src={imageUrl}
+                alt={anyCard.name ?? "place"}
+                fill
+                style={{ objectFit: "cover" }}
+              />
             ) : (
               <div style={{ width: "100%", height: "100%", background: "#0b1220" }} />
             )}
@@ -67,7 +105,10 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
           {/* 상단 뒤로 */}
           <button
             type="button"
-            onClick={onClose}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             style={{
               position: "absolute",
               top: 16,
@@ -95,19 +136,22 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
               left: 0,
               right: 0,
               bottom: 0,
-              padding: "22px 20px 110px",
-              background: "linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(15,23,42,0.85) 75%, rgba(15,23,42,0.92) 100%)",
+              padding: "22px 20px 150px",
+              background:
+                "linear-gradient(180deg, rgba(15,23,42,0) 0%, rgba(15,23,42,0.85) 75%, rgba(15,23,42,0.92) 100%)",
             }}
           >
             <div style={{ fontSize: 18, fontWeight: 900, color: "#f9fafb", marginBottom: 8 }}>
               {anyCard.name}
             </div>
             <div style={{ fontSize: 12, color: "#cbd5e1" }}>
-              {(anyCard.categoryLabel ?? anyCard.category) ? `${anyCard.categoryLabel ?? anyCard.category}` : ""}
+              {(anyCard.categoryLabel ?? anyCard.category)
+                ? `${anyCard.categoryLabel ?? anyCard.category}`
+                : ""}
             </div>
           </div>
 
-          {/* ✅ 하단 액션바 (safe-area 포함 고정) */}
+          {/* ✅ 하단 액션바 (네이버/카카오 + 기존 4개) */}
           <div
             style={{
               position: "absolute",
@@ -119,13 +163,57 @@ export default function CardDetailOverlay({ card, onClose, onAction }: Props) {
               zIndex: 20,
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                justifyContent: "space-between",
-              }}
-            >
+            {/* 1줄: 네이버/카카오 */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openNaver();
+                }}
+                style={{
+                  flex: 1,
+                  height: 44,
+                  borderRadius: 999,
+                  border: "none",
+                  background: "rgba(249,250,251,0.95)",
+                  color: "#111827",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                네이버로 보기
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openKakao();
+                }}
+                style={{
+                  flex: 1,
+                  height: 44,
+                  borderRadius: 999,
+                  border: "none",
+                  background: "rgba(249,250,251,0.95)",
+                  color: "#111827",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.25)",
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                카카오로 보기
+              </button>
+            </div>
+
+            {/* 2줄: 기존 4개 액션 */}
+            <div style={{ display: "flex", gap: 10, justifyContent: "space-between" }}>
               {(["예약", "길안내", "평점", "메뉴"] as const).map((label) => (
                 <button
                   key={label}
