@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import { getDefaultCardImage } from "@/lib/defaultCardImage";
+
 
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { logEvent } from "@/lib/logEvent";
-import { openNaverPlace } from "@/lib/openNaverPlace";
-import { openKakaoPlace } from "@/lib/openKakaoPlace";
 
 type Mode = "recommend" | "explore";
 
@@ -21,6 +20,40 @@ type Props = {
 
 const SWIPE_THRESHOLD = 60;
 const DRAG_LIMIT = 140;
+
+// ✅ 카테고리/태그 기반 플레이스홀더
+function getPlaceholderImage(card: HomeCard): string {
+  const c: any = card as any;
+
+  const category = String(c.category ?? "").toLowerCase();
+  const tags: string[] = Array.isArray(c.tags) ? c.tags : [];
+  const mood: string[] = Array.isArray(c.mood) ? c.mood : [];
+
+  const text = [...tags, ...mood, String(c.name ?? "")]
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+  // 음식 세부 분류(태그/무드/이름 텍스트 기반)
+  const isKorean = /한식|국밥|백반|분식|김밥|찌개|삼겹|갈비|해장국|냉면/.test(text);
+  const isJapanese = /일식|초밥|스시|라멘|돈카츠|우동|이자카야/.test(text);
+  const isChinese = /중식|짜장|짬뽕|탕수육|마라|양꼬치/.test(text);
+  const isWestern = /양식|파스타|스테이크|피자|브런치|샐러드|버거/.test(text);
+
+  if (category === "restaurant") {
+    if (isKorean) return "/images/placeholders/korean.jpg";
+    if (isJapanese) return "/images/placeholders/japanese.jpg";
+    if (isChinese) return "/images/placeholders/chinese.jpg";
+    if (isWestern) return "/images/placeholders/western.jpg";
+    return "/images/placeholders/default.jpg";
+  }
+
+  if (category === "cafe") return "/images/placeholders/cafe.jpg";
+  if (category === "salon") return "/images/placeholders/salon.jpg";
+  if (category === "activity") return "/images/placeholders/activity.jpg";
+
+  return "/images/placeholders/default.jpg";
+}
 
 export default function HomeSwipeDeck({
   cards,
@@ -92,15 +125,17 @@ export default function HomeSwipeDeck({
     logEvent("home_card_swipe", { dir: "next", tab: homeTab, mode, index: activeIndex + 1 });
   };
 
+  // ✅ image_url / imageUrl 없으면 플레이스홀더로 대체
   const getImageUrl = (card: HomeCard | null) => {
     if (!card) return undefined;
     const anyCard = card as any;
-    return (anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? undefined) as
-      | string
-      | undefined;
+    const raw =
+      (anyCard.imageUrl ?? anyCard.image_url ?? anyCard.image ?? undefined) as string | undefined;
+
+    if (typeof raw === "string" && raw.trim().length > 0) return raw;
+    return getPlaceholderImage(card);
   };
 
-  // ✅ mood/tags 같은 값이 배열/문자열/nullable 어떤 형태로 와도 안전하게 문자열로 변환
   const toText = (v: any): string => {
     if (v == null) return "";
     if (Array.isArray(v)) return v.filter(Boolean).join(" · ");
@@ -195,38 +230,11 @@ export default function HomeSwipeDeck({
       onOpenCard(card);
     };
 
-    // ✅ category + optional distanceKm 안전 표시
     const categoryText = toText(anyCard?.categoryLabel ?? anyCard?.category);
     const distanceKm =
       typeof anyCard?.distanceKm === "number" ? (anyCard.distanceKm as number) : null;
 
-    // ✅ moodText/mood 어떤 형태로 와도 표시
     const moodText = toText(anyCard?.moodText ?? anyCard?.mood);
-
-    // ✅ 네이버/카카오 분기 (둘 다 없으면 버튼 숨김)
-    const naverPlaceId = toText(anyCard?.naver_place_id);
-    const naverPlaceUrl = toText(anyCard?.naver_place_url);
-    const kakaoPlaceUrl = toText(anyCard?.kakao_place_url);
-
-    const hasNaver = !!naverPlaceId || !!naverPlaceUrl;
-    const hasKakao = !!kakaoPlaceUrl;
-
-    const handleOpenNaver = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      openNaverPlace({
-        name: toText(anyCard?.name),
-        naverPlaceId: naverPlaceId || null,
-        naverPlaceUrl: naverPlaceUrl || null,
-      });
-    };
-
-    const handleOpenKakao = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      openKakaoPlace({
-        name: toText(anyCard?.name),
-        kakaoPlaceUrl: kakaoPlaceUrl || null,
-      });
-    };
 
     return (
       <button
@@ -261,15 +269,24 @@ export default function HomeSwipeDeck({
           }}
         >
           {imageUrl && (
-            <Image
-              src={imageUrl}
-              alt={anyCard?.name ?? "place"}
-              fill
-              style={{ objectFit: "cover" }}
-              sizes="(max-width: 430px) 320px, 320px"
-              priority={pos === "curr"}
-            />
-          )}
+  <img
+    src={imageUrl}
+    alt={anyCard?.name ?? "place"}
+    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+    loading={pos === "curr" ? "eager" : "lazy"}
+    onError={(e) => {
+      // ✅ 외부 url 실패하면 category 기본 이미지로 강제 교체
+      const fallback = getDefaultCardImage(card);
+      const el = e.currentTarget;
+
+      if (el.src !== window.location.origin + fallback) {
+        el.src = fallback;
+      }
+    }}
+  />
+)}
+
+
         </div>
 
         <div style={{ padding: 16, textAlign: "left" }}>
@@ -283,48 +300,6 @@ export default function HomeSwipeDeck({
           </div>
 
           <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>{moodText}</div>
-
-          {(hasNaver || hasKakao) && (
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              {hasNaver && (
-                <button
-                  type="button"
-                  onClick={handleOpenNaver}
-                  style={{
-                    flex: 1,
-                    height: 40,
-                    borderRadius: 999,
-                    border: "none",
-                    background: "#03C75A",
-                    color: "#fff",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  네이버로 보기
-                </button>
-              )}
-
-              {hasKakao && (
-                <button
-                  type="button"
-                  onClick={handleOpenKakao}
-                  style={{
-                    flex: 1,
-                    height: 40,
-                    borderRadius: 999,
-                    border: "none",
-                    background: "#FEE500",
-                    color: "#111827",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  카카오로 보기
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </button>
     );
