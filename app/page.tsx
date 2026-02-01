@@ -1,6 +1,7 @@
+// app/page.tsx
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -36,6 +37,8 @@ interface PointLog {
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
 const LOGIN_FLAG_KEY = "hamaLoggedIn";
+
+const PER_CATEGORY = 5; // ✅ 각 카테고리 탭에서 보여줄 카드 수(5)
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -86,11 +89,13 @@ export default function HomePage() {
 
   const [homeTab, setHomeTab] = useState<HomeTabKey>("all");
 
+  // ✅ 홈 진입/탭 변경 시 랜덤 갱신 키
+  const [shuffleKey, setShuffleKey] = useState<number>(0);
+
   const { mode, loc, isLocLoading } = useHomeMode();
 
-  const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(homeTab);
-
-  const { cards: nearbyCards, isLoading: isNearbyLoading } = useNearbyCards(homeTab, loc);
+  const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(homeTab, shuffleKey);
+  const { cards: nearbyCards, isLoading: isNearbyLoading } = useNearbyCards(homeTab, loc, shuffleKey);
 
   const [selectedCard, setSelectedCard] = useState<HomeCard | null>(null);
 
@@ -98,6 +103,11 @@ export default function HomePage() {
   useEffect(() => {
     setOverlayOpen(!!selectedCard);
   }, [selectedCard, setOverlayOpen]);
+
+  // ✅ 홈 진입 시 1회 랜덤
+  useEffect(() => {
+    setShuffleKey(Date.now());
+  }, []);
 
   useEffect(() => {
     const sync = () => {
@@ -168,16 +178,26 @@ export default function HomePage() {
     window.location.href = "/api/auth/kakao/login";
   };
 
-  const deckCards =
+  // ✅ 원본 덱 카드 (탐색모드면 nearby 우선)
+  const deckCardsRaw =
     mode === "explore" ? (nearbyCards.length > 0 ? nearbyCards : recommendCards) : recommendCards;
 
+  // ✅ 로딩 상태
   const deckLoading =
     mode === "explore"
       ? (isLocLoading || isNearbyLoading) && recommendCards.length === 0
       : isRecommendLoading;
 
+  // ✅ all: 훅이 이미 20장(5*4) 구성/랜덤 처리 -> 그대로
+  // ✅ 카테고리 탭: 5개만
+  const visibleDeckCards = useMemo(() => {
+    if (homeTab === "all") return deckCardsRaw;
+    return deckCardsRaw.slice(0, PER_CATEGORY);
+  }, [deckCardsRaw, homeTab]);
+
   const getCardLatLng = (card: HomeCard): { lat?: number; lng?: number } => {
     const anyCard = card as any;
+
     const lat =
       typeof anyCard.lat === "number"
         ? anyCard.lat
@@ -195,7 +215,17 @@ export default function HomePage() {
     return { lat, lng };
   };
 
-  const handlePlaceDetailAction = (card: HomeCard, action: "길안내" | "네이버로 보기") => {
+  const getImageUrl = (card: HomeCard | null) => {
+    if (!card) return undefined;
+    const anyCard = card as any;
+    return (anyCard.imageUrl ??
+      anyCard.image ??
+      anyCard.image_url ??
+      anyCard.imageURL ??
+      undefined) as string | undefined;
+  };
+
+  const handlePlaceDetailAction = (card: HomeCard, action: "길안내" | "예약·자세히") => {
     const anyCard = card as any;
     const name = String(anyCard?.name ?? "").trim();
     if (!name) return;
@@ -227,14 +257,6 @@ export default function HomePage() {
     { key: "salon", label: "미용실" },
     { key: "activity", label: "액티비티" },
   ];
-
-  const getImageUrl = (card: HomeCard | null) => {
-    if (!card) return undefined;
-    const anyCard = card as any;
-    return (anyCard.imageUrl ?? anyCard.image ?? anyCard.image_url ?? anyCard.image_url ?? undefined) as
-      | string
-      | undefined;
-  };
 
   return (
     <main
@@ -274,6 +296,7 @@ export default function HomePage() {
                 type="button"
                 onClick={() => {
                   setHomeTab(t.key);
+                  setShuffleKey(Date.now()); // ✅ 탭 바뀔 때마다 랜덤 재실행
                   addPoints(1, "홈 탭 변경");
                   logEvent("home_tab_click", { tab: t.key, mode });
                 }}
@@ -298,8 +321,8 @@ export default function HomePage() {
         </div>
 
         <HomeSwipeDeck
-          key={`${mode}-${homeTab}`}
-          cards={deckCards}
+          key={`${mode}-${homeTab}-${shuffleKey}`}
+          cards={visibleDeckCards}
           homeTab={homeTab}
           mode={mode}
           isLoading={deckLoading}
@@ -356,7 +379,14 @@ export default function HomePage() {
                   {(() => {
                     const imageUrl = getImageUrl(selectedCard);
                     if (!imageUrl) return null;
-                    return <Image src={imageUrl} alt={selectedCard.name ?? "place"} fill style={{ objectFit: "cover" }} />;
+                    return (
+                      <Image
+                        src={imageUrl}
+                        alt={selectedCard.name ?? "place"}
+                        fill
+                        style={{ objectFit: "cover" }}
+                      />
+                    );
                   })()}
 
                   <button
@@ -404,7 +434,8 @@ export default function HomePage() {
                         marginBottom: 10,
                       }}
                     >
-                      {(selectedCard as any).name} · {(selectedCard as any).categoryLabel ?? (selectedCard as any).category}
+                      {(selectedCard as any).name} ·{" "}
+                      {(selectedCard as any).categoryLabel ?? (selectedCard as any).category}
                     </div>
 
                     <div style={{ fontSize: 14, color: "#e5e7eb" }}>
@@ -427,7 +458,7 @@ export default function HomePage() {
                   boxSizing: "border-box",
                 }}
               >
-                {(["길안내", "네이버로 보기"] as const).map((label) => (
+                {(["길안내", "예약·자세히"] as const).map((label) => (
                   <button
                     key={label}
                     type="button"

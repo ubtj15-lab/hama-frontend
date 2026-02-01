@@ -1,74 +1,97 @@
+// app/_hooks/useNearbyCards.ts
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { fetchNearbyStores } from "@/lib/storeRepository";
-import { logEvent } from "@/lib/logEvent";
 
-type Loc = { lat: number; lng: number } | null;
+type LatLng = { lat: number; lng: number } | null | undefined;
 
-export function useNearbyCards(homeTab: HomeTabKey, loc: Loc) {
+type Result = {
+  cards: HomeCard[];
+  isLoading: boolean;
+};
+
+const PER_CATEGORY = 5;     // ✅ 최종 노출 개수
+const POOL_SIZE = 40;       // ✅ 후보 풀
+
+function shuffle<T>(array: T[]): T[] {
+  const a = [...array];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function pickRandomN<T>(array: T[], n: number): T[] {
+  if (!Array.isArray(array) || array.length === 0) return [];
+  return shuffle(array).slice(0, Math.min(n, array.length));
+}
+
+async function fetchNearbyCategoryRandom(
+  loc: { lat: number; lng: number },
+  tab: Exclude<HomeTabKey, "all">
+): Promise<HomeCard[]> {
+  // ✅ 근처도 POOL_SIZE만큼 후보를 받고 그 안에서 랜덤 5개
+  const pool = await fetchNearbyStores({
+    lat: loc.lat,
+    lng: loc.lng,
+    tab,
+    limit: POOL_SIZE,
+  });
+  return pickRandomN(pool, PER_CATEGORY);
+}
+
+async function fetchAllMixedNearby(loc: { lat: number; lng: number }): Promise<HomeCard[]> {
+  const [restaurants, cafes, salons, activities] = await Promise.all([
+    fetchNearbyCategoryRandom(loc, "restaurant"),
+    fetchNearbyCategoryRandom(loc, "cafe"),
+    fetchNearbyCategoryRandom(loc, "salon"),
+    fetchNearbyCategoryRandom(loc, "activity"),
+  ]);
+
+  return [...restaurants, ...cafes, ...salons, ...activities];
+}
+
+export function useNearbyCards(tab: HomeTabKey, loc: LatLng, shuffleKey: number): Result {
   const [cards, setCards] = useState<HomeCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 탭/위치 바뀔 때 레이스 방지
-  const reqIdRef = useRef(0);
-
   useEffect(() => {
-    let alive = true;
-    const reqId = ++reqIdRef.current;
+    let cancelled = false;
 
-    // 위치가 없으면(권한 거부/로딩 전) 근처카드 불가
-    if (!loc) {
-      setCards([]);
-      setIsLoading(false);
-      return () => {
-        alive = false;
-      };
-    }
-
-    setIsLoading(true);
-
-    (async () => {
-      try {
-        const next = await fetchNearbyStores({
-          lat: loc.lat,
-          lng: loc.lng,
-          tab: homeTab,
-          radiusKm: 4, // 필요하면 2~8로 조절
-          limit: homeTab === "all" ? 12 : 8,
-        });
-
-        if (!alive) return;
-        if (reqId !== reqIdRef.current) return;
-
-        const safe = Array.isArray(next) ? next : [];
-        setCards(safe);
-
-        logEvent("nearby_loaded", {
-          tab: homeTab,
-          count: safe.length,
-          lat: loc.lat,
-          lng: loc.lng,
-        });
-      } catch (e) {
-        if (!alive) return;
-        if (reqId !== reqIdRef.current) return;
-
-        console.error("[useNearbyCards] failed:", e);
+    const run = async () => {
+      if (!loc?.lat || !loc?.lng) {
         setCards([]);
-      } finally {
-        if (!alive) return;
-        if (reqId !== reqIdRef.current) return;
-
         setIsLoading(false);
+        return;
       }
-    })();
 
-    return () => {
-      alive = false;
+      setIsLoading(true);
+      try {
+        const result =
+          tab === "all"
+            ? await fetchAllMixedNearby({ lat: loc.lat, lng: loc.lng })
+            : await fetchNearbyCategoryRandom(
+                { lat: loc.lat, lng: loc.lng },
+                tab as Exclude<HomeTabKey, "all">
+              );
+
+        if (!cancelled) setCards(result);
+      } catch (e) {
+        console.error("[useNearbyCards]", e);
+        if (!cancelled) setCards([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     };
-  }, [homeTab, loc?.lat, loc?.lng]);
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, loc?.lat, loc?.lng, shuffleKey]);
 
   return { cards, isLoading };
 }

@@ -45,6 +45,10 @@ export type StoreRow = {
   reservation_required: boolean | null;
 
   price_level: string | null;
+
+  // ✅ 현재 DB에 컬럼이 없어서 제거(쿼리 400 방지)
+  // curated_score: number | null;
+
   updated_at: string | null;
 };
 
@@ -69,30 +73,23 @@ function moodArrayToText(mood: string[] | null | undefined): string {
 }
 
 /**
- * ✅ 핵심: image_url "안전 필터"
- * - 지금 단계에서는 외부 핫링크(카카오/네이버/랜덤 CDN)가 깨질 확률이 높아서 기본적으로 차단
- * - 로컬(public) 경로(/images/...) 만 통과시켜서 "깨진 이미지"를 원천 차단
- *
- * 만약 나중에 네가 S3/Cloudflare 같은 안정적인 CDN URL을 넣을 거면,
- * allowHttp 를 true로 바꾸면 됨.
+ * ✅ image_url "안전 필터"
+ * - 로컬(public) 경로(/images/...)만 통과
+ * - 외부 URL은 기본 차단 -> 깨진 이미지 방지
  */
 function sanitizeImageUrl(input: string | null | undefined, allowHttp = false): string | null {
   const v = (input ?? "").trim();
   if (!v) return null;
 
-  // 로컬 정적 파일만 허용 (public 아래)
   if (v.startsWith("/")) return v;
-
-  // 안정적인 외부 CDN을 쓰기 시작하면 이 옵션을 true로
   if (allowHttp && (v.startsWith("http://") || v.startsWith("https://"))) return v;
 
-  // 그 외는 전부 무시 -> 기본 이미지로 가게 만들기
   return null;
 }
 
 /** ---------- Row -> HomeCard ---------- */
 export function toHomeCard(row: StoreRow): HomeCard {
-  const safeImage = sanitizeImageUrl(row.image_url, false); // ✅ 지금은 외부 URL 차단
+  const safeImage = sanitizeImageUrl(row.image_url, false);
 
   const card: any = {
     id: row.id,
@@ -109,7 +106,6 @@ export function toHomeCard(row: StoreRow): HomeCard {
 
     phone: row.phone ?? null,
 
-    // ✅ 여기서 깨질 수 있는 외부/이상한 값은 null 처리됨
     image_url: safeImage,
     imageUrl: safeImage,
 
@@ -126,10 +122,13 @@ export function toHomeCard(row: StoreRow): HomeCard {
     reservation_required: row.reservation_required ?? null,
 
     price_level: row.price_level ?? null,
+
+    // ✅ curated_score 컬럼이 없으니 기본값만(호환용)
+    curated_score: 0,
+
     updated_at: row.updated_at ?? null,
   };
 
-  // ✅ safeImage가 null이면 무조건 기본 이미지가 주입됨
   return applyDefaultImage(card as HomeCard);
 }
 
@@ -169,6 +168,7 @@ export async function fetchHomeCardsByTab(
 
   if (category) q = q.eq("category", category);
 
+  // ✅ 최신순만 사용 (curated_score 컬럼 없음 → 400 방지)
   q = q.order("updated_at", { ascending: false, nullsFirst: false });
 
   const { data, error } = await q;
@@ -227,6 +227,7 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
 
   if (category) q = q.eq("category", category);
 
+  // ✅ 최신순만 사용 (curated_score 컬럼 없음 → 400 방지)
   q = q.order("updated_at", { ascending: false, nullsFirst: false });
 
   const { data, error } = await q;
@@ -238,4 +239,11 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
 
   const rows = (data ?? []) as StoreRow[];
   return rows.map(toHomeCard);
+}
+function homeTabCount(tab: HomeTabKey): number {
+  if (tab === "restaurant") return 4;
+  if (tab === "cafe") return 4;
+  if (tab === "salon") return 2;
+  if (tab === "activity") return 2;
+  return 12; // all
 }

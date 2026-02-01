@@ -2,11 +2,12 @@
 import type { HomeCard } from "@/lib/storeTypes";
 
 /**
- * public/images/category 아래에 파일을 넣는다는 전제
- * - restaurant.jpg  (분류 못한 레스토랑 기본)
+ * ✅ public/images/category 아래 파일명 기준 매핑
+ *
+ * - restaurant.jpg              (기본/분류 못한 식당)
  * - restaurant-korean.jpg
  * - restaurant-chinese.jpg
- * - restaurant-japanese.jpg (네 파일명이 japanese 라면 그거 그대로 써야 함)
+ * - restaurant-japanese.jpg
  * - restaurant-western.jpg
  * - cafe.jpg
  * - activity.jpg
@@ -15,14 +16,12 @@ import type { HomeCard } from "@/lib/storeTypes";
  * - park.png
  */
 
-const BASE = "/images/category";
-
 export const DEFAULT_CARD_IMAGES = {
+  restaurant: "/images/category/restaurant.jpg",
   restaurant_korean: "/images/category/restaurant-korean.jpg",
   restaurant_chinese: "/images/category/restaurant-chinese.jpg",
   restaurant_japanese: "/images/category/restaurant-japanese.jpg",
   restaurant_western: "/images/category/restaurant-western.jpg",
-  restaurant_generic: "/images/category/restaurant.jpg",
 
   cafe: "/images/category/cafe.jpg",
   activity: "/images/category/activity.jpg",
@@ -30,9 +29,6 @@ export const DEFAULT_CARD_IMAGES = {
   salon: "/images/category/salon.jpg",
   park: "/images/category/park.png",
 } as const;
-
-
-type DbCategory = "restaurant" | "cafe" | "salon" | "activity" | string;
 
 function normalizeText(v?: string | null) {
   return (v ?? "").trim().toLowerCase();
@@ -42,16 +38,23 @@ function hasAny(str: string, keywords: string[]) {
   return keywords.some((k) => str.includes(k));
 }
 
-export function inferRestaurantSubtype(card: Partial<HomeCard>): keyof typeof DEFAULT_CARD_IMAGES {
-  const name = normalizeText((card as any)?.name);
-  const categoryLabel = normalizeText((card as any)?.categoryLabel);
-  const moodText = normalizeText((card as any)?.moodText);
-  const mood = Array.isArray((card as any)?.mood) ? ((card as any).mood as string[]).join(" ") : "";
-  const tags = Array.isArray((card as any)?.tags) ? ((card as any).tags as string[]).join(" ") : "";
+/** 레스토랑 세부분류 추정 */
+export function inferRestaurantSubtype(
+  card: Partial<HomeCard>
+): keyof typeof DEFAULT_CARD_IMAGES {
+  const anyCard = card as any;
+
+  const name = normalizeText(anyCard?.name);
+  const categoryLabel = normalizeText(anyCard?.categoryLabel);
+  const moodText = normalizeText(anyCard?.moodText);
+  const mood = Array.isArray(anyCard?.mood) ? (anyCard.mood as string[]).join(" ") : "";
+  const tags = Array.isArray(anyCard?.tags) ? (anyCard.tags as string[]).join(" ") : "";
 
   const blob = `${name} ${categoryLabel} ${moodText} ${normalizeText(mood)} ${normalizeText(tags)}`;
 
-  if (hasAny(blob, ["한식", "국밥", "백반", "김치", "삼겹", "갈비", "찌개", "비빔", "냉면", "분식", "족발", "보쌈"])) {
+  if (
+    hasAny(blob, ["한식", "국밥", "백반", "김치", "삼겹", "갈비", "찌개", "비빔", "냉면", "분식", "족발", "보쌈"])
+  ) {
     return "restaurant_korean";
   }
   if (hasAny(blob, ["중식", "짜장", "짬뽕", "탕수", "마라", "훠궈", "딤섬", "양꼬치"])) {
@@ -64,9 +67,11 @@ export function inferRestaurantSubtype(card: Partial<HomeCard>): keyof typeof DE
     return "restaurant_western";
   }
 
-  return "restaurant_generic";
+  // 기본 식당 이미지
+  return "restaurant";
 }
 
+/** 카드에 이미지가 없으면 기본 이미지 반환 */
 export function getDefaultCardImage(card: Partial<HomeCard>): string {
   const anyCard = card as any;
 
@@ -78,10 +83,11 @@ export function getDefaultCardImage(card: Partial<HomeCard>): string {
 
   if (existing && typeof existing === "string" && existing.trim().length > 0) return existing;
 
-  const category = normalizeText(anyCard.category as DbCategory);
+  const category = normalizeText(anyCard.category as string);
 
   if (category === "cafe") return DEFAULT_CARD_IMAGES.cafe;
   if (category === "salon") return DEFAULT_CARD_IMAGES.salon;
+
   if (category === "activity") {
     const blob = `${normalizeText(anyCard.name)} ${normalizeText(anyCard.categoryLabel)} ${
       Array.isArray(anyCard.tags) ? normalizeText(anyCard.tags.join(" ")) : ""
@@ -93,10 +99,12 @@ export function getDefaultCardImage(card: Partial<HomeCard>): string {
     return DEFAULT_CARD_IMAGES.activity;
   }
 
+  // restaurant or unknown
   const sub = inferRestaurantSubtype(card);
   return DEFAULT_CARD_IMAGES[sub];
 }
 
+/** 카드 객체에 imageUrl / image_url 둘 다 확정 주입 */
 export function applyDefaultImage<T extends Partial<HomeCard>>(card: T): T {
   const img = getDefaultCardImage(card);
   const anyCard = card as any;

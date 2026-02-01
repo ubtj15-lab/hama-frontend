@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getDefaultCardImage } from "@/lib/defaultCardImage";
 
-
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { logEvent } from "@/lib/logEvent";
 
@@ -34,7 +33,6 @@ function getPlaceholderImage(card: HomeCard): string {
     .replace(/\s+/g, " ")
     .toLowerCase();
 
-  // 음식 세부 분류(태그/무드/이름 텍스트 기반)
   const isKorean = /한식|국밥|백반|분식|김밥|찌개|삼겹|갈비|해장국|냉면/.test(text);
   const isJapanese = /일식|초밥|스시|라멘|돈카츠|우동|이자카야/.test(text);
   const isChinese = /중식|짜장|짬뽕|탕수육|마라|양꼬치/.test(text);
@@ -63,18 +61,11 @@ export default function HomeSwipeDeck({
   onOpenCard,
   onAddPoints,
 }: Props) {
-  const [stableCards, setStableCards] = useState<HomeCard[]>([]);
-
-  useEffect(() => {
-    if (Array.isArray(cards) && cards.length > 0) {
-      setStableCards(cards);
-    }
-  }, [cards]);
-
+  // ✅ 중요: 덱은 props.cards만 사용 (캐싱 금지)
   const list = useMemo<HomeCard[]>(() => {
     if (isLoading) return [];
-    return stableCards.length > 0 ? stableCards : Array.isArray(cards) ? cards : [];
-  }, [isLoading, stableCards, cards]);
+    return Array.isArray(cards) ? cards : [];
+  }, [isLoading, cards]);
 
   const total = list.length;
   const [activeIndex, setActiveIndex] = useState(0);
@@ -85,6 +76,7 @@ export default function HomeSwipeDeck({
   const startXRef = useRef(0);
   const movedRef = useRef(false);
 
+  // ✅ 탭/모드 변경 시 초기화
   useEffect(() => {
     setActiveIndex(0);
     setDragX(0);
@@ -92,8 +84,12 @@ export default function HomeSwipeDeck({
     movedRef.current = false;
   }, [homeTab, mode]);
 
+  // ✅ 카드 리스트가 바뀌면 인덱스 보정 (핵심)
   useEffect(() => {
-    if (total <= 0) return;
+    if (total <= 0) {
+      setActiveIndex(0);
+      return;
+    }
     setActiveIndex((idx) => Math.min(idx, total - 1));
   }, [total]);
 
@@ -125,7 +121,6 @@ export default function HomeSwipeDeck({
     logEvent("home_card_swipe", { dir: "next", tab: homeTab, mode, index: activeIndex + 1 });
   };
 
-  // ✅ image_url / imageUrl 없으면 플레이스홀더로 대체
   const getImageUrl = (card: HomeCard | null) => {
     if (!card) return undefined;
     const anyCard = card as any;
@@ -269,24 +264,20 @@ export default function HomeSwipeDeck({
           }}
         >
           {imageUrl && (
-  <img
-    src={imageUrl}
-    alt={anyCard?.name ?? "place"}
-    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-    loading={pos === "curr" ? "eager" : "lazy"}
-    onError={(e) => {
-      // ✅ 외부 url 실패하면 category 기본 이미지로 강제 교체
-      const fallback = getDefaultCardImage(card);
-      const el = e.currentTarget;
-
-      if (el.src !== window.location.origin + fallback) {
-        el.src = fallback;
-      }
-    }}
-  />
-)}
-
-
+            <img
+              src={imageUrl}
+              alt={anyCard?.name ?? "place"}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              loading={pos === "curr" ? "eager" : "lazy"}
+              onError={(e) => {
+                const fallback = getDefaultCardImage(card);
+                const el = e.currentTarget;
+                if (el.src !== window.location.origin + fallback) {
+                  el.src = fallback;
+                }
+              }}
+            />
+          )}
         </div>
 
         <div style={{ padding: 16, textAlign: "left" }}>
