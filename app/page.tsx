@@ -20,9 +20,9 @@ import { useUIOverlay } from "./_providers/UIOverlayProvider";
 import { openDirections } from "@/lib/openDirections";
 import { openNaverPlace } from "@/lib/openNaverPlace";
 
-// ======================
-// 🧩 포인트 / 로그 저장
-// ======================
+import { inferIntention } from "@/lib/intention";
+import type { IntentionType } from "@/lib/intention";
+
 interface HamaUser {
   nickname: string;
   points: number;
@@ -79,9 +79,6 @@ function appendPointLog(amount: number, reason: string) {
   } catch {}
 }
 
-// ======================
-// ✅ 검색 문장 → "근처 추천" 의도 감지
-// ======================
 function normalizeQuery(q: string) {
   return q
     .toLowerCase()
@@ -91,17 +88,14 @@ function normalizeQuery(q: string) {
 
 function isNearbyIntent(q: string) {
   const t = normalizeQuery(q);
-  // “근처/주변/가까운/내 주변/여기 근처/근방/근처에” 류
   return /(근처|주변|가까운|가까이|내\s?주변|여기\s?근처|근방)/.test(t);
 }
 
 function inferTabFromQuery(q: string): HomeTabKey {
   const t = normalizeQuery(q);
 
-  // 카페
   if (/(카페|커피|디저트|베이커리|브런치|라떼)/.test(t)) return "cafe";
 
-  // 식당
   if (
     /(식당|맛집|밥|점심|저녁|아침|혼밥|국밥|한식|일식|중식|양식|파스타|피자|초밥|라멘|고기|삼겹|갈비|회|분식)/.test(
       t
@@ -109,10 +103,8 @@ function inferTabFromQuery(q: string): HomeTabKey {
   )
     return "restaurant";
 
-  // 미용실
   if (/(미용실|헤어|커트|펌|염색|네일|왁싱|피부|뷰티|샵)/.test(t)) return "salon";
 
-  // 액티비티
   if (/(액티비티|데이트|갈만한|놀거리|체험|전시|공원|박물관|운동|볼링|방탈출|카페거리)/.test(t))
     return "activity";
 
@@ -130,18 +122,25 @@ export default function HomePage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   const [homeTab, setHomeTab] = useState<HomeTabKey>("all");
-
-  // ✅ 홈 진입/탭 변경 시 랜덤 갱신 키
   const [shuffleKey, setShuffleKey] = useState<number>(0);
-
-  // ✅ “근처 추천” 의도일 때 강제로 explore 모드로 오버라이드
   const [modeOverride, setModeOverride] = useState<Mode | null>(null);
 
   const { mode: baseMode, loc, isLocLoading } = useHomeMode();
   const mode: Mode = modeOverride ?? baseMode;
 
-  const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(homeTab, shuffleKey);
-  const { cards: nearbyCards, isLoading: isNearbyLoading } = useNearbyCards(homeTab, loc, shuffleKey);
+  const [intent, setIntent] = useState<IntentionType>("none");
+
+  const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(
+    homeTab,
+    shuffleKey,
+    intent
+  );
+  const { cards: nearbyCards, isLoading: isNearbyLoading } = useNearbyCards(
+    homeTab,
+    loc,
+    shuffleKey,
+    intent
+  );
 
   const [selectedCard, setSelectedCard] = useState<HomeCard | null>(null);
 
@@ -192,7 +191,9 @@ export default function HomePage() {
     const q = query.trim();
     if (!q) return;
 
-    // ✅ “근처 추천”이면 홈에서 바로 처리 (explore + 탭 자동 선택)
+    const it = inferIntention(q);
+    setIntent(it);
+
     if (isNearbyIntent(q)) {
       const tab = inferTabFromQuery(q);
 
@@ -201,16 +202,14 @@ export default function HomePage() {
       setShuffleKey(Date.now());
 
       addPoints(5, "근처 추천 요청");
-      logEvent("nearby_intent", { query: q, tab });
+      logEvent("nearby_intent", { query: q, tab, intention: it });
 
-      // 검색창은 비우는게 UX 깔끔
       setQuery("");
       return;
     }
 
-    // ✅ 일반 검색은 기존대로 search 페이지로
     addPoints(5, "검색");
-    logEvent("search", { query: q, page: "home" });
+    logEvent("search", { query: q, page: "home", intention: it });
     router.push(`/search?query=${encodeURIComponent(q)}`);
   };
 
@@ -239,7 +238,6 @@ export default function HomePage() {
     window.location.href = "/api/auth/kakao/login";
   };
 
-  // ✅ 원본 덱 카드
   const deckCardsRaw =
     mode === "explore" ? (nearbyCards.length > 0 ? nearbyCards : recommendCards) : recommendCards;
 
@@ -294,6 +292,7 @@ export default function HomePage() {
       action,
       mode,
       tab: homeTab,
+      intention: intent,
     });
 
     if (action === "길안내") {
@@ -355,9 +354,8 @@ export default function HomePage() {
                 onClick={() => {
                   setHomeTab(t.key);
                   setShuffleKey(Date.now());
-                  // 탭을 직접 누르면 “기본모드로 복귀”는 하지 않음 (원하면 여기서 setModeOverride(null) 넣으면 됨)
                   addPoints(1, "홈 탭 변경");
-                  logEvent("home_tab_click", { tab: t.key, mode });
+                  logEvent("home_tab_click", { tab: t.key, mode, intention: intent });
                 }}
                 style={{
                   border: "none",
@@ -393,6 +391,7 @@ export default function HomePage() {
               name: c.name,
               tab: homeTab,
               mode,
+              intention: intent,
             });
           }}
           onAddPoints={addPoints}

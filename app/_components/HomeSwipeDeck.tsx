@@ -20,7 +20,6 @@ type Props = {
 const SWIPE_THRESHOLD = 60;
 const DRAG_LIMIT = 140;
 
-// ✅ 카테고리/태그 기반 플레이스홀더
 function getPlaceholderImage(card: HomeCard): string {
   const c: any = card as any;
 
@@ -61,11 +60,18 @@ export default function HomeSwipeDeck({
   onOpenCard,
   onAddPoints,
 }: Props) {
-  // ✅ 중요: 덱은 props.cards만 사용 (캐싱 금지)
+  const [stableCards, setStableCards] = useState<HomeCard[]>([]);
+
+  useEffect(() => {
+    if (Array.isArray(cards) && cards.length > 0) {
+      setStableCards(cards);
+    }
+  }, [cards]);
+
   const list = useMemo<HomeCard[]>(() => {
     if (isLoading) return [];
-    return Array.isArray(cards) ? cards : [];
-  }, [isLoading, cards]);
+    return stableCards.length > 0 ? stableCards : Array.isArray(cards) ? cards : [];
+  }, [isLoading, stableCards, cards]);
 
   const total = list.length;
   const [activeIndex, setActiveIndex] = useState(0);
@@ -76,7 +82,6 @@ export default function HomeSwipeDeck({
   const startXRef = useRef(0);
   const movedRef = useRef(false);
 
-  // ✅ 탭/모드 변경 시 초기화
   useEffect(() => {
     setActiveIndex(0);
     setDragX(0);
@@ -84,12 +89,8 @@ export default function HomeSwipeDeck({
     movedRef.current = false;
   }, [homeTab, mode]);
 
-  // ✅ 카드 리스트가 바뀌면 인덱스 보정 (핵심)
   useEffect(() => {
-    if (total <= 0) {
-      setActiveIndex(0);
-      return;
-    }
+    if (total <= 0) return;
     setActiveIndex((idx) => Math.min(idx, total - 1));
   }, [total]);
 
@@ -229,7 +230,8 @@ export default function HomeSwipeDeck({
     const distanceKm =
       typeof anyCard?.distanceKm === "number" ? (anyCard.distanceKm as number) : null;
 
-    const moodText = toText(anyCard?.moodText ?? anyCard?.mood);
+    // ✅ 여기: 추천 이유 우선, 없으면 기존 moodText
+    const reasonText = toText(anyCard?.reasonText ?? anyCard?.moodText ?? anyCard?.mood);
 
     return (
       <button
@@ -290,7 +292,7 @@ export default function HomeSwipeDeck({
             {distanceKm != null && <> · {distanceKm.toFixed(1)} km</>}
           </div>
 
-          <div style={{ fontSize: 13, color: "#111827", fontWeight: 700 }}>{moodText}</div>
+          <div style={{ fontSize: 13, color: "#111827", fontWeight: 800 }}>{reasonText}</div>
         </div>
       </button>
     );
