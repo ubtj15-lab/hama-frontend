@@ -38,7 +38,7 @@ const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
 const LOGIN_FLAG_KEY = "hamaLoggedIn";
 
-const PER_CATEGORY = 5; // ✅ 각 카테고리 탭에서 보여줄 카드 수(5)
+const PER_CATEGORY = 5;
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -79,6 +79,48 @@ function appendPointLog(amount: number, reason: string) {
   } catch {}
 }
 
+// ======================
+// ✅ 검색 문장 → "근처 추천" 의도 감지
+// ======================
+function normalizeQuery(q: string) {
+  return q
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isNearbyIntent(q: string) {
+  const t = normalizeQuery(q);
+  // “근처/주변/가까운/내 주변/여기 근처/근방/근처에” 류
+  return /(근처|주변|가까운|가까이|내\s?주변|여기\s?근처|근방)/.test(t);
+}
+
+function inferTabFromQuery(q: string): HomeTabKey {
+  const t = normalizeQuery(q);
+
+  // 카페
+  if (/(카페|커피|디저트|베이커리|브런치|라떼)/.test(t)) return "cafe";
+
+  // 식당
+  if (
+    /(식당|맛집|밥|점심|저녁|아침|혼밥|국밥|한식|일식|중식|양식|파스타|피자|초밥|라멘|고기|삼겹|갈비|회|분식)/.test(
+      t
+    )
+  )
+    return "restaurant";
+
+  // 미용실
+  if (/(미용실|헤어|커트|펌|염색|네일|왁싱|피부|뷰티|샵)/.test(t)) return "salon";
+
+  // 액티비티
+  if (/(액티비티|데이트|갈만한|놀거리|체험|전시|공원|박물관|운동|볼링|방탈출|카페거리)/.test(t))
+    return "activity";
+
+  return "all";
+}
+
+type Mode = "recommend" | "explore";
+
 export default function HomePage() {
   const router = useRouter();
 
@@ -92,7 +134,11 @@ export default function HomePage() {
   // ✅ 홈 진입/탭 변경 시 랜덤 갱신 키
   const [shuffleKey, setShuffleKey] = useState<number>(0);
 
-  const { mode, loc, isLocLoading } = useHomeMode();
+  // ✅ “근처 추천” 의도일 때 강제로 explore 모드로 오버라이드
+  const [modeOverride, setModeOverride] = useState<Mode | null>(null);
+
+  const { mode: baseMode, loc, isLocLoading } = useHomeMode();
+  const mode: Mode = modeOverride ?? baseMode;
 
   const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(homeTab, shuffleKey);
   const { cards: nearbyCards, isLoading: isNearbyLoading } = useNearbyCards(homeTab, loc, shuffleKey);
@@ -104,7 +150,6 @@ export default function HomePage() {
     setOverlayOpen(!!selectedCard);
   }, [selectedCard, setOverlayOpen]);
 
-  // ✅ 홈 진입 시 1회 랜덤
   useEffect(() => {
     setShuffleKey(Date.now());
   }, []);
@@ -147,9 +192,25 @@ export default function HomePage() {
     const q = query.trim();
     if (!q) return;
 
+    // ✅ “근처 추천”이면 홈에서 바로 처리 (explore + 탭 자동 선택)
+    if (isNearbyIntent(q)) {
+      const tab = inferTabFromQuery(q);
+
+      setModeOverride("explore");
+      setHomeTab(tab);
+      setShuffleKey(Date.now());
+
+      addPoints(5, "근처 추천 요청");
+      logEvent("nearby_intent", { query: q, tab });
+
+      // 검색창은 비우는게 UX 깔끔
+      setQuery("");
+      return;
+    }
+
+    // ✅ 일반 검색은 기존대로 search 페이지로
     addPoints(5, "검색");
     logEvent("search", { query: q, page: "home" });
-
     router.push(`/search?query=${encodeURIComponent(q)}`);
   };
 
@@ -178,18 +239,15 @@ export default function HomePage() {
     window.location.href = "/api/auth/kakao/login";
   };
 
-  // ✅ 원본 덱 카드 (탐색모드면 nearby 우선)
+  // ✅ 원본 덱 카드
   const deckCardsRaw =
     mode === "explore" ? (nearbyCards.length > 0 ? nearbyCards : recommendCards) : recommendCards;
 
-  // ✅ 로딩 상태
   const deckLoading =
     mode === "explore"
       ? (isLocLoading || isNearbyLoading) && recommendCards.length === 0
       : isRecommendLoading;
 
-  // ✅ all: 훅이 이미 20장(5*4) 구성/랜덤 처리 -> 그대로
-  // ✅ 카테고리 탭: 5개만
   const visibleDeckCards = useMemo(() => {
     if (homeTab === "all") return deckCardsRaw;
     return deckCardsRaw.slice(0, PER_CATEGORY);
@@ -296,7 +354,8 @@ export default function HomePage() {
                 type="button"
                 onClick={() => {
                   setHomeTab(t.key);
-                  setShuffleKey(Date.now()); // ✅ 탭 바뀔 때마다 랜덤 재실행
+                  setShuffleKey(Date.now());
+                  // 탭을 직접 누르면 “기본모드로 복귀”는 하지 않음 (원하면 여기서 setModeOverride(null) 넣으면 됨)
                   addPoints(1, "홈 탭 변경");
                   logEvent("home_tab_click", { tab: t.key, mode });
                 }}

@@ -1,9 +1,7 @@
-// app/_hooks/useNearbyCards.ts
 "use client";
 
 import { useEffect, useState } from "react";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
-import { fetchNearbyStores } from "@/lib/storeRepository";
 
 type LatLng = { lat: number; lng: number } | null | undefined;
 
@@ -12,8 +10,8 @@ type Result = {
   isLoading: boolean;
 };
 
-const PER_CATEGORY = 5;     // ✅ 최종 노출 개수
-const POOL_SIZE = 40;       // ✅ 후보 풀
+const PER_CATEGORY = 5;
+const POOL_SIZE = 40; // ✅ 후보풀 (API에서 이만큼 보장하도록 시도)
 
 function shuffle<T>(array: T[]): T[] {
   const a = [...array];
@@ -29,17 +27,34 @@ function pickRandomN<T>(array: T[], n: number): T[] {
   return shuffle(array).slice(0, Math.min(n, array.length));
 }
 
+async function fetchNearbyPoolFromApi(params: {
+  lat: number;
+  lng: number;
+  tab: Exclude<HomeTabKey, "all">;
+  radiusKm?: number;
+  limit?: number;
+}): Promise<HomeCard[]> {
+  const url = new URL("/api/places/nearby", window.location.origin);
+  url.searchParams.set("lat", String(params.lat));
+  url.searchParams.set("lng", String(params.lng));
+  url.searchParams.set("tab", params.tab);
+  url.searchParams.set("radiusKm", String(params.radiusKm ?? 4));
+  url.searchParams.set("limit", String(params.limit ?? POOL_SIZE));
+
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) return [];
+
+  const json = await res.json();
+  if (!json?.ok) return [];
+
+  return Array.isArray(json.cards) ? (json.cards as HomeCard[]) : [];
+}
+
 async function fetchNearbyCategoryRandom(
   loc: { lat: number; lng: number },
   tab: Exclude<HomeTabKey, "all">
 ): Promise<HomeCard[]> {
-  // ✅ 근처도 POOL_SIZE만큼 후보를 받고 그 안에서 랜덤 5개
-  const pool = await fetchNearbyStores({
-    lat: loc.lat,
-    lng: loc.lng,
-    tab,
-    limit: POOL_SIZE,
-  });
+  const pool = await fetchNearbyPoolFromApi({ lat: loc.lat, lng: loc.lng, tab, limit: POOL_SIZE });
   return pickRandomN(pool, PER_CATEGORY);
 }
 
