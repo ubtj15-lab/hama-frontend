@@ -143,6 +143,7 @@ async function fetchNearbyPoolFromApi(params: {
   tab: Exclude<HomeTabKey, "all">;
   radiusKm?: number;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<HomeCard[]> {
   const url = new URL("/api/places/nearby", window.location.origin);
   url.searchParams.set("lat", String(params.lat));
@@ -151,7 +152,7 @@ async function fetchNearbyPoolFromApi(params: {
   url.searchParams.set("radiusKm", String(params.radiusKm ?? 4));
   url.searchParams.set("limit", String(params.limit ?? POOL_SIZE));
 
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const res = await fetch(url.toString(), { cache: "no-store", signal: params.signal });
   if (!res.ok) return [];
 
   const json = await res.json();
@@ -162,24 +163,30 @@ async function fetchNearbyPoolFromApi(params: {
 async function fetchNearbyCategorySmart(
   loc: { lat: number; lng: number },
   tab: Exclude<HomeTabKey, "all">,
-  intent: IntentionType
+  intent: IntentionType,
+  signal?: AbortSignal
 ): Promise<HomeCard[]> {
   const pool = await fetchNearbyPoolFromApi({
     lat: loc.lat,
     lng: loc.lng,
     tab,
     limit: POOL_SIZE,
+    signal,
   });
 
   return rankAndPick(pool, intent, PER_CATEGORY);
 }
 
-async function fetchAllMixedNearby(loc: { lat: number; lng: number }, intent: IntentionType) {
+async function fetchAllMixedNearby(
+  loc: { lat: number; lng: number },
+  intent: IntentionType,
+  signal?: AbortSignal
+) {
   const [restaurants, cafes, salons, activities] = await Promise.all([
-    fetchNearbyCategorySmart(loc, "restaurant", intent),
-    fetchNearbyCategorySmart(loc, "cafe", intent),
-    fetchNearbyCategorySmart(loc, "salon", intent),
-    fetchNearbyCategorySmart(loc, "activity", intent),
+    fetchNearbyCategorySmart(loc, "restaurant", intent, signal),
+    fetchNearbyCategorySmart(loc, "cafe", intent, signal),
+    fetchNearbyCategorySmart(loc, "salon", intent, signal),
+    fetchNearbyCategorySmart(loc, "activity", intent, signal),
   ]);
 
   return [...restaurants, ...cafes, ...salons, ...activities];
@@ -193,12 +200,15 @@ export function useNearbyCards(
 ): Result {
   const [cards, setCards] = useState<HomeCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const lat = loc?.lat;
+  const lng = loc?.lng;
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     const run = async () => {
-      if (!loc?.lat || !loc?.lng) {
+      if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng)) {
         setCards([]);
         setIsLoading(false);
         return;
@@ -208,16 +218,17 @@ export function useNearbyCards(
       try {
         const result =
           tab === "all"
-            ? await fetchAllMixedNearby({ lat: loc.lat, lng: loc.lng }, intent)
+            ? await fetchAllMixedNearby({ lat, lng }, intent, controller.signal)
             : await fetchNearbyCategorySmart(
-                { lat: loc.lat, lng: loc.lng },
+                { lat, lng },
                 tab as Exclude<HomeTabKey, "all">,
-                intent
+                intent,
+                controller.signal
               );
 
         if (!cancelled) setCards(result);
       } catch (e) {
-        console.error("[useNearbyCards]", e);
+        if ((e as any)?.name !== "AbortError") console.error("[useNearbyCards]", e);
         if (!cancelled) setCards([]);
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -227,8 +238,9 @@ export function useNearbyCards(
     run();
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [tab, loc?.lat, loc?.lng, shuffleKey, intent]);
+  }, [tab, lat, lng, shuffleKey, intent]);
 
   return { cards, isLoading };
 }
