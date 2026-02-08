@@ -14,6 +14,30 @@ type Result = {
 const PER_CATEGORY = 5;
 const POOL_SIZE = 40;
 
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function withDistanceKm(pool: HomeCard[], loc: { lat: number; lng: number }): HomeCard[] {
+  return pool.map((card) => {
+    if (typeof card.distanceKm === "number" && Number.isFinite(card.distanceKm)) return card;
+    const lat = card.lat;
+    const lng = card.lng;
+    if (typeof lat !== "number" || typeof lng !== "number") return card;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return card;
+    return { ...card, distanceKm: haversineKm(loc.lat, loc.lng, lat, lng) };
+  });
+}
+
 function shuffle<T>(array: T[]): T[] {
   const a = [...array];
   for (let i = a.length - 1; i > 0; i--) {
@@ -36,25 +60,23 @@ function norm(s: any): string {
 }
 
 function tokenize(card: HomeCard): string {
-  const c: any = card as any;
   const parts: string[] = [];
-  if (c?.name) parts.push(String(c.name));
-  if (c?.category) parts.push(String(c.category));
-  if (Array.isArray(c?.tags)) parts.push(c.tags.join(" "));
-  if (Array.isArray(c?.mood)) parts.push(c.mood.join(" "));
-  if (c?.moodText) parts.push(String(c.moodText));
+  if (card?.name) parts.push(String(card.name));
+  if (card?.category) parts.push(String(card.category));
+  if (Array.isArray(card?.tags)) parts.push(card.tags.join(" "));
+  if (Array.isArray(card?.mood)) parts.push(card.mood.join(" "));
+  if (card?.moodText) parts.push(String(card.moodText));
   return norm(parts.join(" "));
 }
 
 /** ✅ 추천 이유 한 줄 생성 */
 function makeReasonText(card: HomeCard, intent: IntentionType): string {
-  const c: any = card as any;
-  const category = String(c?.category ?? "").toLowerCase();
+  const category = String(card?.category ?? "").toLowerCase();
   const text = tokenize(card);
   const has = (re: RegExp) => re.test(text);
 
   if (!intent || intent === "none") {
-    const fallback = String(c?.moodText ?? "").trim();
+    const fallback = String(card?.moodText ?? "").trim();
     return fallback || "지금 위치에서 가까운 곳 위주로 골랐어";
   }
 
@@ -89,11 +111,10 @@ function makeReasonText(card: HomeCard, intent: IntentionType): string {
 }
 
 function baseScore(card: HomeCard): number {
-  const c: any = card as any;
-  const curated = typeof c?.curated_score === "number" ? c.curated_score : 0;
+  const curated = typeof card?.curated_score === "number" ? card.curated_score : 0;
 
   // 근처는 거리도 조금 반영(가까울수록 +)
-  const distanceKm = typeof c?.distanceKm === "number" ? c.distanceKm : null;
+  const distanceKm = typeof card?.distanceKm === "number" ? card.distanceKm : null;
   const distanceBoost = typeof distanceKm === "number" ? Math.max(0, 6 - distanceKm) : 0;
 
   return curated * 0.8 + distanceBoost;
@@ -134,7 +155,7 @@ function rankAndPick(pool: HomeCard[], intent: IntentionType, n: number): HomeCa
     .map((x) => x.card);
 
   const top = ranked.slice(0, Math.min(20, ranked.length));
-  return pickRandomN(top, n).map((card) => ({ ...(card as any), reasonText: makeReasonText(card, intent) }));
+  return pickRandomN(top, n).map((card) => ({ ...card, reasonText: makeReasonText(card, intent) }));
 }
 
 async function fetchNearbyPoolFromApi(params: {
@@ -171,7 +192,8 @@ async function fetchNearbyCategorySmart(
     limit: POOL_SIZE,
   });
 
-  return rankAndPick(pool, intent, PER_CATEGORY);
+  const hydrated = withDistanceKm(pool, loc);
+  return rankAndPick(hydrated, intent, PER_CATEGORY);
 }
 
 async function fetchAllMixedNearby(loc: { lat: number; lng: number }, intent: IntentionType) {
@@ -198,7 +220,9 @@ export function useNearbyCards(
     let cancelled = false;
 
     const run = async () => {
-      if (!loc?.lat || !loc?.lng) {
+      const lat = loc?.lat;
+      const lng = loc?.lng;
+      if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng)) {
         setCards([]);
         setIsLoading(false);
         return;
@@ -208,9 +232,9 @@ export function useNearbyCards(
       try {
         const result =
           tab === "all"
-            ? await fetchAllMixedNearby({ lat: loc.lat, lng: loc.lng }, intent)
+            ? await fetchAllMixedNearby({ lat, lng }, intent)
             : await fetchNearbyCategorySmart(
-                { lat: loc.lat, lng: loc.lng },
+                { lat, lng },
                 tab as Exclude<HomeTabKey, "all">,
                 intent
               );
