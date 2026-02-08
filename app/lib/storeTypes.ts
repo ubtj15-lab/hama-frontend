@@ -67,6 +67,9 @@ export type HomeCard = {
   // UI에서 “조용한 분위기” 같은 텍스트로 쓰는 경우가 있음
   moodText?: string;
 
+  // ✅ 추천 카드에서 "추천 이유"로 표시
+  reasonText?: string;
+
   // “0.5km” 같이 표시하는 경우가 있어서 optional로 둠
   distanceKm?: number;
 
