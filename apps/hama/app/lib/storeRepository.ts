@@ -1,7 +1,7 @@
 // app/lib/storeRepository.ts
 "use client";
 
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@hama/shared";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { applyDefaultImage } from "@/lib/defaultCardImage";
 

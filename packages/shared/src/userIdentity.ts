@@ -1,5 +1,3 @@
-// app/_lib/userIdentity.ts
-
 import { getOrCreateSessionId } from "./sessionId";
 
 const LOGIN_FLAG_KEY = "hamaLoggedIn";

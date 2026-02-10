@@ -1,5 +1,3 @@
-// app/_lib/sessionId.ts
-
 const SESSION_KEY = "hama_session_id";
 
 export function getOrCreateSessionId(): string {

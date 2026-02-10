@@ -1,6 +1,6 @@
 # 모노레포 분리 계획 (A단계: 이동 대상 목록)
 
-**진행:** A·B·C·D 완료. E(shared)·F(검증) 대기.
+**진행:** A·B·C·D·E 완료. F(검증) 대기.
 
 ## 목표
 
@@ -245,11 +245,12 @@ hama-frontend/
 - `apps/partner/app/layout.tsx` (신규, 최소)
 - `apps/partner/app/globals.css` (최소)
 
-### 7.3 → packages/shared
+### 7.3 → packages/shared ✅ 완료
 
 - `app/lib/supabaseClient.ts` → `packages/shared/src/supabaseClient.ts`
 - `app/_lib/sessionId.ts` → `packages/shared/src/sessionId.ts`
 - `app/_lib/userIdentity.ts` → `packages/shared/src/userIdentity.ts`
+- hama: `@hama/shared` 의존성 추가, 위 3개 파일 삭제 후 import를 `@hama/shared`로 변경.
 
 ### 7.4 루트 유지
 

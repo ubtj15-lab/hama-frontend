@@ -1,7 +1,6 @@
 // app/lib/logEvent.ts
 
-import { getUserId } from "@/_lib/userIdentity";
-import { getOrCreateSessionId } from "@/_lib/sessionId";
+import { getUserId, getOrCreateSessionId } from "@hama/shared";
 
 type LogPayload = Record<string, unknown>;
 

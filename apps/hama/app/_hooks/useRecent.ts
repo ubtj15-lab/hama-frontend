@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import { storeToHomeCard } from "@/lib/storeMappers";
-import { getUserId } from "@/_lib/userIdentity";
+import { getUserId } from "@hama/shared";
 
 export function useRecent() {
   const [recentCards, setRecentCards] = useState<HomeCard[]>([]);
