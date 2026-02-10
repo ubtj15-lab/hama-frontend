@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import Link from "next/link";
 
 type Props = {
   isLoggedIn: boolean;
@@ -8,6 +9,7 @@ type Props = {
   points: number;
   onLoginClick: () => void;
   onGoPoints: () => void;
+  onGoMy?: () => void;
   onGoBeta: () => void;
 };
 
@@ -17,6 +19,7 @@ export default function HomeTopBar({
   points,
   onLoginClick,
   onGoPoints,
+  onGoMy,
   onGoBeta,
 }: Props) {
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -68,7 +71,24 @@ export default function HomeTopBar({
           ☰
         </button>
 
-        <div style={{ fontWeight: 900, letterSpacing: 1.2, fontSize: 22, color: "#2563EB" }}>HAMA</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ fontWeight: 900, letterSpacing: 1.2, fontSize: 22, color: "#2563EB" }}>HAMA</div>
+          <Link
+            href="/partner"
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#1e40af",
+              textDecoration: "none",
+              padding: "6px 12px",
+              borderRadius: 999,
+              background: "#dbeafe",
+              border: "1px solid #93c5fd",
+            }}
+          >
+            매장주 대시보드
+          </Link>
+        </div>
 
         <button
           type="button"
@@ -105,11 +125,13 @@ export default function HomeTopBar({
               position: "absolute",
               top: menuPos.top,
               left: menuPos.left,
-              width: 180,
+              width: 200,
+              maxHeight: "min(70vh, 400px)",
               borderRadius: 16,
               background: "#ffffff",
               boxShadow: "0 16px 40px rgba(15,23,42,0.18)",
-              overflow: "hidden",
+              overflowY: "auto",
+              overflowX: "hidden",
             }}
           >
             <div style={{ padding: "10px 12px", borderBottom: "1px solid #E5E7EB" }}>
@@ -119,6 +141,27 @@ export default function HomeTopBar({
                 {points.toLocaleString()}P
               </div>
             </div>
+
+            <Link
+              href="/partner"
+              onClick={() => setMenuOpen(false)}
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "12px 12px",
+                textAlign: "left",
+                background: "#EFF6FF",
+                border: "none",
+                borderBottom: "1px solid #E5E7EB",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#1d4ed8",
+                textDecoration: "none",
+              }}
+            >
+              매장주 대시보드
+            </Link>
 
             <button
               type="button"
@@ -139,6 +182,28 @@ export default function HomeTopBar({
             >
               포인트 내역
             </button>
+
+            {onGoMy && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onGoMy();
+                }}
+                style={{
+                  width: "100%",
+                  padding: "12px 12px",
+                  textAlign: "left",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  color: "#111827",
+                }}
+              >
+                저장·최근본
+              </button>
+            )}
 
             <button
               type="button"

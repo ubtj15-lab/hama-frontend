@@ -1,5 +1,8 @@
 // app/lib/logEvent.ts
 
+import { getUserId } from "@/_lib/userIdentity";
+import { getOrCreateSessionId } from "@/_lib/sessionId";
+
 type LogPayload = Record<string, unknown>;
 
 export function logEvent(event: string, payload: LogPayload = {}) {
@@ -7,16 +10,27 @@ export function logEvent(event: string, payload: LogPayload = {}) {
   if (typeof window === "undefined") return;
 
   try {
-    // 개발 중 확인용: 필요하면 콘솔로만 남기기
-    // console.log("[logEvent]", event, payload);
-
-    // 나중에 Supabase/GA/Amplitude 붙일 때 여기만 바꾸면 됨
     (window as any).__HAMA_LOGS__ = (window as any).__HAMA_LOGS__ || [];
     (window as any).__HAMA_LOGS__.push({
       event,
       payload,
       ts: Date.now(),
     });
+
+    // Supabase events 테이블로 전송 (fire-and-forget)
+    const userId = getUserId();
+    const sessionId = getOrCreateSessionId();
+    const isLoggedIn = userId.startsWith("user_");
+    fetch("/api/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: isLoggedIn ? userId : null,
+        session_id: sessionId || "unknown",
+        type: event,
+        data: payload,
+      }),
+    }).catch(() => {});
   } catch {
     // logging 실패해도 앱은 죽으면 안 됨
   }

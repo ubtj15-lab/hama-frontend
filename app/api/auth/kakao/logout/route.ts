@@ -3,25 +3,39 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
   const REST_KEY = (process.env.KAKAO_REST_API_KEY || "").trim();
-  const LOGOUT_REDIRECT_URI =
+  const fallback =
     (process.env.NEXT_PUBLIC_KAKAO_LOGOUT_REDIRECT_URI || "").trim();
 
-  if (!REST_KEY || !LOGOUT_REDIRECT_URI) {
+  if (!REST_KEY) {
     return new Response("Kakao env not set", { status: 500 });
   }
 
-  // 여기서 우리 쪽 세션/쿠키 지우는 로직이 있다면 같이 실행
-  // 예시:
-  // const res = NextResponse.redirect(LOGOUT_REDIRECT_URI);
-  // res.cookies.set("hama_session", "", { maxAge: 0, path: "/" });
-  // return res;
+  // 현재 접속한 주소(origin)로 로그아웃 후 돌아가기 — Host 헤더 기준 (localhost면 localhost, Vercel이면 Vercel)
+  const host = req.headers.get("host") || req.headers.get("x-forwarded-host");
+  const proto = req.headers.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");
+  let logoutRedirectUri: string;
+  if (host) {
+    logoutRedirectUri = `${proto}://${host}/`;
+  } else {
+    try {
+      const url = new URL(req.url);
+      logoutRedirectUri = url.origin;
+    } catch {
+      logoutRedirectUri = fallback || "http://localhost:3000";
+    }
+  }
+  if (!logoutRedirectUri) logoutRedirectUri = "http://localhost:3000/";
+  if (!logoutRedirectUri.endsWith("/")) logoutRedirectUri += "/";
 
   const params = new URLSearchParams({
     client_id: REST_KEY,
-    logout_redirect_uri: LOGOUT_REDIRECT_URI,
+    logout_redirect_uri: logoutRedirectUri,
   });
 
   const kakaoLogoutUrl = `https://kauth.kakao.com/oauth/logout?${params.toString()}`;
 
-  return NextResponse.redirect(kakaoLogoutUrl);
+  const res = NextResponse.redirect(kakaoLogoutUrl);
+  res.cookies.set("hama_user_id", "", { maxAge: 0, path: "/" });
+  res.cookies.set("hama_user_nickname", "", { maxAge: 0, path: "/" });
+  return res;
 }

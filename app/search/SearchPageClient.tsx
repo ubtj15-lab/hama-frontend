@@ -15,6 +15,8 @@ import {
 
 import { useSearchStores } from "./_hooks/useSearchStores";
 import { useCardPaging } from "./_hooks/useCardPaging";
+import { useRecent } from "../_hooks/useRecent";
+import { useSaved } from "../_hooks/useSaved";
 import { useUIOverlay } from "../_providers/UIOverlayProvider";
 
 export default function SearchPageClient() {
@@ -31,31 +33,33 @@ export default function SearchPageClient() {
 
   // ✅ "종합"은 activeCategory = null
   const activeCategory: Category | null = useMemo(() => {
-    if (!rawCategory) return null;
-
-    const t = String(rawCategory).trim();
+    const t = String(rawCategory ?? "").trim();
     const tl = t.toLowerCase();
 
-    if (tl === "all" || tl === "total" || t === "종합") return null;
+    if (t && (tl === "all" || tl === "total" || t === "종합")) return null;
 
-    const mapped = mapUrlCategoryToCategory(t);
-    if (mapped) return mapped;
+    if (rawCategory) {
+      const mapped = mapUrlCategoryToCategory(t);
+      if (mapped) return mapped;
+    }
 
-    // rawCategory가 있을 때만 fallback 허용
-    return inferCategoryFromQuery(query);
+    // rawCategory 없고 query가 있으면 query로 추론 (중국집, 카페 등)
+    if (query.trim()) return inferCategoryFromQuery(query);
+    return null;
   }, [rawCategory, query]);
 
   // 데이터 로딩
   const { stores, loading } = useSearchStores();
 
-  // 필터/정렬/페이지
-  const { categoryStores, pages } = useCardPaging({
+  // 필터/정렬/페이지 (radiusKm 15km로 확대 - 3km면 결과 없을 수 있음)
+  const { categoryStores, pages, usedChineseFallback } = useCardPaging({
     stores: stores as any,
     activeCategory, // Category | null
     query,
     hasMyLocation,
     myLat,
     myLng,
+    radiusKm: 15,
   });
 
   // ✅ pages를 무조건 CardInfo[][] 로 안전 변환 (3페이지 고정)
@@ -78,7 +82,8 @@ export default function SearchPageClient() {
   const [expanded, setExpanded] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  // ✅ FloatingMic 숨김 연동 (가장 중요)
+  const { recordView } = useRecent();
+  const { toggleSaved, isSaved } = useSaved();
   const { setOverlayOpen } = useUIOverlay();
   useEffect(() => {
     setOverlayOpen(overlayVisible);
@@ -206,6 +211,7 @@ export default function SearchPageClient() {
   // 카드 확대 열기/닫기
   const openExpanded = (id: string) => {
     setSelectedId(id);
+    recordView(id);
     setDetailOpen(false);
     resetReserve();
 
@@ -323,6 +329,7 @@ export default function SearchPageClient() {
         <SearchCards
           query={query}
           hasMyLocation={hasMyLocation}
+          usedChineseFallback={usedChineseFallback}
           pageIndex={pageIndex}
           pages={safePages}
           selected={selected}
@@ -355,6 +362,8 @@ export default function SearchPageClient() {
         onOverlayScroll={handleOverlayScroll}
         setReserveDate={(v) => setReserveDate(v)}
         setReserveTime={(v) => setReserveTime(v)}
+        isSaved={isSaved}
+        onToggleSaved={toggleSaved}
       />
     </main>
   );

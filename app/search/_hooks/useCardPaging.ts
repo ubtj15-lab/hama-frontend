@@ -20,6 +20,7 @@ type Result = {
   categoryStores: CardInfo[];
   pages: CardInfo[][];
   usedFallbackFar?: boolean;
+  usedChineseFallback?: boolean;
 };
 
 function normText(v: unknown): string {
@@ -71,7 +72,7 @@ function extractKeywords(rawQuery: string, activeCategory: Category | null): str
     .map((t) => t.trim())
     .filter(Boolean);
 
-  // 불용어(자연어에서 거의 의미 없는 단어들)
+  // 불용어(자연어에서 거의 의미 없는 단어들) - 점심/저녁/아침은 시나리오용으로 유지
   const stop = new Set([
     "근처",
     "가까운",
@@ -83,9 +84,6 @@ function extractKeywords(rawQuery: string, activeCategory: Category | null): str
     "뭐",
     "먹지",
     "먹을까",
-    "점심",
-    "저녁",
-    "아침",
     "오늘",
     "내일",
     "요즘",
@@ -105,11 +103,34 @@ function extractKeywords(rawQuery: string, activeCategory: Category | null): str
   if (activeCategory === "salon") categoryStop.add("미용실");
   if (activeCategory === "activity") categoryStop.add("액티비티");
 
-  const keywords = tokens
+  let keywords = tokens
     .filter((t) => !stop.has(t))
     .filter((t) => !categoryStop.has(t))
     .map((t) => normText(t))
     .filter((t) => t.length >= 2); // 너무 짧은 건 제거
+
+  // 시나리오별 키워드 확장
+  const scenarioExpansions: Record<string, string[]> = {
+    china: ["중국집", "중국", "중식", "짜장", "짬뽕", "짜장면", "탕수", "마라", "훠궈", "딤섬", "양꼬치"],
+    korean: ["한정식", "한식", "코스", "정식", "가족식사", "단체가능", "코다리", "명태", "보양식"],
+    solo: ["혼밥", "혼자", "1인", "1인석", "단독", "혼술"],
+    lunch: ["점심", "점심맛집", "점심식사", "런치", "브런치", "가성비", "메뉴"],
+    company: ["회식", "단체", "모임", "룸", "10인", "20인", "단체가능", "회의"],
+  };
+  const scenarioTriggers: Record<string, (k: string) => boolean> = {
+    china: (k) => k.includes("중국") || k === "중식" || k.includes("짜장") || k.includes("짬뽕"),
+    korean: (k) => k.includes("한정식") || k === "한식" || k.includes("정식"),
+    solo: (k) => k.includes("혼밥") || k.includes("혼자") || k === "1인",
+    lunch: (k) => k.includes("점심") || k.includes("런치") || k.includes("브런치"),
+    company: (k) => k.includes("회식") || k.includes("단체") || k.includes("모임"),
+  };
+  for (const [scenario, expand] of Object.entries(scenarioExpansions)) {
+    const trigger = scenarioTriggers[scenario];
+    if (keywords.some(trigger)) {
+      keywords = Array.from(new Set([...keywords, ...expand]));
+      break; // 한 시나리오만 적용
+    }
+  }
 
   // 중복 제거
   return Array.from(new Set(keywords));
@@ -168,31 +189,125 @@ export function useCardPaging(args: Args): Result {
       })
       .filter((v): v is NormalizedCard => v !== null);
 
-    // 2) 카테고리 스코프(있을 때만)
+    // 2) 카테고리 스코프
+    // 회식/혼밥/점심/한정식 등 식당 시나리오는 반드시 restaurant만 (미용실·액티비티·카페 제외)
     let scoped: NormalizedCard[] = normalized;
-    if (activeCategory) {
-      scoped = scoped.filter((s) => s.category === activeCategory);
+    const forceRestaurant = keywords.some((k) =>
+      ["회식", "단체", "모임", "혼밥", "혼자", "점심", "한정식", "한식"].includes(k)
+    );
+    const effectiveCategory = activeCategory || (forceRestaurant ? "restaurant" : null);
+    if (effectiveCategory) {
+      scoped = scoped.filter((s) => s.category === effectiveCategory);
     }
 
     // 3) 키워드 검색(자연어는 키워드가 없으면 필터 자체를 안 건다)
+    const beforeKeywordFilter = scoped;
+    const hasChineseIntent = activeCategory === "restaurant" && keywords.some((k) =>
+      ["중식", "짜장", "짬뽕", "중국집", "중국", "탕수", "마라", "훠궈", "딤섬", "양꼬치", "짜장면"].includes(k)
+    );
+
+    const hasKoreanIntent = activeCategory === "restaurant" && keywords.some((k) =>
+      ["한정식", "한식", "정식", "코스"].includes(k)
+    );
+    const hasSoloIntent = keywords.some((k) => ["혼밥", "혼자", "1인"].includes(k));
+    const hasLunchIntent = keywords.some((k) => ["점심", "런치", "브런치"].includes(k));
+    const hasCompanyIntent = keywords.some((k) => ["회식", "단체", "모임"].includes(k));
+
+    const scenarioExcludes: Record<string, string[]> = {
+      china: ["한정식", "한식", "국밥", "백반", "김치", "삼겹", "갈비", "찌개", "비빔", "냉면", "분식", "족발", "보쌈", "코다리", "명태", "순대국", "해장국"],
+      korean: ["중국집", "중국", "짬뽕", "짜장", "마라", "훠궈", "양꼬치", "일식", "초밥", "라멘", "양식", "파스타", "스테이크"],
+      solo: ["단체전용", "10인이상", "20인이상"], // 완화: "회식"만 있으면 혼밥도 가능한 곳 있을 수 있음
+      company: ["혼밥전문", "1인전용"], // 완화: "혼자"만 있으면 회식도 가능한 곳 있을 수 있음
+    };
+
     scoped = scoped.filter((s) => {
       if (!keywords.length) return true;
 
       const name = normText((s as any).name ?? "");
       const addr = normText((s as any).address ?? "");
-      const mood = normText((s as any).mood ?? "");
-
+      const moodRaw = (s as any).mood;
+      const mood = Array.isArray(moodRaw) ? normText(moodRaw.join(" ")) : normText(moodRaw ?? "");
       const tagsRaw = (s as any).tags;
-      const tags = Array.isArray(tagsRaw)
-        ? normText(tagsRaw.join(" "))
-        : normText(tagsRaw ?? "");
+      const tags = Array.isArray(tagsRaw) ? normText(tagsRaw.join(" ")) : normText(tagsRaw ?? "");
+      const blob = `${name} ${addr} ${mood} ${tags}`;
 
-      // ✅ 키워드 중 하나라도 포함되면 통과
+      if (hasChineseIntent && scenarioExcludes.china.some((k) => blob.includes(k))) return false;
+      if (hasKoreanIntent && scenarioExcludes.korean.some((k) => blob.includes(k))) return false;
+      if (hasSoloIntent && scenarioExcludes.solo.some((k) => blob.includes(k))) return false;
+      if (hasCompanyIntent && scenarioExcludes.company.some((k) => blob.includes(k))) return false;
+
       return keywords.some((k) => name.includes(k) || addr.includes(k) || mood.includes(k) || tags.includes(k));
     });
 
-    // 4) 거리 정렬(가능할 때만)
-    if (hasMyLocation) {
+    // 3-1) 중국집 검색 시 → 중국집만 표시 (폴백 없이, 일식/양식 등 다른 식당 제외)
+    let usedChineseFallback = false;
+    if (hasChineseIntent && scoped.length === 0 && beforeKeywordFilter.length > 0) {
+      // 중국 키워드가 없는 식당은 제외 (일식·양식 등 다른 카테고리 안 나오게)
+      const chineseKeywords = ["중국집", "중국", "중식", "짜장", "짬뽕", "짜장면", "탕수", "마라", "훠궈", "딤섬", "양꼬치"];
+      scoped = beforeKeywordFilter.filter((s) => {
+        const blob = `${normText((s as any).name ?? "")} ${normText((s as any).address ?? "")} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""}`;
+        return chineseKeywords.some((k) => blob.includes(k));
+      });
+      usedChineseFallback = scoped.length > 0;
+    }
+    if (hasKoreanIntent && scoped.length === 0 && beforeKeywordFilter.length > 0) {
+      const koreanKeywords = ["한정식", "한식", "정식", "코스", "가족식사", "단체가능", "코다리", "명태", "뷔페"];
+      scoped = beforeKeywordFilter.filter((s) => {
+        const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""}`;
+        return koreanKeywords.some((k) => blob.includes(k));
+      });
+    }
+    if (hasCompanyIntent && scoped.length === 0 && beforeKeywordFilter.length > 0) {
+      const companyKeywords = ["회식", "단체", "모임", "룸", "단체가능"];
+      scoped = beforeKeywordFilter.filter((s) => {
+        const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""}`;
+        return companyKeywords.some((k) => blob.includes(k));
+      });
+      // 태그 있는 곳 없으면 → 식당 전체 표시 (회식 가능한 곳)
+      if (scoped.length === 0) scoped = beforeKeywordFilter;
+    }
+    if (hasSoloIntent && scoped.length === 0 && beforeKeywordFilter.length > 0) {
+      const soloKeywords = ["혼밥", "혼자", "1인", "1인석"];
+      scoped = beforeKeywordFilter.filter((s) => {
+        const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""}`;
+        return soloKeywords.some((k) => blob.includes(k));
+      });
+      // 태그 있는 곳 없으면 → 식당 전체 표시 (혼밥 가능한 곳)
+      if (scoped.length === 0) scoped = beforeKeywordFilter;
+    }
+    if (hasLunchIntent && scoped.length === 0 && beforeKeywordFilter.length > 0) {
+      const lunchKeywords = ["점심", "점심맛집", "점심식사", "런치", "브런치", "가성비"];
+      scoped = beforeKeywordFilter.filter((s) => {
+        const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""}`;
+        return lunchKeywords.some((k) => blob.includes(k));
+      });
+      if (scoped.length === 0) scoped = beforeKeywordFilter;
+    }
+
+    // 4) 정렬: 시나리오별 우선순위 키워드 많은 순 → 거리순
+    const scenarioPriority: Record<string, string[]> = {
+      china: ["중국집", "중국", "중식", "짜장", "짬뽕", "짜장면", "탕수", "마라", "훠궈", "딤섬", "양꼬치"],
+      korean: ["한정식", "한식", "정식", "코스", "가족식사"],
+      solo: ["혼밥", "혼자", "1인", "1인석"],
+      lunch: ["점심", "점심맛집", "점심식사", "런치", "브런치", "가성비"],
+      company: ["회식", "단체", "모임", "룸", "단체가능"],
+    };
+    const activeScenario = hasChineseIntent ? "china" : hasKoreanIntent ? "korean" : hasSoloIntent ? "solo" : hasLunchIntent ? "lunch" : hasCompanyIntent ? "company" : null;
+    if (activeScenario && scenarioPriority[activeScenario]) {
+      const priorityKw = scenarioPriority[activeScenario];
+      const countMatch = (s: NormalizedCard) => {
+        const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""}`;
+        return priorityKw.filter((k) => blob.includes(k)).length;
+      };
+      scoped = scoped.sort((a, b) => {
+        const ca = countMatch(a);
+        const cb = countMatch(b);
+        if (cb !== ca) return cb - ca;
+        const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
+        const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
+        return da - db;
+      });
+    } else if (hasMyLocation) {
       scoped = scoped.sort((a, b) => {
         const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
         const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
@@ -215,14 +330,33 @@ export function useCardPaging(args: Args): Result {
       }
     }
 
-    const categoryStores: CardInfo[] = scoped;
+    let categoryStores: CardInfo[] = scoped;
 
+    // 마지막 폴백: 결과 0개면 키워드만 적용
+    // 시나리오 검색(회식/혼밥/한정식 등) 시 다른 카테고리(미용실/액티비티/카페) 노출 금지
+    const hasStrictScenario = hasChineseIntent || hasKoreanIntent || hasSoloIntent || hasCompanyIntent || hasLunchIntent;
+    if (categoryStores.length === 0 && normalized.length > 0 && !hasStrictScenario) {
+      // activeCategory가 있으면 해당 카테고리만 (회식·혼밥은 식당만)
+      let pool = normalized;
+      if (activeCategory) pool = pool.filter((s) => s.category === activeCategory);
+      const keywordFiltered = keywords.length > 0
+        ? pool.filter((s) => {
+            const name = normText((s as any).name ?? "");
+            const tags = Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : "";
+            return keywords.some((k) => name.includes(k) || tags.includes(k));
+          })
+        : pool;
+      categoryStores = keywordFiltered.length > 0 ? keywordFiltered.slice(0, 200) : pool.slice(0, 200);
+    }
+
+    // ✅ 추천 카드 랜덤 순서 (같은 검색어여도 매번 다르게)
+    const shuffled = [...categoryStores].sort(() => Math.random() - 0.5);
     const pages: CardInfo[][] = [
-      categoryStores.slice(0, 3),
-      categoryStores.slice(3, 6),
-      categoryStores.slice(6, 9),
+      shuffled.slice(0, 3),
+      shuffled.slice(3, 6),
+      shuffled.slice(6, 9),
     ];
 
-    return { categoryStores, pages, usedFallbackFar };
+    return { categoryStores: shuffled, pages, usedFallbackFar, usedChineseFallback };
   }, [stores, activeCategory, query, hasMyLocation, myLat, myLng, exploreMode, radiusKm]);
 }

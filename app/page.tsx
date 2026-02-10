@@ -1,8 +1,8 @@
 // app/page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
@@ -16,6 +16,8 @@ import HomeSwipeDeck from "./_components/HomeSwipeDeck";
 import { useHomeCards } from "./_hooks/useHomeCards";
 import { useHomeMode } from "./_hooks/useHomeMode";
 import { useNearbyCards } from "./_hooks/useNearbyCards";
+import { useRecent } from "./_hooks/useRecent";
+import { useSaved } from "./_hooks/useSaved";
 import { useUIOverlay } from "./_providers/UIOverlayProvider";
 import { openDirections } from "@/lib/openDirections";
 import { openNaverPlace } from "@/lib/openNaverPlace";
@@ -97,7 +99,7 @@ function inferTabFromQuery(q: string): HomeTabKey {
   if (/(카페|커피|디저트|베이커리|브런치|라떼)/.test(t)) return "cafe";
 
   if (
-    /(식당|맛집|밥|점심|저녁|아침|혼밥|국밥|한식|일식|중식|양식|파스타|피자|초밥|라멘|고기|삼겹|갈비|회|분식)/.test(
+    /(식당|맛집|밥|점심|저녁|아침|혼밥|국밥|한식|일식|중식|양식|파스타|피자|초밥|라멘|고기|삼겹|갈비|회|분식|중국집|중국|한정식|점심식사|회식)/.test(
       t
     )
   )
@@ -113,8 +115,9 @@ function inferTabFromQuery(q: string): HomeTabKey {
 
 type Mode = "recommend" | "explore";
 
-export default function HomePage() {
+function HomePageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [query, setQuery] = useState("");
 
@@ -144,7 +147,11 @@ export default function HomePage() {
 
   const [selectedCard, setSelectedCard] = useState<HomeCard | null>(null);
 
+  const { recentCards, recordView } = useRecent();
+  const { toggleSaved, isSaved } = useSaved();
   const { setOverlayOpen } = useUIOverlay();
+
+  const openId = searchParams.get("open");
   useEffect(() => {
     setOverlayOpen(!!selectedCard);
   }, [selectedCard, setOverlayOpen]);
@@ -152,6 +159,16 @@ export default function HomePage() {
   useEffect(() => {
     setShuffleKey(Date.now());
   }, []);
+
+  useEffect(() => {
+    if (!openId) return;
+    const fromRecent = recentCards.find((c) => c.id === openId);
+    const card = fromRecent;
+    if (card) {
+      setSelectedCard(card);
+      router.replace("/", { scroll: false });
+    }
+  }, [openId, recentCards, router]);
 
   useEffect(() => {
     const sync = () => {
@@ -228,13 +245,6 @@ export default function HomePage() {
     }
 
     logEvent("login_start", { page: "home" });
-    if (typeof window !== "undefined") {
-      const newUser: HamaUser = { nickname: "카카오 사용자", points: user.points };
-      window.localStorage.setItem(USER_KEY, JSON.stringify(newUser));
-      window.localStorage.setItem(LOGIN_FLAG_KEY, "1");
-      setUser(newUser);
-      setIsLoggedIn(true);
-    }
     window.location.href = "/api/auth/kakao/login";
   };
 
@@ -330,10 +340,58 @@ export default function HomePage() {
           points={user.points}
           onLoginClick={handleKakaoButtonClick}
           onGoPoints={() => router.push("/mypage/points")}
+          onGoMy={() => router.push("/my")}
           onGoBeta={() => router.push("/beta-info")}
         />
 
         <HomeSearchBar query={query} onChange={setQuery} onSubmit={handleSearchSubmit} />
+
+        {recentCards.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginBottom: 8 }}>
+              최근 본 카드
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                overflowX: "auto",
+                paddingBottom: 4,
+                scrollbarWidth: "none",
+              }}
+            >
+              {recentCards.slice(0, 10).map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCard(c);
+                    recordView(c.id);
+                  }}
+                  style={{
+                    flexShrink: 0,
+                    width: 100,
+                    height: 100,
+                    borderRadius: 12,
+                    overflow: "hidden",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    background: "#111827",
+                  }}
+                >
+                  <Image
+                    src={getImageUrl(c) ?? "/images/category/restaurant.jpg"}
+                    alt={c.name ?? ""}
+                    width={100}
+                    height={100}
+                    style={{ objectFit: "cover", width: "100%", height: "100%" }}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div
           style={{
@@ -385,6 +443,7 @@ export default function HomePage() {
           isLoading={deckLoading}
           onOpenCard={(c) => {
             setSelectedCard(c);
+            recordView(c.id);
             addPoints(2, "홈 추천 카드 열람");
             logEvent("home_card_open", {
               id: c.id,
@@ -468,6 +527,31 @@ export default function HomePage() {
                   >
                     ←
                   </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSaved(selectedCard.id);
+                    }}
+                    style={{
+                      position: "absolute",
+                      top: 16,
+                      right: 16,
+                      width: 36,
+                      height: 36,
+                      borderRadius: 999,
+                      border: "none",
+                      background: "rgba(15,23,42,0.65)",
+                      color: isSaved(selectedCard.id) ? "#f43f5e" : "#f9fafb",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      fontSize: 18,
+                    }}
+                  >
+                    {isSaved(selectedCard.id) ? "♥" : "♡"}
+                  </button>
 
                   <div
                     style={{
@@ -547,5 +631,13 @@ export default function HomePage() {
         {!selectedCard && <FeedbackFab />}
       </div>
     </main>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F8FAFC" }}>로딩 중...</div>}>
+      <HomePageContent />
+    </Suspense>
   );
 }

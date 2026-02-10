@@ -1,0 +1,330 @@
+name,category,area,address,lat,lng,phone,kakao_place_url,source,mood,with_kids,for_work,price_level,tags,reservation_required
+더차이나,restaurant,"오산,평택",경기도 평택시 서탄면 발안로 990,36.9886,127.0237,031-663-8886,https://kko.kakao.com/4uGomeDohS, kakao,"든든한,가성비좋은",TRUE,FALSE,1,중국집 짬뽕 탕수육 볶음밥 중화요리 점심식사 가족동반 주차가능 서탄면맛집,FALSE
+공룡국수,restaurant,오산,경기도 오산시 경기대로148번길 16 1층 ,37.15457,127.07603,031-375-7080,https://kko.kakao.com/SxWDvDaKE2, kakao,"든든한,서민적인",TRUE,FALSE,1,국수 잔치국수 칼국수 콩국수 비빔국수 점심맛집 혼밥 로컬맛집 오산맛집,FALSE
+개성집,restaurant,오산,경기도 오산시 동부대로568번길 21-4,37.15888,127.0835,031-376-3880,https://kko.kakao.com/Edt42JQWsr,kakao,"정갈한,가족식사",TRUE,FALSE,2,코다리조림 명태조림 한정식 가족식사 단체가능 점심저녁 로컬맛집 오산맛집,TRUE
+최미삼순대국,restaurant,오산,경기 오산시 경기동로 131-14 1층,37.16231,127.07621,0507-1315-7801,https://kko.to/KGbHH6cvOu,kakao,"구수한,서민적인",TRUE,FALSE,1,순대국 순대 전문점 해장국 밥집 점심맛집 로컬맛집 오산맛집,FALSE
+삼미포차,restaurant,오산,경기도 오산시 오산로 237,37.160385,127.075819,031-375-5830,https://kko.kakao.com/Jd1TeIAKV0,kakao,"소박한,편안한",TRUE,FALSE,1,백반 가정식 점심맛집 기사식당 로컬맛집 오산맛집,FALSE
+두부마을,restaurant,오산,경기도 오산시 동부대로568번길 21,37.15836,127.08309,0507-1463-6114,https://kko.to/RA3_i_tS7G,kakao,"건강한,가족식사",TRUE,FALSE,2,두부요리 두부전골 두부보쌈 연잎보쌈정식 콩국수 비지찌개 한정식 건강식 점심식사 가족동반 오산맛집,FALSE
+오투닭갈비,restaurant,오산,경기도 오산시 죽담안로 38-4,37.16082,127.07164,031-373-5292,https://kko.kakao.com/F6VvA_PwwP,kakao,"활기찬,푸짐한",TRUE,FALSE,2,닭갈비 철판닭갈비 볶음밥 가족식사 회식 친구모임 오산맛집,FALSE
+보배담 안성양성점,restaurant,안성시 양성,경기도 안성시 양성면 만세로 735 (동항리 576),36.9886,127.0237,0507-1393-2393,https://kko.to/BkrWpAOHeP,kakao,"서민적인,활기찬",TRUE,FALSE,1,한식 버섯육개장 열무국수 돼지불고기 김치찜 점심식사 가족식사 단체가능 무료주차 로컬맛집 안성맛집,FALSE
+누리네 복개천찌개찌개,restaurant,오산,경기도 오산시 오산로190번길 29,37.16033,127.07595,0507-1371-5155,https://kko.to/MG9oEb6ViK,kakao,"푸짐한,따뜻한",TRUE,FALSE,1,찌개 김치찌개 김치돈짜글이 김치만두전골 돼지곱창전골 오징어찌개 닭도리탕 점심저녁 가족식사 로컬맛집 오산맛집,FALSE
+오산깍두기집,restaurant,오산,경기도 오산시 오산로190번길 16,37.16021,127.07563,031-372-1767,https://naver.me/FuzrlZRK,naver,"든든한,매운맛",TRUE,FALSE,1,감자탕 뼈해장국 단체가능 저녁맛집 가족모임 로컬맛집 오산맛집,FALSE
+황금장수촌 오산점,restaurant,오산,경기도 오산시 독산성로 425,37.17202,127.08241,031-372-5292,https://naver.me/xoH8w9h5,naver,"든든한,보양식",TRUE,FALSE,2,백숙 능이백숙 닭백숙 오리백숙 보양식 가족식사 단체가능 부모님모시고가기좋은 오산맛집,TRUE
+다미식,restaurant,오산,경기도 오산시 수목원로49번길 55 1층,37.15353,127.08674,0507-1335-7918,https://naver.me/xHgIq7eW,naver,"푸짐한,가족외식",TRUE,FALSE,2,중식 중국요리 돌짜장 동파육 우삼겹짬뽕 동태내장전골 점심식사 저녁식사 가족모임 무료주차 오산맛집,TRUE
+짬뽕지존 오산점,restaurant,오산,경기도 오산시 경기대로 470 1층 (수청동),37.1598,127.0771,0507-1310-5161,https://naver.me/FO9ouRpf,naver,"얼큰한,활기찬",TRUE,FALSE,1,중식 짬뽕전문 짬뽕 짜장면 탕수육 24시간 주차가능 포장가능 점심저녁 오산맛집,FALSE
+이비가짬뽕 오산점,restaurant,오산,"경기도 오산시 수목원로 466 성민리치프라자 2층 204호, 205호",37.15262,127.08583,031-378-9992,https://naver.me/5owH3oNK,naver,"얼큰한,캐주얼한",TRUE,FALSE,2,중식 짬뽕전문 이비가짬뽕 짜장면 탕수육 점심 저녁 가족식사 오산맛집,FALSE
+역대짬뽕,restaurant,오산,경기도 오산시 운천로 109 1층,37.15948,127.07862,0507-1416-7433,https://naver.me/xyTRgSLD,naver,"불맛강한,푸짐한",TRUE,FALSE,1,중식 짬뽕 중국집 불짬뽕 황짬뽕 백합짬뽕 탕수육 볶음밥 점심 저녁 가족식사 단체모임 오산맛집,FALSE
+웍하이,restaurant,오산,경기도 오산시 가장로530번길 3 1층,37.16021,127.07754,010-9950-9844,https://naver.me/Giptk7RK,naver," 활기찬,푸짐한",TRUE,FALSE,1,중식 중국집 간짜장 짬뽕 훈연고기짬뽕 중화비빔밥 탕수육 점심식사 가족식사 오산맛집,FALSE
+홍화루,restaurant,오산,경기도 오산시 오산로 23 A동 1층,37.15986,127.07659,0507-1428-9979,https://naver.me/5S9QpUrZ,naver,"푸짐한,전통적인",TRUE,FALSE,2,중식 중국요리 짬뽕 탕수육 간짜장 해물짬뽕 볶음밥 깐풍기 점심저녁 가족식사 오산맛집,TRUE
+한성각,restaurant,오산,경기도 오산시 오산로190번길 19,37.16035,127.07587,031-374-4464,https://naver.me/58NdXZzX,naver,"전통적인,서민적인",TRUE,FALSE,1,중식 중국집 짜장 짬뽕 탕수육 볶음밥 점심저녁 가족식사 오산맛집 로컬맛집,FALSE
+보배반점,restaurant,오산,경기도 오산시 운암로 17 중앙상가빌딩 1층 101호,37.1595,127.0779,031-377-9017,https://naver.me/53leolZO,naver,"캐주얼한,친근한",TRUE,FALSE,1,중식 중국집 짜장 짬뽕 탕수육 볶음밥 점심저녁 가족식사 혼밥 오산맛집 로컬맛집,FALSE
+오산반점,restaurant,오산,경기도 오산시 오산로 157 1층 (오산동 730-4),37.1613,127.0792,031-373-1690,https://naver.me/FjCCLZMU,naver,"전통적인,든든한",TRUE,FALSE,1,중식 중국요리 짜장면 삼선짬뽕 탕수육 유린기 칠리새우 볶음밥 점심저녁 가족식사 오산맛집,FALSE
+하이난 오산본점,restaurant,오산,경기도 오산시 경기동로 191 1층 (경기동 727-10),37.15922,127.08104,031-376-3885,https://naver.me/FbOn8cE0,naver,"전통적인,정통중식",TRUE,FALSE,2,중식 중국요리 짜장 짬뽕 탕수육 볶음밥 유린기 해물짬뽕 어린이메뉴 가족식사 점심저녁 오산맛집 로컬맛집,FALSE
+비다벨로 오산직영점,restaurant,오산,경기도 오산시 오산대역로132번길 28 (수청동 595-18),37.15745,127.07895,031-372-7966,https://naver.me/F42MfMOb,naver,"캐주얼한,데이트·가족식사",TRUE,FALSE,2,양식 파스타 스테이크 피자 리조또 브런치 데이트식사 점심저녁 가족외식 오산맛집,TRUE
+메르오르,restaurant,오산,경기도 오산시 남부대로 36 (두곡동 1),37.15486,127.07719,031-372-0707,https://naver.me/GRo4kyu0,kakao+naver,"세련된,여유로운",TRUE,FALSE,2,브런치 카페 레스토랑 파스타 피자 리조또 샐러드 스테이크 베이커리 디저트 커피 점심 저녁 야외좌석 정원 무료주차 오산맛집,FALSE
+그날의식탁,restaurant,오산,경기도 오산시 오산대역로132번길 42 1층 (수청동 601-7),37.15682,127.07911,0507-1456-2149,https://naver.me/FRuc6mnQ,kakao+naver,"캐주얼한,세련된",TRUE,FALSE,2,브런치 레스토랑 파스타 전복비빔밥 돈까스 스테이크 비빔밥 샐러드 캐주얼식사 점심저녁 데이트 가족외식 오산맛집,FALSE
+몽상,restaurant,오산,경기도 오산시 양산로 354 1층 (양산동 378-4),37.16779,127.07683,0507-1310-7061,https://naver.me/FfeO510r,kakao+naver,"캐주얼한,아늑한,아담한",TRUE,FALSE,2,양식 파스타 매운크림파스타 크림리조또 루꼴라피자 반반피자 감바스 브런치 캐주얼식사 점심저녁 가족외식 데이트 오산맛집,TRUE
+더브라질 스테이크 오산점,restaurant,오산,경기도 오산시 운암로 13-10 3층,37.15924,127.07771,031-372-9988,https://naver.me/53lKWCEb,kakao+naver,"든든한,프리미엄",TRUE,FALSE,3,양식 스테이크 브라질식그릴 브라질바베큐 점심저녁 가족외식 회식 데이트 오산맛집,TRUE
+treeb,restaurant,오산,경기도 오산시 오산대역로132번길 31-4 1층,37.15775,127.07834,0507-1363-8865,https://naver.me/xQe2w9Xa,kakao+naver,"감성적인,아늑한",TRUE,FALSE,2,카페 브런치 디저트 커피 수제디저트 스콘 샌드위치 라떼 아메리카노 테라스 좌석 감성공간 오산카페,FALSE
+코지하우스 오산점,restaurant,오산,경기도 오산시 오산로 169 2층 (오산동 886-11),37.1567,127.0785,0507-1364-7576,https://naver.me/xQe4YZQB,kakao+naver,"캐주얼한,가성비좋은",TRUE,FALSE,2,양식 레스토랑 스테이크 파스타 필라프 피자 리조또 샐러드 점심 저녁 가족외식 모임 오산맛집,FALSE
+스트리트파스타,restaurant,오산,경기도 오산시 역광장로 8-2 (오산동 885-22),37.1604,127.0767,070-8648-0303,https://naver.me/IIt3BNuH,kakao+naver,"캐주얼한,가성비좋은",FALSE,FALSE,1,양식 파스타 알리오올리오 크림파스타 매콤파스타 오븐스파게티 리조또 스트리트떡볶이 사이드메뉴 감자튀김 배달가능 오산맛집,FALSE
+파스타도식사다,restaurant,오산,경기도 오산시 내삼미로 89 스마트캐슬 113호,37.1553,127.0784,031-377-0988,https://naver.me/5Vm7nGVU,kakao+naver,"캐주얼한,가성비좋은",TRUE,FALSE,1,양식 파스타 리조또 알리오올리오 투움바파스타 쉬림프크림파스타 피자 스테이크 샐러드 점심저녁 가족식사 오산맛집,FALSE
+비스트로,restaurant,오산,경기도 오산시 오산로 72 L&J PLAZA 2층,37.1592,127.0775,031-372-0202,https://naver.me/GOPeVBew,kakao+naver,"캐주얼한,양식",TRUE,FALSE,2,양식 비스트로 파스타 빠네파스타 봉골레파스타 브런치 점심저녁 가족외식 오산맛집,FALSE
+훗스테이크 오산점,restaurant,오산,경기도 오산시 서동로 28-5 1층 (벌음동 43-2),37.15783,127.07692,0507-1435-0964,https://naver.me/GOhZVvTX,kakao+naver,"든든한,프리미엄",TRUE,FALSE,2,양식 스테이크 그릴 스테이크하우스 등심스테이크 파스타 런치 스테이크점 식사 오산맛집 데이트,FALSE
+임마카세,restaurant,오산,경기도 오산시 남부대로 313 1층 105호 (원동 444-3),37.16238,127.07972,0507-1449-3054,https://naver.me/GzE94SY3,kakao+naver,"캐주얼한,퓨전",TRUE,FALSE,2,양식 수제버거 퀘사디아 타코 파스타 브런치 샐러드 디저트 점심저녁 가족식사 데이트 오산맛집,FALSE
+월남쌈김상사 오산점,restaurant,오산,경기도 오산시 경기대로 154 패션폴라리스 2층 (원동),37.1494,127.0718,0507-1325-4245,https://naver.me/GtURfELP,kakao+naver,"깔끔한,편안한",TRUE,FALSE,2,월남쌈 베트남음식 샤브샤브 건강식 가족외식 단체모임 오산맛집,FALSE
+바베큐팩토리 오산점,restaurant,오산 경기남부,경기도 오산시 청학로 203 (청학동),37.1626,127.0609,0507-1390-9791,https://naver.me/FHl0pRLG,kakao+naver,"캐주얼한,활기찬",TRUE,FALSE,2,바베큐 고기무한리필 패밀리레스토랑 가족외식 단체모임 회식 오산맛집,FALSE
+바베큐 그라운드,restaurant,화성 경기남부 동탄 오산,경기도 화성시 장지로 60-36 (장지동),37.2053,127.1084,0507-1351-6036,https://naver.me/FhfKX2Sj,kakao+naver,"캐주얼한,야외감성",TRUE,FALSE,2,바베큐 야외바베큐 캠핑감성 고기집 가족외식 단체모임 동탄근교 화성맛집,TRUE
+어린시절 떡볶이,restaurant,화성 동탄 오산 경기남부,경기도 화성시 동탄순환대로3가길 42 1층 (영천동),37.2059,127.1031,0507-1407-2135,https://naver.me/xKEb5OMF,kakao+naver,"캐주얼한,편안한",TRUE,FALSE,1,분식 떡볶이 어묵 튀김 학교앞맛집 가족외식 아이동반 동탄맛집,FALSE
+애슐리퀸즈 동탄레이크꼬모점,restaurant,화성 동탄 경기남부,경기도 화성시 동탄대로 181 레이크꼬모 스트리트존 B1 (송동),37.1736,127.1069,0507-1352-2368,https://naver.me/IGJy9fag,kakao+naver,"깔끔한,활기찬",TRUE,FALSE,2,뷔페 패밀리레스토랑 애슐리퀸즈 가족외식 단체모임 아이동반 동탄맛집 레이크꼬모,TRUE
+애슐리퀸즈 타임테라스 동탄점,restaurant,화성 동탄 오산 경기남부,경기도 화성시 동탄중앙로 220 타임테라스 A블럭 B2F (반송동),37.2041,127.0725,0507-1473-1071,https://naver.me/Fmf6hW5K,kakao+naver,"깔끔한,활기찬",TRUE,FALSE,2,뷔페 패밀리레스토랑 애슐리퀸즈 가족외식 단체모임 아이동반 동탄맛집 타임테라스,TRUE
+연성갈비,restaurant,화성 동탄 오산,경기도 화성시 동탄반송길 17-1 (반송동),37.2063,127.0732,0507-1324-9254,https://naver.me/xq3aPYV7,kakao+naver,"편안한,정갈한",TRUE,FALSE,2,갈비 한식 고깃집 가족외식 단체모임 아이동반 동탄맛집,FALSE
+참다운정육식당 오산세교점,restaurant,오산 세교,경기도 오산시 경기대로 868-6 1층,37.1667,127.0459,0507-1379-0672,https://naver.me/GUmNsPXz,kakao+naver,"캐주얼한,가족식사,활기찬",TRUE,FALSE,2,정육식당 고기집 한우 삼겹살 가족외식 회식 오산 세교,FALSE
+에이스돈 숯불고기,restaurant,오산,경기도 오산시 궐리사로 83,37.1538,127.0716,0507-1320-7514,https://naver.me/FXwNHbnY,kakao+naver,"활기찬,서민적인,캐주얼한",TRUE,FALSE,2,숯불고기 돼지고기 고기집 24시 가족외식 혼밥 오산,FALSE
+육미락 동탄본점,restaurant,오산,경기도 오산시 북삼미로 259-3,37.1689,127.0663,0507-1406-9315,https://naver.me/GQ1liThY,kakao+naver,"깔끔한,가족식사,편안한",TRUE,FALSE,2,고기집 숯불구이 돼지고기 소고기 가족외식 동탄 오산,FALSE
+용궁갈비,restaurant,오산,경기도 오산시 외삼미로152번길 57-29,37.1706,127.0749,0507-1345-1312,https://naver.me/5PVaQ7C2,kakao+naver,"가족식사,편안한,전통적인",TRUE,FALSE,2,갈비 돼지갈비 소갈비 숯불구이 가족외식 회식 오산,FALSE
+특별한초밥 오산점,restaurant,오산,경기도 오산시 성호대로 130 204호,37.1498,127.0712,031-8055-7720,https://naver.me/xTsZY63C,kakao+naver,"깔끔한,차분한,가족식사",TRUE,FALSE,2,초밥 스시 일식 회전초밥 가족외식 데이트 오산,FALSE
+이자카야 우규 오산대역점,restaurant,오산,"경기도 오산시 내삼미로79번길 23 1층 112호, 113호",37.1694,127.0639,0507-1378-7179,https://naver.me/G28gu9X9,kakao+naver,"캐주얼한,분위기있는,활기찬",FALSE,FALSE,2,이자카야 일본요리 사케 안주맛집 데이트 술집 오산대역,FALSE
+자연그리고어반 동탄직영점,restaurant,오산,경기도 오산시 외삼미로152번길 57-29,37.1706,127.0749,0507-1492-9311,https://naver.me/5XJW8hr7,kakao+naver,"깔끔한,차분한,가족친화적",TRUE,FALSE,2,한식 건강식 샤브샤브 채소중심 가족외식 동탄 오산,FALSE
+살살녹소 오산점,restaurant,오산,경기도 오산시 경기대로 138-3,37.1491,127.0718,0507-1428-9295,https://naver.me/F42MSbSv,kakao+naver,"고급스러운,깔끔한,가족식사",TRUE,FALSE,3,소고기 한우 구이전문 프리미엄고기집 가족외식 회식 오산,FALSE
+천지연 오산시청점,restaurant,오산,경기도 오산시 경기대로 290,37.1507,127.0703,031-8058-3204,https://naver.me/GQ15wKk4,kakao+naver,"고급스러운,조용한,격식있는",TRUE,FALSE,3,갈비 소갈비 한정식 상견례 회식 가족모임 오산시청,TRUE
+송도갈비 천지연 오산세교점,restaurant,오산 세교,경기도 오산시 경기대로636번길 11,37.1661,127.0452,031-378-5283,https://naver.me/5apDdKJg,kakao+naver,"고급스러운,조용한,격식있는",TRUE,FALSE,3,갈비 소갈비 한정식 상견례 회식 가족모임 오산 세교,TRUE
+하이크랩 오산점,restaurant,오산,경기도 오산시 내삼미로79번길 27 3층 301호,37.1691,127.0642,0507-1352-1581,https://naver.me/5oE5s1Ep,kakao+naver,"캐주얼한,트렌디한,가벼운",TRUE,FALSE,2,크레페 디저트 카페식사 간단식 브런치 오산대역,FALSE
+족발신선생 오산대역점,restaurant,오산,"경기도 오산시 내삼미로79번길 46 1층 110, 111호",37.1697,127.0648,0507-1328-5609,https://naver.me/5z52ae4l,kakao+naver,"활기찬,캐주얼한,편안한",FALSE,FALSE,2,족발 보쌈 야식 포장 술안주 오산대역,FALSE
+바베큐팩토리 오산점,restaurant,오산,경기도 오산시 청학로 203,37.1476,127.0669,0507-1390-9791,https://naver.me/FHl0pRLG,kakao+naver,"캐주얼한,활기찬,가족친화적",TRUE,FALSE,2,바베큐 고기무한리필 숯불구이 가족외식 회식 오산,FALSE
+참숯갈비고을,restaurant,오산,경기도 오산시 경기대로 842 1층,37.164,127.0499,0507-1487-9009,https://naver.me/xGFREUKC,kakao+naver,"전통적인,편안한,가족식사",TRUE,FALSE,2,갈비 돼지갈비 숯불구이 가족외식 회식 오산,FALSE
+바다이야기,restaurant,오산,경기도 오산시 발안로 1356-16 주건축물제1동 1층,37.1328,127.0564,031-375-4442,https://naver.me/xRhEfBTe,kakao+naver,"활기찬,서민적인,편안한",TRUE,FALSE,2,해산물 횟집 조개구이 해물요리 가족외식 회식 오산,FALSE
+민들레화로,restaurant,오산,경기도 오산시 외삼미로 7,37.1714,127.0731,0507-1424-3398,https://naver.me/5jJTPZof,kakao+naver,"깔끔한,편안한,가족식사",TRUE,FALSE,2,화로구이 숯불구이 고기집 가족외식 회식 오산,FALSE
+우설화 오산세교점,restaurant,오산 세교,경기도 오산시 경기대로636번길 11,37.1661,127.0452,031-378-5764,https://naver.me/IMyGNBQj,kakao+naver,"고급스러운,조용한,격식있는",TRUE,FALSE,3,소고기 한우 구이전문 프리미엄고기집 상견례 회식 가족모임 오산 세교,TRUE
+양심장어 오산청호,restaurant,오산,"경기도 오산시 엘지로 230 1, 2층",37.1736,127.0519,0507-1366-6791,https://naver.me/Gj73A7Wk,kakao+naver,"깔끔한,조용한,가족식사",TRUE,FALSE,3,장어구이 민물장어 보양식 가족외식 회식 오산,TRUE
+샤브올데이 오산세교점,restaurant,오산 세교,경기도 오산시 경기대로 842 1층,37.164,127.0499,031-8043-5377,https://naver.me/xNLHbHqn,kakao+naver,"깔끔한,가족친화적,편안한",TRUE,FALSE,2,샤브샤브 무한리필 건강식 가족외식 단체모임 오산 세교,FALSE
+장강,restaurant,오산,경기도 오산시 독산성로449번길 52,37.1762,127.0556,0507-1498-8579,https://naver.me/xLWANPcM,kakao+naver,"서민적인,활기찬,편안한",TRUE,FALSE,1,중식당 중국집 짜장면 짬뽕 탕수육 가족식사 배달 오산,FALSE
+봄설,restaurant,오산,경기도 오산시 외삼미로 162-34,37.1719,127.0761,031-8003-9926,https://naver.me/5hua3VP5,kakao+naver,"깔끔한,차분한,감성적인",TRUE,FALSE,2,한식 정갈한한상 코스요리 가족식사 데이트 오산 간장게장,FALSE
+양심소 세교점,restaurant,오산 세교,경기도 오산시 세남로14번길 42,37.1653,127.0508,0507-1300-3464,https://naver.me/GuDQbXHZ,kakao+naver,"깔끔한,가족식사,편안한",TRUE,FALSE,2,소고기 한우 구이전문 가족외식 회식 오산 세교,FALSE
+미돼지,restaurant,오산,경기도 오산시 내삼미로79번길 19 1층,37.169,127.0641,0507-1319-1802,https://naver.me/5MVztCOw,kakao+naver,"캐주얼한,활기찬,편안한",TRUE,FALSE,2,돼지고기 삼겹살 목살 숯불구이 가족외식 회식 오산대역,FALSE
+코다리덕장 오산갈곶점,restaurant,오산 갈곶,경기도 오산시 동부대로 331-16 1층,37.1619,127.0834,0507-1341-8477,https://naver.me/5PVoY7dy,kakao+naver,"편안한,가족식사,담백한",TRUE,FALSE,2,코다리 명태조림 한식 가족외식 점심식사 오산 갈곶,FALSE
+무한조개 오산점,restaurant,오산,경기도 오산시 운천로 3 4층 401호,37.1502,127.071,0507-1446-8292,https://naver.me/xOxHaPyR,kakao+naver,"활기찬,캐주얼한,가성비",TRUE,FALSE,2,조개구이 무한리필 해산물 가족외식 단체모임 오산,FALSE
+수청 직거래수산,restaurant,오산,경기도 오산시 청학로 264 107호,37.1472,127.0678,0507-1328-8736,https://naver.me/5T4ACfJU,kakao+naver,"서민적인,활기찬,편안한",TRUE,FALSE,2,횟집 수산물 직거래 해산물 포장 가족외식 오산,FALSE
+소주물 오산대역점,restaurant,오산,"경기도 오산시 내삼미로79번길 27 1층 114, 115호",37.1693,127.064,0507-1356-3711,https://naver.me/5DDiCNPh,kakao+naver,"캐주얼한,활기찬,편안한",TRUE,FALSE,1,포차 술집 안주맛집 소주 맥주 야식 오산대역,FALSE
+장우정,restaurant,오산,경기도 오산시 독산성로449번길 55 1층,37.1764,127.056,031-378-1259,https://naver.me/G58gHoz1,kakao+naver,"깔끔한,차분한,편안한",TRUE,FALSE,2,한식 정식 백반 제육볶음 가족식사 점심 오산,FALSE
+갑짬뽕 오산점,restaurant,오산,경기도 오산시 독산성로449번길 51 1층,37.176,127.0558,0507-1400-7607,https://naver.me/FQV8EQws,kakao+naver,"서민적인,활기찬,편안한",TRUE,FALSE,1,중식당 짬뽕 탕수육 중국집 점심식사 오산,FALSE
+특공대곱창 오산본점,restaurant,오산,경기도 오산시 수목원로468번길 6-1 1층 101호,37.1682,127.0735,0507-1343-5802,https://naver.me/GL81PPhX,kakao+naver,"활기찬,캐주얼한,서민적인",FALSE,FALSE,2,곱창 막창 대창 술안주 회식 오산,FALSE
+쿠우쿠우 오산점,restaurant,오산,"경기도 오산시 성호대로 122 5층 501호, 502호, 503호",37.1504,127.0715,0507-1375-1239,https://naver.me/5KbosDi1,kakao+naver,"활기찬,가족친화적,캐주얼한",TRUE,FALSE,2,뷔페 초밥 뷔페무한리필 가족외식 단체모임 오산,FALSE
+백미헌 오산점,restaurant,오산,경기도 오산시 문시로 133 1동,37.1588,127.0619,031-376-8966,https://naver.me/53lKfUKY,kakao+naver,"깔끔한,차분한,가족식사",TRUE,FALSE,2,한식 쌀밥 정식 백반 가족외식 점심 오산 짬뽕 통갑오징어 낙지 탕수육,FALSE
+우도,restaurant,오산,경기도 오산시 외삼미로 160 1층,37.1718,127.0756,0507-1327-4592,https://naver.me/xwms6tgA,kakao+naver,"깔끔한,차분한,가족식사",TRUE,FALSE,2,한식 우대갈비 소고기 정갈한상차림 가족외식 오산,FALSE
+삼창수산 오산점,restaurant,오산,경기도 오산시 운천로 55,37.1516,127.0704,031-374-9914,https://naver.me/FTXw3fXu,kakao+naver,"서민적인,활기찬,편안한",TRUE,FALSE,2,수산물 횟집 해산물 포장 가족외식 오산 장어 먹장어요리,FALSE
+우설화 오산시청점,restaurant,오산,"경기도 오산시 운천로 50 101호, 102호",37.1508,127.0709,0507-1352-2099,https://naver.me/5YSe8n7J,kakao+naver,"고급스러운,조용한,격식있는",TRUE,FALSE,3,소고기 한우 구이전문 프리미엄고기집 상견례 회식 가족모임 오산시청,TRUE
+우이며녹 백합칼국수 동탄점,restaurant,오산,경기도 오산시 외삼미로 162-42 101호,37.1721,127.0765,031-8003-1117,https://naver.me/5b0oa6CK,kakao+naver,"담백한,차분한,편안한",TRUE,FALSE,2,백합칼국수 칼국수 국물요리 한식 가족식사 점심 오산 동탄,FALSE
+향연177,restaurant,오산,"경기도 오산시 내삼미로79번길 34 제이프라자 108호, 109호",37.1696,127.0646,0507-1470-1557,https://naver.me/GNWkD3Eh,kakao+naver,"깔끔한,차분한,가족식사",TRUE,FALSE,2,한식 정갈한요리 코스한식 가족외식 데이트 오산대역,FALSE
+소플러스 북오산점,restaurant,오산,경기도 오산시 외삼미로 54-52,37.1739,127.0702,0507-1448-4900,https://naver.me/xq3aRlOR,kakao+naver,"깔끔한,가족식사,편안한",TRUE,FALSE,2,소고기 한우 가성비고기집 가족외식 회식 북오산,FALSE
+새말해장국,restaurant,오산,경기도 오산시 현충로 95,37.1523,127.0701,031-373-5929,https://naver.me/GDa2Vitv,kakao+naver,"서민적인,편안한,활기찬",TRUE,FALSE,1,해장국 내장탕 국밥 아침식사 점심식사 오산,FALSE
+돈필살 오산점,restaurant,오산,경기도 오산시 운천로 59 1층 101호,37.1519,127.0708,0507-1312-0526,https://naver.me/5iTdBaAj,kakao+naver,"활기찬,캐주얼한,서민적인",TRUE,FALSE,2,돼지고기 고기집 삼겹살 목살 가족외식 회식 오산,FALSE
+만리곱창 오산점,restaurant,오산,경기도 오산시 성호대로 122 1층 107호,37.1504,127.0715,031-375-2023,https://naver.me/xTTVrtts,kakao+naver,"활기찬,캐주얼한,서민적인",FALSE,FALSE,2,곱창 막창 대창 술안주 저녁모임 오산,FALSE
+육풍 오산프리미엄점,restaurant,오산,경기도 오산시 밀머리로 88,37.1583,127.0607,0507-1429-9304,https://naver.me/FxF8vYBT,kakao+naver,"고급스러운,깔끔한,격식있는",TRUE,FALSE,3,소고기 한우 구이전문 프리미엄고기집 상견례 회식 가족모임 오산,TRUE
+북극해고등어 본점,restaurant,오산,경기도 오산시 경기대로 845,37.1652,127.0508,031-372-5101,https://naver.me/GG7tyFP8,kakao+naver,"담백한,편안한,서민적인",TRUE,FALSE,2,고등어구이 생선구이 한식 백반 점심식사 가족외식 오산,FALSE
+인계곱창 오산점,restaurant,오산,경기도 오산시 운암로 19 1층 101호,37.1497,127.0716,0507-1431-8986,https://naver.me/xtgMwTQW,kakao+naver,"활기찬,캐주얼한,서민적인",FALSE,FALSE,2,곱창 막창 대창 술안주 저녁모임 오산시청,FALSE
+맥도날드 오산세교DT점,restaurant,오산,경기도 오산시 경기대로 651,37.1632,127.0467,031-8058-1400,https://naver.me/GRoBTiJ6,kakao+naver,"캐주얼한,빠른,가족친화적",TRUE,FALSE,1,패스트푸드 햄버거 드라이브스루 DT 간편식 오산 세교,FALSE
+수본 오산본점,restaurant,오산,경기도 오산시 동부대로 384,37.1586,127.0859,031-373-3340,https://naver.me/xa5R3U4F,kakao+naver,"깔끔한,차분한,가족식사",TRUE,FALSE,2,일식 돈카츠 카츠정식 우동 가족외식 점심 오산,FALSE
+왕부정,restaurant,오산,경기도 오산시 경기대로 461 1층,37.1449,127.0662,031-376-6866,https://naver.me/I55a6XXB,kakao+naver,"서민적인,편안한,활기찬",TRUE,FALSE,2,짬뽕 낙지짬뽕 중국집,FALSE
+청수식당,restaurant,오산,경기도 오산시 운암로 13-18 1층 101호,37.1495,127.0719,0507-1371-9750,https://naver.me/xDCq4jdb,kakao+naver,"서민적인,편안한,차분한",TRUE,FALSE,1,한식 백반 정식 가정식 점심식사 오산,FALSE
+예찬,restaurant,오산,경기도 오산시 독산성로270번길 96-32,37.1609,127.0598,0507-1409-2552,https://naver.me/FLyTPBHi,kakao+naver,한식 정갈한요리 코스한식 가족외식 데이트 오산,TRUE,FALSE,2,"깔끔한,차분한,가족식사",FALSE
+세마대 풍천장어,restaurant,오산,경기도 오산시 경기대로 845 1층,37.1652,127.0508,0507-1414-8822,https://naver.me/GfCsv357,kakao+naver,장어구이 풍천장어 보양식 가족외식 오산,TRUE,FALSE,3,장어구이 풍천장어 보양식 가족외식 오산,TRUE
+착한장어소고기무한리필 오산점,restaurant,오산,경기도 오산시 세마역로19번길 6-2 108호,37.1872,127.0438,0507-1399-3343,https://naver.me/GNWk08SD,kakao+naver,"캐주얼한,활기찬,가성비",TRUE,FALSE,2,장어 소고기 무한리필 가성비고기집 가족외식 단체모임 오산 세마,FALSE
+등나무집화로구이,restaurant,오산,경기도 오산시 외삼미로 162-28 1층,37.1717,127.076,0507-1381-9254,https://naver.me/F74k9h27,kakao+naver,"전통적인,편안한,가족식사",TRUE,FALSE,2,화로구이 숯불구이 돼지고기 소고기 가족외식 오산,FALSE
+수청 직거래수산,restaurant,오산,경기도 오산시 청학로 264 107호,37.1472,127.0678,0507-1328-8736,https://naver.me/5T4ACfJU,kakao+naver,"서민적인,활기찬,편안한",TRUE,FALSE,2,횟집 수산물 직거래 해산물 포장 가족외식 오산,FALSE
+세카이스시,restaurant,오산,경기도 오산시 운천로 59 2층 201호,37.1519,127.0708,0507-1418-0032,https://naver.me/xl0DmZgQ,kakao+naver,"깔끔한,차분한,캐주얼한",TRUE,FALSE,2,스시 초밥 일식 사시미 점심식사 저녁식사 오산,FALSE
+샤브올데이 오산금암점,restaurant,오산,경기도 오산시 금암로11번길 7 1층,37.1701,127.0529,031-375-6420,https://naver.me/x1mdp69u,kakao+naver,"깔끔한,가족친화적,편안한",TRUE,FALSE,2,샤브샤브 무한리필 건강식 가족외식 단체모임 오산 금암,FALSE
+돌고래마차,restaurant,오산,경기도 오산시 운천로 21,37.1506,127.0712,031-378-4817,https://naver.me/5MVzXhr3,kakao+naver,"서민적인,활기찬,포장마차감성",FALSE,FALSE,2,포장마차 술집 안주 분식 야식 오산시청,FALSE
+돼통령 오산대역점,restaurant,오산,경기도 오산시 내삼미로79번길 12 B동 1층 110~112호,37.1687,127.0636,031-375-1812,https://naver.me/GG72KamV,kakao+naver,"활기찬,캐주얼한,서민적인",TRUE,FALSE,2,돼지고기 삼겹살 목살 고기집 가족외식 회식 오산대역,FALSE
+맥도날드 오산DT점,restaurant,오산,경기도 오산시 경기대로 170,37.1417,127.0679,031-8058-0700,https://naver.me/G4WnVZny,kakao+naver,"캐주얼한,빠른,가족친화적",TRUE,FALSE,1,패스트푸드 햄버거 드라이브스루 DT 간편식 오산,FALSE
+잭슨피자 오산점,restaurant,오산,"경기도 오산시 수청로 11-3 1층 102호, 103호",37.1512,127.0714,0507-1429-2717,https://naver.me/5noENAho,kakao+naver,"캐주얼한,활기찬,트렌디한",TRUE,FALSE,2,피자 수제피자 포장 배달 가족식사 간편식 오산,FALSE
+백년약속 서서갈비 오산본점,restaurant,오산,"경기도 오산시 오산대역로132번길 45 1층 101호, 102호",37.1685,127.0629,0507-1485-9236,https://naver.me/GUwSYgN8,kakao+naver,"서민적인,활기찬,캐주얼한",TRUE,FALSE,2,서서갈비 돼지갈비 숯불구이 고기집 회식 오산대역,FALSE
+신주옥미 오산직영점,restaurant,오산,경기도 오산시 경기대로 465 1층,37.1452,127.0665,031-374-7220,https://naver.me/IFgL79n7,kakao+naver,"깔끔한,차분한,가족식사",TRUE,FALSE,2,한식 솥밥 정식 건강식 점심식사 가족외식 오산,FALSE
+오색쭈꾸미,restaurant,오산,경기도 오산시 오산로240번길 12 1층,37.1486,127.0683,0507-1360-7807,https://naver.me/xMjKqOWo,kakao+naver,"활기찬,매콤한,캐주얼한",TRUE,FALSE,2,쭈꾸미볶음 매운음식 한식 가족외식 점심 저녁 오산,FALSE
+초언니만두점,restaurant,오산,경기도 오산시 오산로 272 1층,37.1493,127.0691,031-378-7588,https://naver.me/GBFHgqE2,kakao+naver,"서민적인,아기자기한,편안한",TRUE,FALSE,1,만두 분식 찐만두 군만두 포장 점심식사 오산,FALSE
+임성근국가공인진갈비 오산점,restaurant,오산,경기도 오산시 원동로 56 1층,37.149,127.0724,0507-1329-4913,https://naver.me/55rmI3od,kakao+naver,"깔끔한,가족식사,전통적인",TRUE,FALSE,2,갈비 돼지갈비 양념갈비 한식 가족외식 점심 저녁 오산,FALSE
+남다른대구막창 오산세마점,restaurant,오산,경기도 오산시 세남로 32 1층,37.1876,127.0449,031-377-9200,https://naver.me/5PlbxrDH,kakao+naver," 활기찬,캐주얼한,서민적인",TRUE,FALSE,2,막창 대구막창 곱창 숯불구이 술안주 저녁모임 오산 세마,FALSE
+야키토리잔잔 오산점,restaurant,오산,경기도 오산시 운암로 13-22 1층 101호,37.1496,127.0718,0507-1397-5543,https://naver.me/5ssTZrhn,kakao+naver,"분위기있는,캐주얼한,활기찬",FALSE,FALSE,2,이자카야 야키토리 꼬치구이 일본요리 술집 오산,FALSE
+다온참치,restaurant,오산,경기도 오산시 운암로 13-16 2층,37.1496,127.0716,0507-1459-0993,https://naver.me/5bVY4kXx,kakao+naver,"차분한,깔끔한,조용한",FALSE,FALSE,2,참치회 참치전문점 사시미 저녁모임 술자리 오산,FALSE
+차이나팬더 24시 본점,restaurant,오산,경기도 오산시 외삼미동 외삼미로 162-40,37.1723,127.0768,031-8015-1108,https://naver.me/xHgIcy5C,kakao+naver,"서민적인,활기찬,편안한",TRUE,FALSE,1,중식당 중국집 24시 짜장면 짬뽕 탕수육 배달 오산,FALSE
+닭갈비부대,restaurant,오산,"경기도 오산시 세마역로 95 테라스뷰 1층 116호, 117호",37.1866,127.0456,0507-1497-3338,https://naver.me/GgWkHY6Q,kakao+naver,"활기찬,캐주얼한,편안한",TRUE,FALSE,2,닭갈비 부대찌개 한식 가족외식 점심 저녁 오산 세마,FALSE
+오산다와칼국수,restaurant,오산,경기도 오산시 청호로 7 1층,37.1541,127.0719,0507-1369-9394,https://naver.me/5T4AxiTa,kakao+naver,"담백한,편안한,서민적인",TRUE,FALSE,1,칼국수 바지락칼국수 국수전문점 점심식사 가족식사 오산,FALSE
+KFC 오산DT점,restaurant,오산,경기도 오산시 경기대로 136,37.142,127.0672,031-372-2620,https://naver.me/xBw0HtMO,kakao+naver,"캐주얼한,빠른,간편한",TRUE,FALSE,1,패스트푸드 치킨 햄버거 드라이브스루 DT 간편식 오산,FALSE
+육풍 오산점,restaurant,오산,경기도 오산시 운천로 73-1,37.1526,127.0713,031-378-9200,https://naver.me/FgHN1OMZ,kakao+naver,"깔끔한,활기찬,캐주얼한",TRUE,FALSE,2,고기집 돼지고기 삼겹살 숯불구이 가족외식 회식 오산,FALSE
+등촌샤브칼국수 오산대역점,restaurant,오산,"경기도 오산시 내삼미로79번길 52 2층 201호, 202호",37.1701,127.0649,031-374-8460,https://naver.me/FN7ZgGqD,kakao+naver,"깔끔한,가족친화적,편안한",TRUE,FALSE,2,샤브샤브 칼국수 버섯샤브 가족외식 점심 저녁 오산대역,FALSE
+일품대패 오산점,restaurant,오산,경기도 오산시 경기대로 193,37.1432,127.0676,0507-1475-9028,https://naver.me/G58vYueA,kakao+naver,"활기찬,캐주얼한,가성비",TRUE,FALSE,2,대패삼겹살 무한리필 고기집 가족외식 회식 오산 우삼겹 물냉 비냉,FALSE
+롯데리아 오산세교DT점,restaurant,오산,경기도 오산시 경기대로 859,37.1666,127.0506,031-378-3180,https://naver.me/FgH3YxGk,kakao+naver,"캐주얼한,빠른,간편한",TRUE,FALSE,1,패스트푸드 햄버거 드라이브스루 DT 간편식 오산 세교,FALSE
+이화수전통육개장 오산세교점,restaurant,오산,경기도 오산시 경기대로 853,37.1663,127.0503,031-376-2282,https://naver.me/xUwWz0gT,kakao+naver,"담백한,편안한,서민적인",TRUE,FALSE,2,육개장 국밥 한식 점심식사 가족식사 오산 세교,FALSE
+홍매화쌈밥 오산점,restaurant,오산,경기도 오산시 큰말길 79 1층,37.1564,127.0611,031-374-7330,https://naver.me/xOxHwcLO,kakao+naver,"담백한,차분한,가족식사",TRUE,FALSE,2,쌈밥 한식 건강식 정식 가족외식 점심 오산 우렁쌈밥 소인돈까스 해물파전,FALSE
+얼큰이해장국,restaurant,오산,경기도 오산시 궐리사로46번길 60-14 1층,37.1572,127.0729,031-374-6334,https://naver.me/5EUZ0ijo,kakao+naver,"서민적인,편안한,활기찬",TRUE,FALSE,1,해장국 국밥 얼큰한 국물 아침식사 점심식사 오산,FALSE
+글램그램,restaurant,오산,경기도 오산시 서부로 38 두곡동,37.1468,127.0524,031-373-9478,https://naver.me/xKERgdAW,kakao+naver,"활기찬,캐주얼한,가성비",TRUE,FALSE,2,고기무한리필 삼겹살 소고기 가성비고기집 가족외식 회식 오산,FALSE
+오빠야 세교점,restaurant,오산,경기도 오산시 문헌공로 9 1층 101호~102호,37.1679,127.0486,0507-1364-9115,https://naver.me/5HkHz39O,kakao+naver,"활기찬,캐주얼한,편안한",TRUE,FALSE,2,한식 고기집 삼겹살 돼지고기 가족외식 회식 오산 세교,FALSE
+광명홍두깨칼국수,restaurant,오산,경기도 오산시 성호새싹길 44,37.1528,127.0698,0507-1379-5414,https://naver.me/5Rh0FRaL,kakao+naver,"서민적인,담백한,편안한",TRUE,FALSE,1,칼국수 손칼국수 홍두깨칼국수 점심식사 가족식사 오산,FALSE
+두끼 오산운암점,restaurant,오산,경기도 오산시 운천로 62 2층 205호,37.1515,127.0711,0507-1372-1206,https://naver.me/GZZNSvEX,kakao+naver,"활기찬,캐주얼한,가성비",TRUE,FALSE,1,떡볶이 무한리필 분식 뷔페 가족외식 학생 오산,FALSE
+겁쿤,restaurant,오산,경기도 오산시 오산로232번길 19,37.1479,127.0689,010-5003-1478,https://naver.me/GI3oygel,kakao+naver,"활기찬,캐주얼한,서민적인",TRUE,FALSE,2,태국쌀국수 태국음식 현지주방장 이색적인분위기 ,FALSE
+완미족발 오산대역점,restaurant,오산,"경기도 오산시 내삼미로79번길 22 1층 108호, 109호",37.1694,127.0643,0507-1433-1584,https://naver.me/5Kb3Qudi,kakao+naver,"활기찬,캐주얼한,편안한",TRUE,FALSE,2,족발 보쌈 야식 술안주 포장 오산대역,FALSE
+대흥식당,restaurant,오산,경기도 오산시 오산로278번길 9-12,37.1498,127.0697,031-374-4723,https://naver.me/5IStDgbx,kakao+naver,"서민적인,편안한,활기찬",TRUE,FALSE,1,돼지머리국밥 국밥 수육 편육 전통시장 전통음식 재래시장맛집,FALSE
+대궐막국수 동탄오산직영점,restaurant,오산,경기도 오산시 외삼미로152번길 57-29 다동 1층,37.1712,127.0739,0507-1430-5312,https://naver.me/xR2mriJ8,kakao+naver,"담백한,편안한,서민적인",TRUE,FALSE,2,막국수 메밀국수 냉면 한식 가족식사 점심 오산 동탄,FALSE
+어촌회,restaurant,오산,경기도 오산시 오산로 28 1층,37.1411,127.067,031-375-8485,https://naver.me/IMyGKvae,kakao+naver,"서민적인,편안한,활기찬",TRUE,FALSE,2,횟집 회 해산물 매운탕 가족외식 저녁식사 오산,FALSE
+철길부산집 오산시청점,restaurant,오산,경기도 오산시 대원로 63 1층 107호,37.1509,127.0713,0507-1381-5066,https://naver.me/Fmf6zSGN,kakao+naver,"활기찬,캐주얼한,레트로감성",FALSE,FALSE,2,이자카야 부산포차 어묵 꼬치 술집 오산시청,FALSE
+정겨운집,restaurant,오산,경기도 오산시 대원로 65 운암프라자 1층 109호,37.1511,127.0712,031-375-3892,https://naver.me/FdCtgYQe,kakao+naver,"서민적인,편안한,정겨운",FALSE,FALSE,2,포차 오뎅바 2차안성맞춤 술안주,FALSE
+닭이닭숯불닭갈비,restaurant,오산,경기도 오산시 큰말길 83 1층,37.1567,127.0614,0507-1306-8053,https://naver.me/xf5A4Cbu,kakao+naver,"활기찬,캐주얼한,편안한",TRUE,FALSE,2,숯불닭갈비 닭갈비 숯불구이 가족외식 회식 오산,FALSE
+청불천막집포차 오산대역점,restaurant,오산,경기도 오산시 내삼미로79번길 46 어반스페이스타워 2층 212호,37.1698,127.0649,0507-1397-6566,https://naver.me/Gq9cI65W,kakao+naver,"활기찬,캐주얼한,포차감성",FALSE,FALSE,1,포차 술집 안주 천막포차 야식 오산대역,FALSE
+다경감자탕 성필점,restaurant,오산,경기도 오산시 발안로 1241-5 1층,37.1365,127.0589,0507-1374-6922,https://naver.me/xIe52XtD,kakao+naver,"서민적인,편안한,활기찬",TRUE,FALSE,2,감자탕 뼈해장국 국밥 해장 가족식사 오산,FALSE
+저팔계연탄막창,restaurant,오산,경기도 오산시 경기동로8번길 24-24,37.1481,127.0699,031-376-6060,https://naver.me/5A3HJ8TT,kakao+naver,"서민적인,활기찬,캐주얼한",FALSE,FALSE,2,막창 연탄구이 곱창 술안주 저녁모임 오산,FALSE
+딱이야 숯불 닭갈비,restaurant,오산,경기도 오산시 남부대로 327,37.1396,127.0718,031-376-9283,https://naver.me/G58geNT6,kakao+naver,"활기찬,캐주얼한,편안한",TRUE,FALSE,2,숯불닭갈비 닭갈비 숯불구이 가족외식 회식 오산,FALSE
+동탄 갈치밥상,restaurant,오산,경기도 오산시 외삼미로 162-28 3층,37.1717,127.076,0507-1337-7798,https://naver.me/GYCqOj90,kakao+naver,"차분한,담백한,가족식사",TRUE,FALSE,2,갈치조림 갈치구이 생선요리 한식 가족외식 점심 오산 동탄,FALSE
+최고야 한식뷔페,restaurant,오산,경기도 오산시 세남로14번길 57 1층,37.1658,127.0516,031-373-5953,https://naver.me/GxkGbQ5C,kakao+naver,"서민적인,활기찬,가성비",TRUE,FALSE,1,한식뷔페 백반 무한리필 점심식사 가성비 오산,FALSE
+특별한초밥 오산점,restaurant,오산,경기도 오산시 성호대로 130 204호,37.1511,127.072,031-8055-7720,https://naver.me/xTsZY63C,kakao+naver,"깔끔한,차분한,캐주얼한",TRUE,FALSE,2,초밥 스시 일식 사시미 점심식사 저녁식사 오산,FALSE
+오산폐계닭,restaurant,오산,경기도 오산시 오산로198번길 5 1층,37.1469,127.0674,031-372-0799,https://naver.me/xY4sgZPZ,kakao+naver,"서민적인,활기찬,캐주얼한",FALSE,FALSE,2,닭요리 닭볶음탕 술안주 저녁모임 오산,FALSE
+동해식당,restaurant,오산,경기도 오산시 오산로198번길 4,37.1468,127.0672,031-377-3155,https://naver.me/G8s84Ntl,kakao+naver,"서민적인,정겨운,편안한",TRUE,FALSE,1,한식 백반 기사식당 생선구이 제육볶음 점심식사 오산,FALSE
+전통춘천닭갈비,restaurant,오산,경기도 오산시 오산로198번길 7,37.1471,127.0676,0507-1374-8559,https://naver.me/GubjqGok,kakao+naver,"서민적인,활기찬,편안한",TRUE,FALSE,2,춘천닭갈비 철판닭갈비 볶음밥 가족외식 저녁식사 오산,FALSE
+전여친,restaurant,오산,경기도 오산시 오산로198번길 10,37.1473,127.0678,010-3019-1300,https://naver.me/x2jyKzk8,kakao+naver,"서민적인,캐주얼한,활기찬",FALSE,FALSE,2,전요리 모듬전 막걸리 술집 안주 오산,FALSE
+참숯불갈비,restaurant,오산,경기도 오산시 오산로198번길 14,37.1476,127.0681,031-378-6646,https://naver.me/FFGU6CVT,kakao+naver,"서민적인,편안한,전통적인",TRUE,FALSE,2,갈비 돼지갈비 숯불구이 가족외식 저녁식사 오산,FALSE
+빈대떡에얼음막걸리 오산점,restaurant,오산,경기도 오산시 오산로198번길 14-1,37.1477,127.0682,031-372-7892,https://naver.me/FDnqgTbM,kakao+naver,"서민적인,레트로한,활기찬",FALSE,FALSE,1,빈대떡 전요리 막걸리 포차 술집 오산,FALSE
+오산착한갈비탕,restaurant,오산,경기도 오산시 오산로198번길 18 1층,37.1479,127.0684,031-372-7741,https://naver.me/xyTotwGf,kakao+naver,"담백한,편안한,서민적인",TRUE,FALSE,2,갈비탕 국밥 한식 점심식사 가족식사 오산,FALSE
+해영호프,restaurant,오산,경기도 오산시 오산로198번길 20,37.1481,127.0686,031-378-2900,https://naver.me/x5m7aKvj,kakao+naver,"서민적인,활기찬,정겨운",FALSE,FALSE,1,호프 맥주 치킨 안주 술집 오산,FALSE
+역전포차,restaurant,오산,경기도 오산시 오산로190번길 17-4,37.1465,127.0671,0507-1381-5071,https://naver.me/xv6YXL8L,kakao+naver,"서민적인,활기찬,포차감성",FALSE,FALSE,1,포차 술집 안주 야식 2차 오산,FALSE
+본가할매순대국 원동점,restaurant,오산,경기도 오산시 원동로37번길 25 1층,37.1484,127.0736,0507-1308-5258,https://naver.me/GEXxHJnN,kakao+naver,"서민적인,담백한,편안한",TRUE,FALSE,1,순대국 국밥 뼈해장국 한식 점심식사 해장 오산,FALSE
+옥이네포차,restaurant,오산,경기도 오산시 원동로37번길 23 1층 103호,37.1482,127.0734,010-7435-5977,https://naver.me/5HrFsN0L,kakao+naver,"서민적인,활기찬,포차감성",FALSE,FALSE,1,포차 술집 안주 야식 2차 오산 원동,FALSE
+이고집쭈꾸미,restaurant,오산,경기도 오산시 원동로37번길 30 1층,37.1478,127.0739,0507-1488-0723,https://naver.me/FLyTnBgm,kakao+naver,"활기찬,친절한,로컬맛집",TRUE,FALSE,2,쭈꾸미 철판요리 매콤한 야식 회식 오산 원동,FALSE
+튀김하우스,restaurant,오산,경기도 오산시 원동로37번길 33 1층,37.1477,127.0735,031-377-3527,https://naver.me/5zX6VCLN,kakao+naver,"정겨운,추억의,가성비",TRUE,FALSE,1,분식 떡볶이 튀김 떡꼬치 야식 오산 원동,FALSE
+취향마라 오산역점,restaurant,오산,경기도 오산시 원동로37번길 31 1층,37.1477,127.0737,0507-1402-2069,https://naver.me/F2Z4TsM4,kakao+naver,"깔끔한,캐주얼,트렌디",TRUE,FALSE,2,마라탕 마라샹궈 꿔바로우 혼밥 오산역 원동,FALSE
+요모조모,restaurant,오산,경기도 오산시 오산로212번길 16 2층,37.1462,127.0669,010-2247-4714,https://naver.me/FIf7HUyz,kakao+naver,"캐주얼한,활기찬,트렌디한",FALSE,FALSE,2,술집 이자카야 안주 맛집 2차 오산,FALSE
+놀부보쌈&부대찌개 오산문화의거리점,restaurant,오산,경기도 오산시 원동로37번길 41 2층,37.1489,127.0739,0507-1396-7796,https://naver.me/F88IBBTi,kakao+naver,"편안한,캐주얼한,가족식사",TRUE,FALSE,2,보쌈 부대찌개 한식 가족외식 단체모임 오산문화의거리,FALSE
+틈새라면 오산점,restaurant,오산,경기도 오산시 원동로37번길 44,37.1492,127.0741,031-375-1705,https://naver.me/FJbWPWc1,kakao+naver,"캐주얼한,활기찬,간편한",TRUE,FALSE,1,라면 분식 틈새라면 매운라면 간편식 오산문화의거리,FALSE
+파스토파스토,restaurant,오산,경기도 오산시 오산로212번길 7-1 1층,37.146,127.0665,010-5824-0124,https://naver.me/xNnbicDs,kakao+naver,"캐주얼한,트렌디한,편안한",TRUE,FALSE,2,파스타 이탈리안 양식 데이트 점심 저녁 오산,FALSE
+금가네장터 오산역점,restaurant,오산,경기도 오산시 대원로 2 1층,37.1456,127.0662,0507-1347-7858,https://naver.me/xZVbFc42,kakao+naver,"서민적인,활기찬,정겨운",TRUE,FALSE,1,한식 백반 장터국밥 제육볶음 점심식사 오산역,FALSE
+오산할매김밥,restaurant,오산,경기도 오산시 역광장로 55 동일빌딩,37.1454,127.066,031-372-1158,https://naver.me/xf59nESd,kakao+naver,"서민적인,편안한,간편한",TRUE,FALSE,1,김밥 분식 떡볶이 라면 포장 간편식 오산역,FALSE
+토박이생선구이,restaurant,오산,경기도 오산시 역광장로 52,37.1452,127.0658,031-377-9795,https://naver.me/GHvJxVXJ,kakao+naver,"서민적인,담백한,편안한",TRUE,FALSE,2,생선구이 한식 백반 점심식사 가족식사 오산역,FALSE
+해남해물아구찜,restaurant,오산,경기도 오산시 원동로7번길 18,37.1459,127.0708,031-373-7782,https://naver.me/xf5PS9un,kakao+naver,"활기찬,서민적인,편안한",TRUE,FALSE,2,아구찜 해물찜 해물요리 가족외식 저녁식사 오산,FALSE
+에그폭탄,restaurant,오산,경기도 오산시 원동로37번길 26 2층,37.1483,127.0733,070-4012-3969,https://naver.me/xHmeAQUs,kakao+naver,"캐주얼한,활기찬,트렌디한",TRUE,FALSE,2,계란말이 술집 안주맛집 이자카야 오산문화의거리,FALSE
+경성술집 오산원동점,restaurant,오산,경기도 오산시 원동로37번길 20 1층,37.1478,127.073,0507-1464-8307,https://naver.me/FMcgtVAb,kakao+naver,"레트로한,활기찬,캐주얼한",FALSE,FALSE,2,술집 경성포차 레트로 안주 술자리 오산문화의거리,FALSE
+진중화요리,restaurant,오산,경기도 오산시 원동로 6,37.1455,127.0702,031-377-9987,https://naver.me/GrmB7D6P,kakao+naver,"서민적인,편안한,정겨운",TRUE,FALSE,1,중식당 중국집 짜장면 짬뽕 탕수육 점심식사 오산,FALSE
+리틀꼬마김밥 오산이편한점,restaurant,오산,경기도 오산시 오산로160번길 11 1층 103호,37.1419,127.0618,0507-1372-7752,https://naver.me/GZZcz6Cu,kakao+naver,"간편한,서민적인,캐주얼한",TRUE,FALSE,1,김밥 분식 꼬마김밥 포장 간편식 오산,FALSE
+펀비어킹 오산 원동대림점,restaurant,오산,"경기도 오산시 오산로160번길 7 원동G MATE 1층 101호, 102호",37.1421,127.062,031-377-8931,https://naver.me/xdp3mHOT,kakao+naver,"캐주얼한,활기찬,편안한",FALSE,FALSE,2,호프 맥주 치킨 안주 술집 오산 원동,FALSE
+모퉁이,restaurant,오산,경기도 오산시 오산로160번길 7 1층 105호,37.1422,127.0621,0507-1481-4479,https://naver.me/5xjppMYH,kakao+naver,"서민적인,캐주얼한,편안한",FALSE,FALSE,2,포차 술집 안주 저녁모임 오산 원동,FALSE
+체이스마라탕,restaurant,오산,경기도 오산시 오산로160번길 15,37.1424,127.0623,031-378-4442,https://naver.me/G8sodTE9,kakao+naver,"캐주얼한,활기찬,이국적인",TRUE,FALSE,2,마라탕 마라샹궈 중식 매운음식 점심 저녁 오산,FALSE
+양은이네 오산역점,restaurant,오산,경기도 오산시 역광장로 7-1 1층,37.145,127.0653,0507-1490-9026,https://naver.me/xxF8Y2yP,kakao+naver,"서민적인,활기찬,캐주얼한",TRUE,FALSE,2,분식 떡볶이 순대 튀김 포장 간편식 오산역,FALSE
+바다회목장,restaurant,오산,경기도 오산시 오산로 161 1층,37.1428,127.0626,031-377-1492,https://naver.me/G0DuUvWm,kakao+naver,"서민적인,편안한,활기찬",TRUE,FALSE,2,횟집 회 해산물 매운탕 가족외식 저녁식사 오산,FALSE
+장어섬,restaurant,오산,경기도 오산시 오산로 123-10,37.1406,127.0609,031-373-9285,https://naver.me/GDa2pBp0,kakao+naver,"차분한,정갈한,가족식사",TRUE,FALSE,3,장어구이 민물장어 보양식 가족외식 저녁식사 오산,FALSE
+1984그수육집칼국수 오산원동점,restaurant,오산,경기도 오산시 오산로 123-9 C동 2층,37.1408,127.061,0507-1432-3364,https://naver.me/GI3pdpUl,kakao+naver,"담백한,편안한,가족식사",TRUE,FALSE,2,수육 칼국수 보쌈 한식 점심식사 가족외식 오산,FALSE
+능이밥상 오산직영점,restaurant,오산,경기도 오산시 오산로 123-7 1층,37.141,127.0611,031-377-2225,https://naver.me/GaldwNCn,kakao+naver,"차분한,정갈한,건강한",TRUE,FALSE,2,능이백숙 능이삼계탕 보양식 한식 가족외식 오산,FALSE
+우테일러 동탄점,restaurant,동탄,경기 화성시 장지안길 82 1층,37.2131,127.1086,0507-1391-9692,https://naver.me/F0z2OK8Y,kakao+naver,"고급, 한우전문, 회식, 가족모임, 조용함",TRUE,FALSE,3,한우전문점 동탄소고기 동탄한우 맛집 회식 단체모임 프라이빗룸,TRUE
+문가네정육식당 동탄2신도시점,restaurant,동탄,경기 화성시 지산2길 12 1층,37.2099,127.1061,031-831-3634,https://naver.me/G386peYj,kakao+naver,"정육식당, 가성비, 가족, 회식",TRUE,FALSE,2,정육식당 소고기 돼지고기 가성비맛집 가족외식 회식 동탄2신도시,FALSE
+텍사스랜치 동탄호수공원 본점,restaurant,동탄,경기 화성시 동탄대로5길 32 3층 310호,37.171,127.1036,0507-1466-9074,https://naver.me/GyY4SKIi,kakao+naver,"미국식, 스테이크, 데이트, 가족외식",TRUE,FALSE,2,스테이크 미국식레스토랑 텍사스바베큐 동탄호수공원 맛집 데이트 가족외식,FALSE
+참솥 동탄레이크꼬모점,restaurant,동탄,경기 화성시 송동 694,37.1707,127.1031,0507-1340-5923,https://naver.me/5jJTP7Ve,kakao+naver,"한식, 솥밥, 가족외식, 깔끔함",TRUE,FALSE,2,솥밥 한식 정갈한밥집 가족식사 동탄호수공원 레이크꼬모,FALSE
+더몰트하우스 동탄2신도시점,restaurant,동탄,경기 화성시 오산동 1020,37.1979,127.0948,031-8050-2504,https://naver.me/xSFaLBPr,kakao+naver,"브런치, 캐주얼다이닝, 데이트, 모임",TRUE,FALSE,2,브런치 파스타 스테이크 수제맥주 데이트 모임 동탄2신도시,FALSE
+카사데타코,restaurant,동탄,경기 화성시 동탄공원로3길 22-1 1동 1층,37.1681,127.0846,0507-1398-8094,https://naver.me/xUw1T10x,kakao+naver,"멕시칸, 캐주얼, 데이트, 친구모임",TRUE,FALSE,2,멕시칸 타코 브리또 캐주얼다이닝 데이트 동탄,FALSE
+라스카 그릴,restaurant,동탄,경기 화성시 동탄역로 196 L3 301호,37.1994,127.0998,0507-1458-2592,https://naver.me/5A3pxwGv,kakao+naver,"그릴요리, 캐주얼다이닝, 데이트, 모임",TRUE,FALSE,2,그릴 스테이크 플래터 데이트 모임 동탄역 라스카,FALSE
+맛찬들왕소금구이 동탄점,restaurant,동탄,경기 화성시 반송동 90-7,37.2011,127.0739,031-613-7366,https://naver.me/FEUpfZb5,kakao+naver,"고기집, 회식, 가족외식, 활기참",TRUE,FALSE,2,삼겹살 목살 왕소금구이 고기집 회식 가족외식 동탄,FALSE
+피제리아다문 동탄,restaurant,동탄,경기 화성시 왕배산1길 8-5 1층,37.2141,127.1062,0507-1469-5620,https://naver.me/x4FLTHr3,kakao+naver,"이탈리안, 화덕피자, 데이트, 가족외식",TRUE,FALSE,2,피제리아 화덕피자 파스타 이탈리안 데이트 동탄 왕배산,FALSE
+식사가 되는 술집 양심 동탄점,restaurant,동탄,경기 화성시 동탄중심상가2길 7 2층 201호 (시티플러스),37.2016,127.0731,0507-1345-4089,https://naver.me/F1rgnnXX,kakao+naver,"술집, 안주맛집, 데이트, 회식, 캐주얼",FALSE,FALSE,2,술집 안주맛집 한식안주 데이트 회식 동탄 중심상가,FALSE
+콘타이 동탄타임테라스점,restaurant,동탄,경기 화성시 동탄중앙로 220 A블럭 3층,37.2005,127.072,031-613-1090,https://naver.me/xOx1GO3D,kakao+naver,"태국음식, 이국적, 데이트, 가족외식",TRUE,FALSE,2,태국음식 팟타이 똠얌꿍 커리 이국적인맛 동탄 타임테라스,FALSE
+짚불태백 동탄본점,restaurant,동탄,경기 화성시 지산2길 11-8 1층,37.2101,127.1054,010-9690-0770,https://naver.me/FRLNwKJN,kakao+naver,"짚불구이, 고기집, 회식, 가족외식",TRUE,FALSE,2,짚불구이 소고기 돼지고기 고기집 회식 동탄2신도시,FALSE
+콩온,restaurant,동탄,경기 화성시 영천동 851,37.2108,127.1169,070-4006-8617,https://naver.me/xWzhhevB,kakao+naver,"한식, 건강식, 따뜻함, 혼밥, 가족식사",TRUE,FALSE,2,콩국수 NonGMO 건강식 한식 영천동 동탄2신도시,FALSE
+육미락 동탄본점,restaurant,동탄,경기 오산시 북삼미로 259-3,37.1763,127.0542,0507-1406-9315,https://naver.me/GQ1liThY,kakao+naver,"고기집, 회식, 가족외식, 활기참",TRUE,FALSE,2,고기집 소고기 돼지고기 회식 가족외식 오산 동탄,FALSE
+애슐리퀸즈 레이크꼬모 동탄점,restaurant,동탄,경기 화성시 송동 694,37.1707,127.1031,0507-1352-2368,https://naver.me/IGJy9fag,kakao+naver,"뷔페, 가족외식, 모임, 캐주얼",TRUE,FALSE,2,뷔페 패밀리레스토랑 가족외식 단체모임 레이크꼬모 동탄,TRUE
+황부자 1991 본점,restaurant,동탄,경기 화성시 동탄반송3길 8 1층,37.202,127.0735,0507-1369-9629,https://naver.me/xf5MX7PY,kakao+naver,"고기집, 회식, 가족외식, 레트로",TRUE,FALSE,2,고기집 돼지고기 소고기 회식 가족외식 동탄 반송동,FALSE
+한마음정육식당 동탄호수공원점,restaurant,동탄,경기 화성시 동탄대로1길 3 2층,37.1716,127.1026,0507-1434-8967,https://naver.me/xjgcCXXv,kakao+naver,"정육식당, 고기집, 가족외식, 회식",TRUE,FALSE,2,정육식당 소고기 돼지고기 가성비 회식 가족외식 동탄호수공원,FALSE
+오아시스조개 동탄영천점,restaurant,동탄,경기 화성시 지산2길 12-9 1층,37.2102,127.1058,0507-1322-6724,https://naver.me/FjbnGXL2,kakao+naver,"조개구이, 해산물, 가족외식, 회식",TRUE,FALSE,2,조개구이 조개찜 해산물 가족외식 회식 동탄 영천동,FALSE
+우후죽순 동탄북광장점,restaurant,동탄,경기 화성시 동탄중심상가2길 7,37.2016,127.0731,0507-1358-6486,https://naver.me/FPn5kbAy,kakao+naver,"퓨전한식, 감성술집, 데이트, 모임, 따뜻함",FALSE,FALSE,2,퓨전한식 술집 동탄북광장 감성맛집 데이트 친구모임,FALSE
+핏제리아오 동탄점,restaurant,동탄,경기 화성시 노작로1가길 10 웨이브빌딩 3층,37.2014,127.0746,0507-1453-0926,https://naver.me/GbD6aKwN,kakao+naver,"이탈리안, 화덕피자, 데이트, 가족외식",TRUE,FALSE,2,화덕피자 피자 파스타 이탈리안 데이트 동탄 북광장,FALSE
+반송돈 동탄북광장점,restaurant,동탄,반송돈 동탄북광장점,37.2019,127.0737,0507-1420-1656,https://naver.me/Fmf6THBL,kakao+naver,"고기집, 돼지고기, 회식, 가족외식",TRUE,FALSE,2,돼지고기 삼겹살 목살 고기집 회식 가족외식 동탄 북광장,FALSE
+스케줄 롯데백화점 동탄점,restaurant,동탄,경기 화성시 동탄역로 160 D.Avenue 2층,37.1991,127.0992,031-8036-3640,https://naver.me/GCvq4GBQ,kakao+naver,"캐주얼다이닝, 브런치, 데이트, 가족외식",TRUE,FALSE,2,브런치 파스타 스테이크 캐주얼다이닝 롯데백화점 동탄,FALSE
+소팔소곱창 동탄점,restaurant,동탄,경기 화성시 동탄반송2길 31-7 1층,37.2017,127.0726,0507-1416-2595,https://naver.me/FXwGd4Hc,kakao+naver,"곱창, 소주, 회식, 활기참",TRUE,FALSE,2,곱창 막창 대창 소곱창 회식 동탄 반송동,FALSE
+한가네숯불닭갈비 동탄점,restaurant,동탄,경기 화성시 동탄중심상가2길 26-31,37.2013,127.0742,0507-1383-9224,https://naver.me/Gubw33Ld,kakao+naver,"숯불닭갈비, 회식, 가족외식, 활기참",TRUE,FALSE,2,숯불닭갈비 닭갈비 고기집 회식 가족외식 동탄 중심상가,FALSE
+코지하우스 화성동탄점,restaurant,동탄,"경기 화성시 여울로 108 1, 2층",37.2045,127.0734,0507-1399-4668,https://naver.me/xKER1LDR,kakao+naver,"이탈리안, 캐주얼다이닝, 데이트, 가족외식",TRUE,FALSE,2,파스타 피자 이탈리안 데이트 가족외식 동탄,FALSE
+쿠우쿠우 동탄점,restaurant,동탄,경기 화성시 노작로1가길 8 나루프라자 3층 (반송동),37.201,127.0749,031-613-6274,https://naver.me/GlJ68KRN,kakao+naver,"뷔페, 가족외식, 단체모임, 캐주얼",TRUE,FALSE,2,초밥뷔페 무한리필 가족외식 단체모임 동탄 반송동,FALSE
+빕스 동탄롯데백화점점,restaurant,동탄,경기 화성시 동탄역로 160 롯데백화점 동탄점 D.Avenue B1F,37.1991,127.0992,0507-1380-9540,https://naver.me/FCA8w2lp,kakao+naver,"패밀리레스토랑, 뷔페, 가족외식, 모임",TRUE,FALSE,2,패밀리레스토랑 스테이크 샐러드바 뷔페 가족외식 롯데백화점 동탄,FALSE
+편백회관 동탄역점,restaurant,동탄,경기 화성시 동탄대로 446 동탄역 그란비아스타 제2층,37.1996,127.0986,0507-1392-8099,https://naver.me/FsRsdh2g,kakao+naver,"편백찜, 한식, 건강식, 가족외식, 깔끔함",TRUE,FALSE,2,편백찜 샤브샤브 건강식 가족외식 동탄역 그란비아스타,FALSE
+우블랑 동탄,restaurant,동탄,경기 화성시 동탄역로 102 1층,37.1968,127.1012,0507-1383-8393,https://naver.me/FHlgFuUp,kakao+naver,"브런치, 캐주얼다이닝, 데이트, 가족외식, 깔끔함",TRUE,FALSE,2,브런치 파스타 스테이크 캐주얼다이닝 데이트 동탄역,FALSE
+리틀노작 동탄 본점,restaurant,동탄,경기 화성시 노작로4길 30-8 1층,37.2069,127.0818,0507-1368-6010,https://naver.me/GWe27JMg,kakao+naver,"캐주얼다이닝, 브런치, 데이트, 가족외식, 아늑함",TRUE,FALSE,2,브런치 파스타 양식 캐주얼다이닝 데이트 동탄 노작,FALSE
+TSG통삼국 동탄점,restaurant,동탄,경기 화성시 동탄오산로 86-10 1층,37.1769,127.0598,0507-1382-3925,https://naver.me/xZVpxGSS,kakao+naver,"고기집, 삼겹살, 회식, 가족외식, 활기참",TRUE,FALSE,2,삼겹살 통삼겹 고기집 회식 가족외식 동탄 오산인근,FALSE
+정육식당육국 동탄점,restaurant,동탄,경기 화성시 동탄반송3길 8 동탄타워 1층,37.202,127.0736,0507-1390-3558,https://naver.me/GTnBYOyH,kakao+naver,"정육식당, 고기집, 회식, 가족외식",TRUE,FALSE,2,정육식당 소고기 돼지고기 가성비 회식 가족외식 동탄 반송동,FALSE
+단막 동탄호수점,restaurant,동탄,경기 화성시 동탄대로5길 21 라크몽B동 1층,37.1708,127.1039,0507-1444-6225,https://naver.me/FRui86F1,kakao+naver,"곱창, 막창, 프리미엄, 회식, 모임",TRUE,FALSE,2,막창 곱창 통막창 대구막창 회식 동탄호수공원 라크몽,FALSE
+애슐리퀸즈 동탄타임테라스점,restaurant,동탄,경기 화성시 동탄중앙로 220 타임테라스 A블럭 B2F,37.2005,127.072,0507-1473-1071,https://naver.me/Fmf6hW5K,kakao+naver,"뷔페, 패밀리레스토랑, 가족외식, 모임",TRUE,FALSE,2,뷔페 패밀리레스토랑 가족외식 단체모임 타임테라스 동탄,TRUE
+족발신선생 동탄영천점,restaurant,동탄,경기 화성시 지산2길 27 1층,37.2105,127.1066,031-373-8485,https://naver.me/GhbgZKqO,kakao+naver,"족발, 보쌈, 회식, 가족외식",TRUE,FALSE,2,족발 보쌈 야식 회식 가족외식 동탄 영천동,FALSE
+무궁화1983 동탄점,restaurant,동탄,경기 화성시 동탄지성로 17 동탄위버폴리스,37.2015,127.0744,0507-1330-0325,https://naver.me/GMmgIvG3,kakao+naver,"한식, 전통, 회식, 가족외식",TRUE,FALSE,2,한식 한상차림 전통음식 회식 가족외식 동탄 위버폴리스,FALSE
+농가의하루 동탄 본점,restaurant,동탄,경기 화성시 왕배산1길 3-16 1층,37.214,127.1057,0507-1492-8843,https://naver.me/5Q37LCTU,kakao+naver,"한식, 집밥, 건강식, 가족외식, 정갈함",TRUE,FALSE,2,한식 집밥 백반 정식 가족외식 동탄 왕배산,FALSE
+쭈돼집 동탄본점,restaurant,동탄,경기 화성시 동탄오산로 86-3,37.1767,127.0602,0507-1364-9786,https://naver.me/GSD8u0jI,kakao+naver,"쭈꾸미, 돼지고기, 매콤함, 회식, 가족외식",TRUE,FALSE,2,쭈꾸미 쭈삼 매콤한맛 고기집 회식 가족외식 동탄,FALSE
+다이닝원 동탄직영점,restaurant,동탄,경기 화성시 동탄대로5길 21 3층,37.1709,127.1038,0507-1327-5983,https://naver.me/G1wSdHPT,kakao+naver,"캐주얼다이닝, 뷔페, 가족외식, 모임, 깔끔함",TRUE,FALSE,2,뷔페 패밀리레스토랑 가족외식 단체모임 동탄 라크몽,FALSE
+돼통령,restaurant,병점,경기 화성시 병점중앙로156번길 11-12 1층,37.2063,127.0331,0507-1367-6692,https://naver.me/Gsj2rmCp,kakao+naver,"고기집, 돼지고기, 회식, 가족외식, 활기참",TRUE,FALSE,2,돼지고기 삼겹살 목살 고기집 회식 가족외식 병점,FALSE
+훈장골 동탄점,restaurant,동탄,경기 화성시 동탄장지천2길 27 2층,37.2126,127.1109,0507-1489-8799,https://naver.me/GOPeBMzb,kakao+naver,"한식, 정갈함, 가족외식, 회식",TRUE,FALSE,2,한식 정식 고기요리 가족외식 회식 동탄 장지동,FALSE
+한마음정육식당 동탄북광장점,restaurant,동탄,경기 화성시 노작로 203 서해더블루팍스 1층,37.2012,127.0751,0507-1347-0226,https://naver.me/5GpYxH7D,kakao+naver,"정육식당, 고기집, 회식, 가족외식",TRUE,FALSE,2,정육식당 소고기 돼지고기 가성비 회식 가족외식 동탄 북광장,FALSE
+스시노칸도 동탄북광장점,restaurant,동탄,경기 화성시 동탄원천로 163 위너스타 2층,37.2018,127.0741,031-8003-9950,https://naver.me/x0UEPTV7,kakao+naver,"초밥, 캐주얼, 데이트, 가족외식",TRUE,FALSE,2,초밥 스시 일본음식 데이트 가족외식 동탄 북광장,FALSE
+테오쿠진 동탄호수공원점,restaurant,동탄,경기 화성시 동탄대로5길 32 1층,37.1711,127.1035,0507-1393-8956,https://naver.me/FCA8lF10,kakao+naver,"프리미엄, 그릴다이닝, 데이트, 회식, 고급스러움",TRUE,FALSE,3,한우 스테이크 그릴요리 프리미엄다이닝 데이트 회식 동탄호수공원,FALSE
+스시이세이 롯데백화점 동탄점,restaurant,동탄,경기 화성시 오산동 967-157 롯데백화점 동탄점,37.1991,127.0992,0507-1495-3639,https://naver.me/Gn0yqYDe,kakao+naver,"초밥, 정갈함, 데이트, 가족외식, 깔끔함",TRUE,FALSE,2,초밥 스시 오마카세 일본음식 데이트 가족외식 롯데백화점 동탄,FALSE
+온유담,restaurant,동탄,경기 화성시 동탄지성로 184,37.2056,127.0769,0507-1363-9033,https://naver.me/5PVaqwn4,kakao+naver,"한식, 정갈함, 조용함, 가족외식, 모임",TRUE,FALSE,2,한정식 한식코스 정갈한식사 가족외식 모임 동탄,FALSE
+소레나,restaurant,동탄,경기 화성시 메타폴리스로 44 1층,37.2008,127.0727,0507-1409-2750,https://naver.me/FlZnuggV,kakao+naver,"일식, 철판요리, 이자카야, 데이트, 캐주얼",TRUE,FALSE,2,일식 철판요리 오코노미야키 야키소바 이자카야 하이볼 동탄 메타폴리스,FALSE
+동해수산,restaurant,동탄,경기 화성시 동탄반석로 172 동탄 파라곤 지하1층,37.2002,127.0758,0507-1305-2489,https://naver.me/Fafyo18X,kakao+naver,"해산물, 횟집, 가족외식, 모임",TRUE,FALSE,2,횟집 해산물 회 가족외식 모임 동탄 파라곤,FALSE
+디라이프스타일키친 롯데백화점 동탄점,restaurant,동탄,경기 화성시 오산동 967-157 롯데백화점 동탄점,37.1991,127.0992,0507-1384-3572,https://naver.me/502MWtA1,kakao+naver,"캐주얼다이닝, 브런치, 깔끔함, 가족외식, 데이트",TRUE,FALSE,2,캐주얼다이닝 브런치 파스타 스테이크 가족외식 데이트 롯데백화점 동탄,FALSE
+반송돈 동탄북광장점,restaurant,동탄,경기 화성시 동탄지성로 2 1층,37.2019,127.0737,0507-1420-1656,https://naver.me/Fmf6THBL,kakao+naver,"고기집, 돼지고기, 회식, 가족외식",TRUE,FALSE,2,돼지고기 삼겹살 목살 고기집 회식 가족외식 동탄 북광장,FALSE
+웬즈데이 동탄센트럴파크점,restaurant,동탄,경기 화성시 동탄공원로2길 41,37.1694,127.0842,0507-1398-5744,https://naver.me/GyYbb9ki,kakao+naver,"브런치, 캐주얼다이닝, 데이트, 가족외식, 깔끔함",TRUE,FALSE,2,브런치 파스타 샐러드 캐주얼다이닝 데이트 동탄 센트럴파크,FALSE
+온비프,restaurant,동탄,경기 화성시 동탄대로 646-4 메가비즈타워 B동 1층 111-116호,37.2162,127.1121,0507-1390-9295,https://naver.me/5T4AltHC,kakao+naver,"고기집, 한우, 회식, 가족외식, 깔끔함",TRUE,FALSE,3,한우 소고기 고기집 회식 가족외식 동탄 메가비즈타워,FALSE
+후대화로,restaurant,동탄,경기 화성시 동탄중심상가1길 18 1층,37.2011,127.0733,0507-1402-6707,https://naver.me/FgHD3FHQ,kakao+naver,"고기집, 숯불구이, 회식, 가족외식, 활기참",TRUE,FALSE,2,숯불구이 소고기 돼지고기 고기집 회식 가족외식 동탄 중심상가,FALSE
+어서옵쇼,restaurant,동탄,경기 화성시 동탄대로21가길 14-5 1층,37.2119,127.1096,031-8077-9896,https://naver.me/FUhs8Ax2,kakao+naver,"한식주점, 안주맛집, 데이트, 모임, 캐주얼",FALSE,FALSE,2,한식주점 술집 안주맛집 데이트 모임 동탄,FALSE
+와우리장작구이 동탄점,restaurant,동탄,경기 화성시 여울로 127,37.2049,127.0751,0507-1306-5299,https://naver.me/G2EwIF4m,kakao+naver,"장작구이, 고기집, 회식, 가족외식, 푸짐함",TRUE,FALSE,2,장작구이 통삼겹 바베큐 고기집 회식 가족외식 동탄,FALSE
+왕뼈사랑 동탄목동점,restaurant,동탄,경기 화성시 왕배산1길 3-4 1층,37.2138,127.1052,0507-1314-5559,https://naver.me/GeUb1Ti3,kakao+naver,"감자탕, 뼈찜, 푸짐함, 가족외식, 회식",TRUE,FALSE,2,감자탕 뼈해장국 뼈찜 푸짐한한식 가족외식 회식 동탄 목동,FALSE
+샤브20 동탄2신도시점,restaurant,동탄,경기 화성시 동탄순환대로27길 30 2층,37.2068,127.0841,0507-1406-4920,https://naver.me/F168zE4H,kakao+naver,"샤브샤브, 깔끔함, 가족외식, 모임",TRUE,FALSE,2,샤브샤브 무한리필 야채바 가족외식 단체모임 동탄2신도시,FALSE
+이화옥 스테이크 동탄 본점,restaurant,동탄,경기 화성시 노작로 226-7 산타플러스 1층,37.206,127.0768,0507-1344-0133,https://naver.me/FfeOpfiw,kakao+naver,"스테이크, 프리미엄, 데이트, 가족외식, 조용함",TRUE,FALSE,3,스테이크 소고기 프리미엄다이닝 데이트 기념일 가족외식 동탄,FALSE
+퀸스타운,restaurant,동탄,경기 화성시 동탄기흥로520번나길 20 1층,37.2123,127.1128,0507-1308-5202,https://naver.me/GXApNuAN,kakao+naver,"캐주얼다이닝, 데이트, 모임, 이국적",TRUE,FALSE,2,양식 스테이크 파스타 캐주얼다이닝 데이트 동탄,FALSE
+돌탄순댓국 동탄테크노밸리점,restaurant,동탄,경기 화성시 동탄기흥로520번가길 26 1층,37.2127,127.1136,0507-1477-5666,https://naver.me/5yWVuqOR,kakao+naver,"한식, 순댓국, 든든함, 직장인식사, 혼밥",TRUE,FALSE,1,순댓국 국밥 해장 든든한한끼 혼밥 동탄테크노밸리,FALSE
+와이노 동탄호수공원점,restaurant,동탄,경기 화성시 동탄대로6길 17 2층,37.1715,127.1044,0507-1356-4642,https://naver.me/5XJIoHd2,kakao+naver,"와인바, 데이트, 분위기좋음, 조용함",TRUE,FALSE,3,와인바 와인 안주 데이트 기념일 동탄호수공원,FALSE
+고메스퀘어 동탄점,restaurant,동탄,경기 화성시 동탄역로 102 엘리스빌 3층 (Gate 6),37.1968,127.1012,031-375-1379,https://naver.me/FQVGhGOb,kakao+naver,"뷔페, 프리미엄, 가족외식, 모임",TRUE,FALSE,2,프리미엄뷔페 해산물 스테이크 가족외식 단체모임 동탄역,FALSE
+필동함박 IN 동탄호수공원점,restaurant,동탄,경기 화성시 동탄순환대로5길 9 제이아크1동,37.1719,127.1052,0507-1396-5685,https://naver.me/FAPvmMUY,kakao+naver,"함박스테이크, 캐주얼, 가족외식, 데이트",TRUE,FALSE,2,함박스테이크 경양식 양식 가족외식 데이트 동탄호수공원,FALSE
+파크사이드,restaurant,동탄,경기 화성시 동탄감배산로 143 상가 B123호,37.2087,127.0886,0507-1334-3295,https://naver.me/5bVsWJYD,kakao+naver,"브런치, 캐주얼다이닝, 데이트, 가족외식, 깔끔함",TRUE,FALSE,2,브런치 파스타 스테이크 캐주얼다이닝 데이트 동탄 감배산,FALSE
+남도연프리미엄,restaurant,동탄,경기 화성시 동탄대로5길 9 5층,37.1719,127.1052,0507-1347-1653,https://naver.me/FO9oVxte,kakao+naver,"한식, 남도음식, 정갈함, 모임, 가족외식",TRUE,FALSE,2,남도한식 해물탕 꼬막정식 쭈꾸미 한정식 가족외식 모임 동탄호수공원,FALSE
+파파스 초밥,restaurant,동탄,경기 화성시 동탄대로21가길 4-3,37.2115,127.1092,0507-1493-5188,https://naver.me/xIe6QGtp,kakao+naver,"초밥, 깔끔함, 혼밥, 가족외식",TRUE,FALSE,2,초밥 스시 일본음식 혼밥 가족외식 동탄,FALSE
+경기 화성시 노작로1가길 10 2층,restaurant,동탄,경기 화성시 노작로1가길 10 2층,37.2016,127.0747,0507-1370-0895,https://naver.me/FHVMcXkK,kakao+naver,"한식, 정갈함, 조용함, 모임, 가족외식",TRUE,FALSE,2,한식 정식 코스요리 모임 가족외식 동탄 북광장,FALSE
+팔각도 동탄역점,restaurant,동탄,경기 화성시 동탄역로 102 앨리스빌,37.1968,127.1012,0507-1479-7828,https://naver.me/xxY2110n,kakao+naver,"숯불닭갈비, 고기집, 회식, 가족외식, 활기참",TRUE,FALSE,2,숯불닭갈비 닭갈비 고기집 회식 가족외식 동탄역,FALSE
+상무초밥 동탄호수공원점,restaurant,동탄,경기 화성시 동탄대로5길 15 더샵동탄센텀폴리스 1단지 그랑파사쥬 1층,37.1717,127.1041,0507-1366-2218,https://naver.me/FO9dk9lH,kakao+naver,"초밥, 깔끔함, 가족외식, 데이트",TRUE,FALSE,2,초밥 스시 회전초밥 가족외식 데이트 동탄호수공원,FALSE
+세광양대창 동탄점,restaurant,동탄,경기 화성시 동탄중심상가1길 34 1층,37.2012,127.0739,0507-1489-9290,https://naver.me/F2ZbrWTO,kakao+naver,"곱창, 양대창, 회식, 활기참",TRUE,FALSE,2,양대창 곱창 대창 막창 회식 동탄 중심상가,FALSE
+뭉텅 병점점,restaurant,병점,경기 화성시 병점동로 94 1층,37.2074,127.0346,0507-1364-9178,https://naver.me/xxY2QPZF,kakao+naver,"고기집, 두툼함, 회식, 가족외식, 활기참",TRUE,FALSE,2,고기집 삼겹살 목살 두툼한고기 회식 가족외식 병점,FALSE
+이탈리안테이블 동탄,restaurant,동탄,경기 화성시 동탄순환대로5길 5-25 1층,37.1713,127.1049,010-3948-0301,https://naver.me/xSFhaB0V,kakao+naver,"이탈리안, 캐주얼다이닝, 데이트, 가족외식, 아늑함",TRUE,FALSE,2,이탈리안 파스타 피자 스테이크 데이트 가족외식 동탄호수공원,FALSE
+등촌샤브칼국수 동탄역점,restaurant,동탄,경기 화성시 동탄대로 597 보원프라자 2층,37.2019,127.1108,031-378-4766,https://naver.me/xmxIOA7f,kakao+naver,"샤브샤브, 칼국수, 든든함, 가족외식, 회식",TRUE,FALSE,2,샤브샤브 칼국수 볶음밥 가족외식 회식 동탄역,FALSE
+파크사이드,restaurant,동탄,경기 화성시 동탄감배산로 143 상가 B123호,37.2087,127.0886,0507-1334-3295,https://naver.me/5bVsWJYD,kakao+naver,"브런치, 캐주얼다이닝, 데이트, 가족외식, 깔끔함",TRUE,FALSE,2,브런치 파스타 스테이크 캐주얼다이닝 데이트 동탄 감배산,FALSE
+상해루,restaurant,동탄,경기 화성시 노작로 147 돌모루프라자 DM프라자,37.2037,127.0758,031-8015-0102,https://naver.me/GipBCJPa,kakao+naver,"중식, 정통중화요리, 가족외식, 모임",TRUE,FALSE,2,중식당 짜장면 짬뽕 탕수육 코스요리 가족외식 동탄,FALSE
+담가화로구이 동탄센트럴파크점,restaurant,동탄,경기 화성시 동탄지성로 118 1층,37.2033,127.0782,0507-1390-1370,https://naver.me/xen68ssF,kakao+naver,"화로구이, 고기집, 회식, 가족외식",TRUE,FALSE,2,화로구이 숯불구이 소고기 돼지고기 고기집 회식 가족외식 동탄 센트럴파크,FALSE
+라오충칭훠궈,restaurant,동탄,경기 화성시 동탄반석로 172,37.2003,127.0759,0507-1455-1647,https://naver.me/5PV6UBtm,kakao+naver,"훠궈, 중식, 이국적, 모임, 회식",TRUE,FALSE,2,훠궈 마라 중식 사천요리 모임 회식 동탄,FALSE
+양심소 동탄능동점,restaurant,동탄,경기 화성시 동탄지성로 169 1층,37.2046,127.0775,0507-1316-6699,https://naver.me/FG7tKkXR,kakao+naver,"고기집, 소고기, 회식, 가족외식",TRUE,FALSE,2,소고기 한우 고기집 회식 가족외식 동탄 능동,FALSE
+맥도날드 동탄2 DT점,restaurant,동탄,경기 화성시 동탄순환대로 754-9,37.2079,127.1194,031-8043-5900,https://naver.me/5A3pO2qK,kakao+naver,"패스트푸드, 캐주얼, 가족, 간편식사",TRUE,FALSE,1,햄버거 드라이브스루 DT 24시간 가족외식 동탄2신도시,FALSE
+후라토식당 동탄레이크꼬모점,restaurant,동탄,경기 화성시 동탄대로 181 동탄레이크꼬모 송동길 2층,37.1707,127.1031,0507-1473-3364,https://naver.me/xhzCnccq,kakao+naver,"일식, 정갈함, 가족외식, 데이트",TRUE,FALSE,2,일식 돈카츠 스테이크 정식 가족외식 데이트 레이크꼬모 동탄,FALSE
+애슐리퀸즈 롯데아울렛 기흥점,restaurant,동탄,경기 용인시 기흥구 신고매로 124 2층,37.2256,127.1224,0507-1322-6376,https://naver.me/5apTFIxA,kakao+naver,"뷔페, 패밀리레스토랑, 가족외식, 쇼핑동선",TRUE,FALSE,2,뷔페 패밀리레스토랑 가족외식 단체모임 롯데아울렛 기흥,FALSE
+아웃백스테이크하우스 동탄점,restaurant,동탄,경기 화성시 동탄중앙로 220 타임테라스 A블럭 3층,37.2005,127.072,0507-1305-4261,https://naver.me/5ssTHXZP,kakao+naver,"스테이크하우스, 캐주얼다이닝, 가족외식, 데이트",TRUE,FALSE,2,스테이크 패밀리레스토랑 데이트 가족외식 타임테라스 동탄,FALSE
+한양식당 동탄호수공원점,restaurant,동탄,경기 화성시 동탄순환대로5길 5-8 1층,37.1714,127.1047,0507-1372-8994,https://naver.me/xJiBs1hT,kakao+naver,"한식, 집밥, 든든함, 가족외식",TRUE,FALSE,2,한식 백반 제육볶음 김치찌개 가족외식 동탄호수공원,FALSE
+쭈꾸미잘하는집,restaurant,동탄,경기 화성시 풀무골로110번길 1,37.1786,127.0439,0507-1344-0171,https://naver.me/Fk73k84U,kakao+naver,"쭈꾸미, 매콤함, 든든함, 가족외식, 회식",TRUE,FALSE,2,쭈꾸미볶음 쭈삼 매운음식 가족외식 회식 화성,FALSE
+미태리 동탄산척점,restaurant,동탄,경기 화성시 동탄순환대로14길 45-13 1층,37.2169,127.0882,070-4066-6069,https://naver.me/FHVBdD7n,kakao+naver,"이탈리안, 캐주얼, 가성비, 가족외식",TRUE,FALSE,1,파스타 피자 가성비맛집 가족외식 동탄 산척,FALSE
+최고손칼국수,restaurant,병점,경기 화성시 병점중앙로 100-3,37.2071,127.0338,0507-1340-9687,https://naver.me/GzEDFUjy,kakao+naver,"한식, 칼국수, 든든함, 서민적",TRUE,FALSE,1,칼국수 손칼국수 국수집 병점 혼밥 가족식사,FALSE
+이화옥 스테이크 동탄 본점,restaurant,동탄,경기 화성시 노작로 226-7 산타플러스 1층,37.206,127.0768,0507-1344-0133,https://naver.me/FfeOpfiw,kakao+naver,"스테이크, 프리미엄, 데이트, 기념일, 가족외식",TRUE,FALSE,2,스테이크 소고기 프리미엄다이닝 데이트 기념일 가족외식 동탄,TRUE
+겐로쿠우동 동탄호수공원점,restaurant,동탄,경기 화성시 동탄순환대로3길 28-32 1층,37.1709,127.1056,0507-1348-1235,https://naver.me/5N15kj6P,kakao+naver,"일식, 우동, 깔끔함, 혼밥, 가족외식",TRUE,FALSE,2,우동 일본우동 덮밥 혼밥 가족외식 동탄호수공원,FALSE
+로운샤브샤브 스타필드마켓 동탄점,restaurant,동탄,경기 화성시 동탄중앙로 376 스타필드마켓 동탄점 1층,37.2048,127.0999,0507-1386-6104,https://naver.me/5KqlCZ0E,kakao+naver,"샤브샤브, 깔끔함, 가족외식, 쇼핑동선",TRUE,FALSE,2,샤브샤브 무한리필 야채바 가족외식 스타필드마켓 동탄,FALSE
+미도인 동탄레이크꼬모점,restaurant,동탄,경기 화성시 동탄대로 181 판매시설 A동 2층,37.1707,127.1031,031-374-1990,https://naver.me/F1rxWT25,kakao+naver,"일식, 덮밥, 깔끔함, 혼밥, 가족외식",TRUE,FALSE,2,일식 덮밥 스테이크덮밥 규동 가족외식 레이크꼬모 동탄,FALSE
+리파인 동탄호수공원점,restaurant,동탄,경기 화성시 동탄대로5길 32 2층,37.1712,127.1036,0507-1309-5514,https://naver.me/xprAp0Rk,kakao+naver,"브런치, 캐주얼다이닝, 데이트, 조용함",TRUE,FALSE,2,브런치 파스타 양식 캐주얼다이닝 데이트 동탄호수공원,FALSE
+먹고보자 무한리필 양꼬치,restaurant,동탄,경기 화성시 동탄문화센터로 65 1층,37.1998,127.0816,0507-1369-6767,https://naver.me/5FmSS6Gj,kakao+naver,"양꼬치, 중식, 회식, 가성비, 활기참",TRUE,FALSE,1,양꼬치 무한리필 중식 훠궈 회식 가성비 동탄,FALSE
+숙성회136 동탄북광장점,restaurant,동탄,경기 화성시 동탄중심상가2길 31 2층,37.2014,127.074,0507-1335-3541,https://naver.me/x3HeRFYz,kakao+naver,"숙성회, 횟집, 데이트, 모임, 깔끔함",TRUE,FALSE,2,숙성회 회 사시미 해산물 데이트 모임 동탄 북광장,FALSE
+운암돈,restaurant,동탄,경기 화성시 동탄오산로 86-8 1층,37.1768,127.0607,0507-1444-5701,https://naver.me/F74VRSuf,kakao+naver,"고기집, 돼지고기, 회식, 가족외식",TRUE,FALSE,2,돼지고기 삼겹살 목살 고기집 회식 가족외식 동탄,FALSE
+고진사 영천직영점,restaurant,동탄,경기 화성시 지산1길 11-7 1층,37.2109,127.1072,0507-1387-1929,https://naver.me/x1mpaGdF,kakao+naver,"고기집, 소고기, 회식, 가족외식",TRUE,FALSE,2,소고기 한우 고기집 회식 가족외식 동탄 영천동,FALSE
+스시노칸도 동탄북광장점,restaurant,동탄,경기 화성시 동탄원천로 163 위너스타 2층,37.2018,127.0741,031-8003-9950,https://naver.me/x0UEPTV7,kakao+naver,"초밥, 깔끔함, 데이트, 가족외식",TRUE,FALSE,2,초밥 스시 일본음식 데이트 가족외식 동탄 북광장,FALSE
+담가화로구이 동탄목동점,restaurant,동탄,경기 화성시 동탄순환대로 400 우성스타시티A 1층,37.2101,127.0894,0507-1411-8094,https://naver.me/IGJxoWMd,kakao+naver,"화로구이, 고기집, 회식, 가족외식",TRUE,FALSE,2,화로구이 숯불구이 소고기 돼지고기 고기집 회식 가족외식 동탄 목동,FALSE
+모박사부대찌개 동탄점,restaurant,동탄,경기 화성시 메타폴리스로 53 스타프라자 2층,37.2006,127.0718,0507-1374-0096,https://naver.me/xs3GQqLm,kakao+naver,"한식, 부대찌개",TRUE,FALSE,2,부대찌개 한식 국물요리 가족외식 회식 동탄 메타폴리스,FALSE
+옥이떡볶이,restaurant,동탄,경기 화성시 목동 393-10,37.2017,126.9985,0507-1415-4110,https://naver.me/GeURDurh,kakao+naver,"분식, 떡볶이",TRUE,FALSE,1,떡볶이 분식 화성 목동 간식 혼밥,FALSE
+다시 봄 비스트로,restaurant,동탄,경기 화성시 노작로1길 45 1층,37.2026,127.0493,0507-1483-1213,https://naver.me/5apDSVTX,kakao+naver,"양식, 비스트로, 데이트, 가족외식",TRUE,FALSE,2,비스트로 양식 파스타 뇨끼 리조또 스테이크 데이트,FALSE
+우정가 동탄북광장점,restaurant,동탄,경기 화성시 동탄지성로 11 2층,37.2078,127.0642,0507-1350-7965,https://naver.me/FV7Y4QMN,kakao+naver,"한식, 곱창, 고기, 회식, 가족외식",TRUE,FALSE,2,우정가 곱창 한식 동탄북광장,FALSE
+동탄한우 정육식당,restaurant,동탄,경기 화성시 여울로 178-5 1층,37.2015,127.0564,031-8015-0702,https://naver.me/5du4KRbx,kakao+naver,"한식, 고기, 가족외식, 회식",TRUE,FALSE,2,한우 정육식당 고기 화성 동탄,FALSE
+양심장어 본점,restaurant,동탄,경기 화성시 동탄중심상가2길 29,37.2009,127.0843,0507-1473-4050,https://naver.me/FjbnOeRR,kakao+naver,"한식, 장어, 회식",TRUE,FALSE,2,장어 한식 동탄 중심상가,FALSE
+이자카야 춘 동탄점,restaurant,동탄,경기 화성시 동탄반석로 172 1층,37.1978,127.0751,0507-1322-3332,https://naver.me/5IS9ueLB,kakao+naver,"일식, 이자카야, 회식, 데이트",FALSE,FALSE,2,이자카야 일식 동탄 술집,FALSE
+달구운바람 동탄영천점,restaurant,동탄,경기 화성시 지산1길 3-1 1층,37.2082,127.0567,031-373-9192,https://naver.me/GUwSNqyx,kakao+naver,"한식, 바비큐, 회식, 가족외식",TRUE,FALSE,2,달구운바람 한식 고기 동탄 영천,FALSE
+백미헌 능동점,restaurant,동탄,경기 화성시 여울로 135,37.2034,127.0589,031-238-8887,https://naver.me/FfBQYtoE,kakao+naver,"중식, 짬뽕, 해장, 식사",TRUE,FALSE,2,중식 짬뽕 화성 능동 백미헌,FALSE
+금수정,restaurant,동탄,경기 화성시 동탄역로 102 앨리스빌 상가 1층,37.1997,127.0694,031-377-4818,https://naver.me/xJiBARuE,kakao+naver,"장어, 숯불",TRUE,FALSE,3,장어 숯불장어 동탄 앨리스빌 보양식,FALSE
+최미삼순대국 능동점,restaurant,동탄,경기 화성시 동탄지성로 187 1층,37.2066,127.0588,031-236-9007,https://naver.me/5Rh0j8AH,kakao+naver,"한식, 순대국, 해장, 혼밥",TRUE,FALSE,1,순대국 국밥 화성 능동 해장,FALSE
+IZAKAYA 만지,restaurant,동탄,경기 화성시 동탄반송2길 15-1 1층,37.2019,127.0716,070-7543-2172,https://naver.me/5oE5WxxV,kakao+naver,"일식, 이자카야, 술집, 데이트",FALSE,FALSE,2,이자카야 일식 동탄 반송 술집,FALSE
+탐라육해 동탄북광장점,restaurant,동탄,경기 화성시 동탄중심상가2길 36 1층,37.2014,127.0849,0507-1432-9026,https://naver.me/xLsKCk6P,kakao+naver,"한식, 고기, 해산물, 회식, 가족외식",FALSE,FALSE,2,고기 해산물 제주 탐라육해 동탄 북광장,FALSE
+이우철한방누룽지삼계탕,restaurant,동탄,경기 오산시 외삼미로 162-28 2층,37.1896,127.0489,0507-1334-3364,https://naver.me/FG7xoxvi,kakao+naver,"한식, 삼계탕, 보양식, 가족외식",TRUE,FALSE,2,삼계탕 한방 누룽지 보양식 오산 외삼미,FALSE
+파올 동탄여울공원점,restaurant,동탄,경기 화성시 동탄오산로 29 디에트르퍼스티지 A동 105호,37.2031,127.0572,0507-1480-0183,https://naver.me/xbjtSluR,kakao+naver,"양식, 파스타, 브런치, 데이트",TRUE,FALSE,2,파스타 양식 브런치 동탄 여울공원,FALSE
+짬뽕지존 동탄점,restaurant,동탄,경기 화성시 동탄반석로 156 동탄하이페리온,37.1989,127.0746,031-8003-2922,https://naver.me/FDn7KD0i,kakao+naver,"중식, 짬뽕, 해장, 식사",TRUE,FALSE,2,짬뽕 중식 동탄 하이페리온 짬뽕지존,FALSE
+라본테이블 본점,restaurant,동탄,경기 화성시 동탄반석로 172 파라곤1차,37.1979,127.075,0507-1362-0146,https://naver.me/IDFUdteB,kakao+naver,"양식, 이탈리안, 데이트, 가족외식",TRUE,FALSE,2,라본테이블 파스타 스테이크 동탄 파라곤,FALSE
+와다이 동탄역점,restaurant,동탄,경기 화성시 동탄오산로 86-8 로얄클래스,37.1993,127.0608,0507-1438-2075,https://naver.me/xk1nJDqf,kakao+naver,"일식, 이자카야,",FALSE,FALSE,2,"이자카야 일식 사시미 세트메뉴 동탄 술집, 데이트",FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,동탄,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,
+,restaurant,오산,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,오산,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,오산,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE
+,restaurant,오산,,,,,,kakao+naver,,TRUE,FALSE,,,FALSE

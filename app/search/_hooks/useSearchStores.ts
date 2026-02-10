@@ -71,6 +71,12 @@ export function normalizeCategory(raw: unknown): Category | null {
     return "activity";
   }
 
+  // 범용 fallback (DB에 다양한 형식이 있을 수 있음)
+  if (c.includes("cafe") || c.includes("카페")) return "cafe";
+  if (c.includes("restaurant") || c.includes("식당") || c.includes("fd6") || c.includes("중식") || c.includes("한식") || c.includes("양식") || c.includes("일식")) return "restaurant";
+  if (c.includes("salon") || c.includes("미용") || c.includes("beauty") || c.includes("bk9")) return "salon";
+  if (c.includes("activity") || c.includes("액티비티") || c.includes("활동") || c.includes("공원") || c.includes("박물관")) return "activity";
+
   return null;
 }
 
@@ -99,7 +105,23 @@ export function inferCategoryFromQuery(q: string): Category {
   if (t.includes("미용") || t.includes("헤어") || t.includes("뷰티") || t.includes("살롱") || t.includes("salon") || t.includes("beauty")) {
     return "salon";
   }
-  if (t.includes("식당") || t.includes("밥") || t.includes("한식") || t.includes("레스토랑") || t.includes("맛집")) {
+  if (
+    t.includes("식당") ||
+    t.includes("밥") ||
+    t.includes("한식") ||
+    t.includes("레스토랑") ||
+    t.includes("맛집") ||
+    t.includes("중국집") ||
+    t.includes("중국") ||
+    t.includes("중식") ||
+    t.includes("일식") ||
+    t.includes("양식") ||
+    t.includes("한정식") ||
+    t.includes("혼밥") ||
+    t.includes("점심식사") ||
+    t.includes("회식") ||
+    t.includes("점심")
+  ) {
     return "restaurant";
   }
   if (t.includes("박물관") || t.includes("공원") || t.includes("체험") || t.includes("활동") || t.includes("놀") || t.includes("키즈")) {

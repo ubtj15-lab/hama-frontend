@@ -164,7 +164,8 @@ async function fetchAllMixedRecommend(intent: IntentionType): Promise<HomeCard[]
     fetchCategorySmart("activity", intent),
   ]);
 
-  return [...restaurants, ...cafes, ...salons, ...activities];
+  const merged = [...restaurants, ...cafes, ...salons, ...activities];
+  return shuffle(merged);
 }
 
 export function useHomeCards(tab: HomeTabKey, shuffleKey: number, intent: IntentionType): Result {

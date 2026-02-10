@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import FloatingMic from "./components/FloatingMic";
+import { AuthSync } from "./_components/AuthSync";
 import { UIOverlayProvider } from "./_providers/UIOverlayProvider";
 
 export const metadata: Metadata = {
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ko">
       <body style={{ margin: 0 }}>
+        <AuthSync />
         <UIOverlayProvider>
           {children}
           <FloatingMic />

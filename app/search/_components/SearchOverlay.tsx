@@ -12,10 +12,10 @@ function labelOfCategory(category: Category): string {
 }
 
 function fallbackImageByCategory(category: Category) {
-  if (category === "restaurant") return "/images/fallback/restaurant.jpg";
-  if (category === "cafe") return "/images/fallback/cafe.jpg";
-  if (category === "salon") return "/images/fallback/beauty.jpg";
-  return "/images/fallback/activity.jpg";
+  if (category === "restaurant") return "/images/category/restaurant.jpg";
+  if (category === "cafe") return "/images/category/cafe.jpg";
+  if (category === "salon") return "/images/category/salon.jpg";
+  return "/images/category/activity.jpg";
 }
 
 type Props = {
@@ -35,6 +35,8 @@ type Props = {
   onOverlayScroll: (e: React.UIEvent<HTMLDivElement>) => void;
   setReserveDate: (v: string) => void;
   setReserveTime: (v: string) => void;
+  isSaved?: (storeId: string) => boolean;
+  onToggleSaved?: (storeId: string) => void;
 };
 
 export default function SearchOverlay(props: Props) {
@@ -51,6 +53,8 @@ export default function SearchOverlay(props: Props) {
     onOverlayScroll,
     setReserveDate,
     setReserveTime,
+    isSaved,
+    onToggleSaved,
   } = props;
 
   if (!visible || !selected) return null;
@@ -144,6 +148,28 @@ export default function SearchOverlay(props: Props) {
           >
             ←
           </button>
+
+          {onToggleSaved && selected && (
+            <button
+              onClick={() => onToggleSaved(selected.id)}
+              style={{
+                position: "absolute",
+                top: 10,
+                right: 10,
+                width: 32,
+                height: 32,
+                borderRadius: "9999px",
+                border: "none",
+                background: "rgba(15,23,42,0.8)",
+                color: isSaved?.(selected.id) ? "#f43f5e" : "#f9fafb",
+                cursor: "pointer",
+                boxShadow: "0 4px 10px rgba(0, 0, 0, 0.4)",
+                fontSize: 16,
+              }}
+            >
+              {isSaved?.(selected.id) ? "♥" : "♡"}
+            </button>
+          )}
 
           <button
             onClick={() => onOpenKakaoPlace(selected)}

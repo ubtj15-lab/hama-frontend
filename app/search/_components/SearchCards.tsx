@@ -12,15 +12,16 @@ function labelOfCategory(category: Category): string {
 }
 
 function fallbackImageByCategory(category: Category) {
-  if (category === "restaurant") return "/images/fallback/restaurant.jpg";
-  if (category === "cafe") return "/images/fallback/cafe.jpg";
-  if (category === "salon") return "/images/fallback/beauty.jpg";
-  return "/images/fallback/activity.jpg";
+  if (category === "restaurant") return "/images/category/restaurant.jpg";
+  if (category === "cafe") return "/images/category/cafe.jpg";
+  if (category === "salon") return "/images/category/salon.jpg";
+  return "/images/category/activity.jpg";
 }
 
 type Props = {
   query: string;
   hasMyLocation: boolean;
+  usedChineseFallback?: boolean;
   pageIndex: number;
   pages: CardInfo[][];
   selected: CardInfo | null;
@@ -38,6 +39,7 @@ export default function SearchCards(props: Props) {
   const {
     query,
     hasMyLocation,
+    usedChineseFallback = false,
     pageIndex,
     pages,
     selected,
@@ -100,7 +102,7 @@ export default function SearchCards(props: Props) {
           {query
             ? `“${query}” 검색 결과${
                 hasCards ? ` · ${labelOfCategory(selected!.categoryNorm)}` : ""
-              }${hasMyLocation ? " · 내 위치 기준" : ""}`
+              }${usedChineseFallback ? " (중국집 태그된 곳이 없어 주변 식당)" : ""}${hasMyLocation ? " · 내 위치 기준" : ""}`
             : "하마 추천 장소"}
         </div>
       </div>
@@ -207,7 +209,7 @@ export default function SearchCards(props: Props) {
                 }}
               >
                 {selected!.name} · {labelOfCategory(selected!.categoryNorm)}
-                {selected!.distanceKm != null
+                {selected!.distanceKm != null && selected!.distanceKm < 500
                   ? ` · ${selected!.distanceKm.toFixed(1)}km`
                   : ""}
               </div>
@@ -277,7 +279,7 @@ export default function SearchCards(props: Props) {
                     }}
                   >
                     {card.name}
-                    {card.distanceKm != null
+                    {card.distanceKm != null && card.distanceKm < 500
                       ? ` · ${card.distanceKm.toFixed(1)}km`
                       : ""}
                   </div>

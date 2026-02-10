@@ -182,7 +182,7 @@ async function fetchAllMixedNearby(loc: { lat: number; lng: number }, intent: In
     fetchNearbyCategorySmart(loc, "activity", intent),
   ]);
 
-  return [...restaurants, ...cafes, ...salons, ...activities];
+  return shuffle([...restaurants, ...cafes, ...salons, ...activities]);
 }
 
 export function useNearbyCards(
