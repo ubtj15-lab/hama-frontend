@@ -68,7 +68,15 @@ export function storeToHomeCard(store: AnyStore): HomeCard {
   const distanceKm = Number(distanceKmRaw);
   const safeDistance = Number.isFinite(distanceKm) ? distanceKm : 0;
 
-  const imageUrl = String(store?.imageUrl ?? store?.image_url ?? store?.image ?? store?.thumbnail ?? store?.thumb ?? "");
+  const imageUrl = String(
+    store?.cover_image_url ??
+      store?.imageUrl ??
+      store?.image_url ??
+      store?.image ??
+      store?.thumbnail ??
+      store?.thumb ??
+      ""
+  );
 
   const lat =
     typeof store?.lat === "number"

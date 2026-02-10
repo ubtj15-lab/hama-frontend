@@ -144,7 +144,7 @@ export default function SearchCards(props: Props) {
               fontSize: 14,
             }}
           >
-            추천 카드가 없어요
+            하마가 학습 중이에요
           </div>
         ) : (
           <>

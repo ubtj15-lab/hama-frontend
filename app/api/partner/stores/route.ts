@@ -45,11 +45,26 @@ export async function GET(req: NextRequest) {
       query = query.ilike("name", `%${q}%`);
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
 
     if (error) {
       console.error("[partner/stores]", error);
       return NextResponse.json({ stores: [] });
+    }
+
+    // 결과 없고 검색어가 2자 이상이면 마지막 글자 빼고 한 번 더 검색 (오타 보정)
+    if ((data?.length ?? 0) === 0 && q.length >= 2) {
+      const fallbackQ = q.slice(0, -1);
+      const fallback = await supabase
+        .from("stores")
+        .select("id, name, category, area")
+        .eq("owner_id", userId)
+        .ilike("name", `%${fallbackQ}%`)
+        .order("name", { ascending: true })
+        .limit(limit);
+      if (!fallback.error && (fallback.data?.length ?? 0) > 0) {
+        data = fallback.data;
+      }
     }
 
     return NextResponse.json({ stores: data ?? [] });

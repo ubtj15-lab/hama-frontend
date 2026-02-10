@@ -82,7 +82,12 @@ export default function MapPage() {
   };
 
   const handleReserve = () => {
-    router.push(`/reserve?q=${encodeURIComponent(name)}`);
+    const params = new URLSearchParams({
+      name: name || "목적지",
+      lat: String(lat),
+      lng: String(lng),
+    });
+    router.push(`/reserve?${params.toString()}`);
   };
 
   const handleVoiceCommand = (text: string) => {

@@ -31,7 +31,7 @@ export default function SearchResultList({ items, onSelect }: Props) {
   if (!items || items.length === 0) {
     return (
       <div style={{ padding: 12, color: "#64748b", fontSize: 13 }}>
-        검색 결과가 없어요.
+        하마가 학습 중이에요
       </div>
     );
   }

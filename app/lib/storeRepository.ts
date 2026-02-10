@@ -33,6 +33,7 @@ export type StoreRow = {
   phone: string | null;
 
   image_url: string | null;
+  cover_image_url: string | null;
 
   kakao_place_url: string | null;
   naver_place_id: string | null;
@@ -89,7 +90,9 @@ function sanitizeImageUrl(input: string | null | undefined, allowHttp = false): 
 
 /** ---------- Row -> HomeCard ---------- */
 export function toHomeCard(row: StoreRow): HomeCard {
-  const safeImage = sanitizeImageUrl(row.image_url, false);
+  const safeImage =
+    sanitizeImageUrl((row as any).cover_image_url, true) ??
+    sanitizeImageUrl(row.image_url, false);
 
   const card: any = {
     id: row.id,
@@ -153,6 +156,7 @@ export async function fetchHomeCardsByTab(
       lng,
       phone,
       image_url,
+      cover_image_url,
       kakao_place_url,
       naver_place_id,
       mood,
@@ -208,6 +212,7 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
       lng,
       phone,
       image_url,
+      cover_image_url,
       kakao_place_url,
       naver_place_id,
       mood,

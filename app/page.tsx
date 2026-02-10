@@ -8,6 +8,7 @@ import Image from "next/image";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { logEvent } from "@/lib/logEvent";
 import FeedbackFab from "@/components/FeedbackFab";
+import FloatingMic from "@/components/FloatingMic";
 
 import HomeTopBar from "./_components/HomeTopBar";
 import HomeSearchBar from "./_components/HomeSearchBar";
@@ -20,7 +21,6 @@ import { useRecent } from "./_hooks/useRecent";
 import { useSaved } from "./_hooks/useSaved";
 import { useUIOverlay } from "./_providers/UIOverlayProvider";
 import { openDirections } from "@/lib/openDirections";
-import { openNaverPlace } from "@/lib/openNaverPlace";
 
 import { inferIntention } from "@/lib/intention";
 import type { IntentionType } from "@/lib/intention";
@@ -311,10 +311,18 @@ function HomePageContent() {
       return;
     }
 
-    openNaverPlace({
-      name,
-      naverPlaceId: anyCard?.naver_place_id ?? null,
+    // 예약·자세히 → 앱 내 예약 플로우(/reserve)로 이동
+    const { lat, lng } = getCardLatLng(card);
+    const storeId = String(anyCard?.id ?? "").trim();
+    const naverPlaceId = anyCard?.naver_place_id ?? null;
+    const params = new URLSearchParams({
+      name: name || "",
+      ...(storeId && { storeId }),
+      ...(lat != null && !Number.isNaN(lat) && { lat: String(lat) }),
+      ...(lng != null && !Number.isNaN(lng) && { lng: String(lng) }),
+      ...(naverPlaceId && { naverPlaceId: String(naverPlaceId) }),
     });
+    router.push(`/reserve?${params.toString()}`);
   };
 
   const tabButtons: { key: HomeTabKey; label: string }[] = [
@@ -629,6 +637,7 @@ function HomePageContent() {
         )}
 
         {!selectedCard && <FeedbackFab />}
+        <FloatingMic />
       </div>
     </main>
   );

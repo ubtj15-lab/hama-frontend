@@ -21,7 +21,7 @@ type Reservation = {
   lng?: number | null;
 };
 
-/* ---------- 상단 로그아웃 바 ---------- */
+/* ---------- 상단 네비/로그아웃 바 ---------- */
 function AdminTopbar() {
   const router = useRouter();
   const onLogout = async () => {
@@ -29,7 +29,13 @@ function AdminTopbar() {
     router.replace("/admin/login");
   };
   return (
-    <div className="flex justify-end mb-4">
+    <div className="flex justify-end items-center gap-3 mb-4">
+      <a href="/admin" className="text-sm text-blue-600 hover:underline">
+        통계 대시보드
+      </a>
+      <a href="/admin/stores" className="text-sm text-blue-600 hover:underline">
+        매장 연결
+      </a>
       <button
         onClick={onLogout}
         className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"

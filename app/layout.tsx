@@ -1,6 +1,5 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import FloatingMic from "./components/FloatingMic";
 import { AuthSync } from "./_components/AuthSync";
 import { UIOverlayProvider } from "./_providers/UIOverlayProvider";
 
@@ -16,7 +15,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthSync />
         <UIOverlayProvider>
           {children}
-          <FloatingMic />
         </UIOverlayProvider>
       </body>
     </html>
