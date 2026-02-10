@@ -1,43 +1,15 @@
 {
-  "name": "frontend_next",
+  "name": "hama-monorepo",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:reset": "prisma migrate reset",
-    "prisma:push": "prisma db push",
-    "prisma:seed": "prisma db seed"
+    "dev:hama": "npm run dev --workspace=apps/hama",
+    "dev:partner": "npm run dev --workspace=apps/partner",
+    "build:hama": "npm run build --workspace=apps/hama",
+    "build:partner": "npm run build --workspace=apps/partner"
   },
-  "dependencies": {
-    "@prisma/client": "^6.18.0",
-    "@supabase/supabase-js": "^2.90.1",
-    "axios": "^1.13.2",
-    "bcrypt": "^5.1.1",
-    "bcryptjs": "^3.0.2",
-    "dotenv": "^17.2.3",
-    "next": "^14.2.35",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "typescript": "^5.3.3"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.16",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/node": "24.9.2",
-    "@types/react": "19.2.2",
-    "@types/react-dom": "^19.2.3",
-    "eslint": "8.55.0",
-    "eslint-config-next": "14.0.0",
-    "postcss": "^8.5.6",
-    "prisma": "^6.18.0",
-    "tailwindcss": "^4.1.16"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.cjs"
-  }
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }

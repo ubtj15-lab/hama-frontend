@@ -1,0 +1,134 @@
+/* app/globals.css */
+
+/* 전체 박스 사이즈 안정화 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+/* 기본 폰트 + 배경색 */
+body {
+  background: #eef5fb;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Noto Sans KR',
+    sans-serif;
+}
+
+/* 모바일에서 스크롤바 튀지 않게 */
+body {
+  overscroll-behavior-y: none;
+}
+
+/* Next 기본 root */
+:root {
+  color-scheme: light;
+}
+:root {
+  /* Color */
+  --bg-top: #f8fafc;
+  --bg-bottom: #eef2ff;
+  --surface: #ffffff;
+  --surface-2: rgba(255, 255, 255, 0.78);
+  --stroke: rgba(148, 163, 184, 0.22);
+
+  --text: #0f172a;
+  --muted: rgba(15, 23, 42, 0.55);
+  --brand: #2563eb;
+
+  /* Radius */
+  --r-lg: 20px;
+  --r-xl: 28px;
+
+  /* Shadow (고급 느낌 핵심) */
+  --shadow-sm: 0 8px 20px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 14px 34px rgba(15, 23, 42, 0.14);
+  --shadow-lg: 0 22px 55px rgba(15, 23, 42, 0.18);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  color: var(--text);
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* 살짝 “유리” 느낌 */
+.hama-glass {
+  background: var(--surface-2);
+  border: 1px solid var(--stroke);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* 버튼 눌림 감(고급 UX 핵심) */
+.hama-press {
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease), opacity 160ms var(--ease);
+}
+.hama-press:active {
+  transform: scale(0.98);
+}
+/* globals.css (아래쪽 아무데나 추가) */
+
+:root{
+  --shadow-sm: 0 10px 26px rgba(15,23,42,0.10);
+  --shadow-md: 0 16px 40px rgba(15,23,42,0.14);
+  --line: rgba(255,255,255,0.55);
+  --glass: rgba(255,255,255,0.72);
+  --text: #0f172a;
+  --muted: #64748b;
+  --primary: #2563eb;
+}
+
+/* ✅ 고급 글래스 바 */
+.hama-glass{
+  background: var(--glass);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* ✅ 아이콘 캡슐 */
+.hama-icon-chip{
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255,255,255,0.6);
+}
+
+/* ✅ 프라이머리 버튼 */
+.hama-primary-btn{
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.4);
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 10px 22px rgba(37,99,235,0.22);
+}
+
+.hama-primary-btn:active{
+  transform: translateY(1px);
+}
