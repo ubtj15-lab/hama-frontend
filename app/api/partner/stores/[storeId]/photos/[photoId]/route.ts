@@ -14,7 +14,7 @@ function getUserIdFromRequest(req: NextRequest): string | null {
 }
 
 async function assertPartnerOwnsStore(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   storeId: string,
   userId: string
 ): Promise<NextResponse | null> {
@@ -23,7 +23,8 @@ async function assertPartnerOwnsStore(
     .select("owner_id")
     .eq("id", storeId)
     .single();
-  if (!data || data.owner_id !== userId)
+  const ownerId = (data as { owner_id?: string | null } | null)?.owner_id ?? null;
+  if (!ownerId || ownerId !== userId)
     return NextResponse.json({ error: "이 매장을 수정할 권한이 없어요" }, { status: 403 });
   return null;
 }
