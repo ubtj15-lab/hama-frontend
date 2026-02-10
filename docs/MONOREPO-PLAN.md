@@ -1,5 +1,7 @@
 # 모노레포 분리 계획 (A단계: 이동 대상 목록)
 
+**진행:** A·B·C·D 완료. E(shared)·F(검증) 대기.
+
 ## 목표
 
 - **apps/hama**: 일반 유저 앱 (/, /search, /map, /reserve, /my) + 관리자(/admin)
@@ -235,13 +237,13 @@ hama-frontend/
 - `public/*`
 - `next.config.js`(또는 .bak에서 복원), `tailwind.config.js`, `postcss.config.js`, `tsconfig.json`, `eslint.config.mjs`
 
-### 7.2 → apps/partner (복사)
+### 7.2 → apps/partner (복사) ✅ 완료
 
-- `app/partner/page.tsx` → `apps/partner/app/page.tsx`
+- `app/partner/page.tsx` → `apps/partner/app/page.tsx` (return_to=/ 로 수정)
 - `app/api/partner/*` 전체 → `apps/partner/app/api/partner/*`
-- `app/api/auth/kakao/login/route.ts`, `callback/route.ts`, `logout/route.ts` → `apps/partner/app/api/auth/kakao/*`
+- `app/api/auth/kakao/login/route.ts`, `callback/route.ts`, `logout/route.ts` → `apps/partner/app/api/auth/kakao/*` (fallback localhost:3001)
 - `apps/partner/app/layout.tsx` (신규, 최소)
-- `apps/partner/app/globals.css` (최소 또는 공통 스타일만)
+- `apps/partner/app/globals.css` (최소)
 
 ### 7.3 → packages/shared
 
