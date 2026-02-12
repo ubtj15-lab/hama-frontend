@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
 
   const KAKAO_KEY = process.env.KAKAO_REST_API_KEY;
   if (!KAKAO_KEY) {
-    return NextResponse.json({ error: "KAKAO_REST_API_KEY missing" }, { status: 500 });
+    return NextResponse.json({ documents: [] });
   }
 
   const url = new URL("https://dapi.kakao.com/v2/local/geo/coord2regioncode.json");

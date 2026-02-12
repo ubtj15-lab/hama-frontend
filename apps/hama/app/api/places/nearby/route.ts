@@ -47,10 +47,10 @@ function pickAreaFromAddress(addr: string | null): string | null {
   return parts[0] ?? null;
 }
 
-function makeSupabaseAdmin() {
+function makeSupabaseAdmin(): ReturnType<typeof createClient> | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) throw new Error("Missing SUPABASE env");
+  if (!url || !serviceKey) return null;
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
@@ -62,6 +62,7 @@ async function fetchDbNearbyPool(params: {
   limit: number;
 }) {
   const supabase = makeSupabaseAdmin();
+  if (!supabase) return [];
   const { lat, lng, tab, radiusKm, limit } = params;
 
   const latDelta = radiusKm / 111;
@@ -124,7 +125,7 @@ async function fetchKakaoNearby(params: {
   size: number;
 }) {
   const apiKey = process.env.KAKAO_REST_API_KEY;
-  if (!apiKey) throw new Error("Missing KAKAO_REST_API_KEY");
+  if (!apiKey) return [];
 
   const group = categoryToKakaoGroup(params.tab);
   if (!group) return [];
@@ -263,7 +264,10 @@ export async function GET(req: Request) {
     if (need > 0) {
       // Kakao는 한 번에 최대 15라 여러 번 호출해야 할 수 있음
       const supabase = makeSupabaseAdmin();
-
+      const apiKey = process.env.KAKAO_REST_API_KEY;
+      if (!supabase || !apiKey) {
+        // env 없으면 DB 결과만 반환
+      } else {
       let fetched: any[] = [];
       let remain = need;
 
@@ -294,6 +298,7 @@ export async function GET(req: Request) {
 
         // upsert 후 다시 DB에서 최신 풀 재조회(합쳐진 결과를 안정적으로 받기)
         merged = await fetchDbNearbyPool({ lat, lng, tab, radiusKm, limit });
+      }
       }
     }
 

@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "dev": "npm run dev:hama",
     "dev:hama": "npm run dev --workspace=apps/hama",
     "dev:partner": "npm run dev --workspace=apps/partner",
     "build:hama": "npm run build --workspace=apps/hama",

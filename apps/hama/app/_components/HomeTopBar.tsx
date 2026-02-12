@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import Link from "next/link";
+import { PARTNER_APP_URL } from "@/lib/partnerUrl";
 
 type Props = {
   isLoggedIn: boolean;
@@ -73,8 +74,10 @@ export default function HomeTopBar({
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontWeight: 900, letterSpacing: 1.2, fontSize: 22, color: "#2563EB" }}>HAMA</div>
-          <Link
-            href="/partner"
+          <a
+            href={PARTNER_APP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
               fontSize: 13,
               fontWeight: 700,
@@ -87,7 +90,7 @@ export default function HomeTopBar({
             }}
           >
             매장주 대시보드
-          </Link>
+          </a>
         </div>
 
         <button
@@ -142,8 +145,10 @@ export default function HomeTopBar({
               </div>
             </div>
 
-            <Link
-              href="/partner"
+            <a
+              href={PARTNER_APP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => setMenuOpen(false)}
               style={{
                 display: "block",
@@ -161,7 +166,7 @@ export default function HomeTopBar({
               }}
             >
               매장주 대시보드
-            </Link>
+            </a>
 
             <button
               type="button"

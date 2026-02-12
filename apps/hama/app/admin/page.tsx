@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { PARTNER_APP_URL } from "@/lib/partnerUrl";
 
 type Stats = {
   today: {
@@ -91,7 +92,7 @@ export default function AdminDashboardPage() {
             예약 목록
           </Link>
           <a
-            href="/partner"
+            href={PARTNER_APP_URL}
             target="_blank"
             rel="noopener noreferrer"
             style={{ fontSize: 14, color: "#64748b", textDecoration: "none" }}

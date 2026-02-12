@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { PARTNER_APP_URL } from "@/lib/partnerUrl";
 
 type Store = {
   id: string;
@@ -134,7 +135,7 @@ export default function AdminStoresPage() {
             통계 대시보드
           </Link>
           <a
-            href="/partner"
+            href={PARTNER_APP_URL}
             target="_blank"
             rel="noopener noreferrer"
             style={{ fontSize: 14, color: "#2563eb", textDecoration: "none", fontWeight: 600 }}
