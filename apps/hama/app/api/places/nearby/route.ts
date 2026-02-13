@@ -288,10 +288,10 @@ export async function GET(req: Request) {
           .filter((x) => x.place_key && x.name && x.lat != null && x.lng != null);
 
         if (upserts.length > 0) {
-          // ✅ place_key unique 기준 upsert
+          // ✅ place_key unique 기준 upsert (Supabase 타입 미생성 시 단언 사용)
           const { error: upsertErr } = await supabase
             .from("stores")
-            .upsert(upserts, { onConflict: "place_key" });
+            .upsert(upserts as Record<string, unknown>[], { onConflict: "place_key" });
 
           if (upsertErr) console.error("[kakao upsert]", upsertErr);
         }
