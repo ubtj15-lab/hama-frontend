@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import Link from "next/link";
-import { PARTNER_APP_URL } from "@/lib/partnerUrl";
+import { PARTNER_APP_URL } from "../lib/partnerUrl";
 
 type Props = {
   isLoggedIn: boolean;

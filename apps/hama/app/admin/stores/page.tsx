@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PARTNER_APP_URL } from "@/lib/partnerUrl";
+import { PARTNER_APP_URL } from "../../lib/partnerUrl";
 
 type Store = {
   id: string;
