@@ -10,7 +10,10 @@ type Result = {
   isLoading: boolean;
 };
 
-const PER_CATEGORY = 5;
+/** 종합(all) 탭: 카테고리당 3장 → 4개 카테고리 × 3 = 12장 */
+const PER_CATEGORY_MIXED = 3;
+/** 단일 카테고리 탭에서 보여줄 장수 */
+const PER_CATEGORY_SINGLE = 4;
 const POOL_SIZE = 40;
 
 function shuffle<T>(array: T[]): T[] {
@@ -152,16 +155,28 @@ function rankAndPick(pool: HomeCard[], intent: IntentionType, n: number): HomeCa
 
 async function fetchCategorySmart(tab: Exclude<HomeTabKey, "all">, intent: IntentionType) {
   const pool = await fetchHomeCardsByTab(tab, { count: POOL_SIZE });
-  const picked = rankAndPick(pool, intent, PER_CATEGORY);
+  const picked = rankAndPick(pool, intent, PER_CATEGORY_SINGLE);
   return decorate(picked, intent);
 }
 
 async function fetchAllMixedRecommend(intent: IntentionType): Promise<HomeCard[]> {
   const [restaurants, cafes, salons, activities] = await Promise.all([
-    fetchCategorySmart("restaurant", intent),
-    fetchCategorySmart("cafe", intent),
-    fetchCategorySmart("salon", intent),
-    fetchCategorySmart("activity", intent),
+    (async () => {
+      const pool = await fetchHomeCardsByTab("restaurant", { count: POOL_SIZE });
+      return decorate(rankAndPick(pool, intent, PER_CATEGORY_MIXED), intent);
+    })(),
+    (async () => {
+      const pool = await fetchHomeCardsByTab("cafe", { count: POOL_SIZE });
+      return decorate(rankAndPick(pool, intent, PER_CATEGORY_MIXED), intent);
+    })(),
+    (async () => {
+      const pool = await fetchHomeCardsByTab("salon", { count: POOL_SIZE });
+      return decorate(rankAndPick(pool, intent, PER_CATEGORY_MIXED), intent);
+    })(),
+    (async () => {
+      const pool = await fetchHomeCardsByTab("activity", { count: POOL_SIZE });
+      return decorate(rankAndPick(pool, intent, PER_CATEGORY_MIXED), intent);
+    })(),
   ]);
 
   const merged = [...restaurants, ...cafes, ...salons, ...activities];

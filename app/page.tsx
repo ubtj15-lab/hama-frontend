@@ -256,8 +256,10 @@ function HomePageContent() {
       ? (isLocLoading || isNearbyLoading) && recommendCards.length === 0
       : isRecommendLoading;
 
+  /** 종합 12장, 단일 카테고리 5장 */
+  const TOTAL_DECK_MAX = 12;
   const visibleDeckCards = useMemo(() => {
-    if (homeTab === "all") return deckCardsRaw;
+    if (homeTab === "all") return deckCardsRaw.slice(0, TOTAL_DECK_MAX);
     return deckCardsRaw.slice(0, PER_CATEGORY);
   }, [deckCardsRaw, homeTab]);
 

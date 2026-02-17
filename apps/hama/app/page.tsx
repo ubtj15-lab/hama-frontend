@@ -16,7 +16,6 @@ import HomeSwipeDeck from "./_components/HomeSwipeDeck";
 
 import { useHomeCards } from "./_hooks/useHomeCards";
 import { useHomeMode } from "./_hooks/useHomeMode";
-import { useNearbyCards } from "./_hooks/useNearbyCards";
 import { useRecent } from "./_hooks/useRecent";
 import { useSaved } from "./_hooks/useSaved";
 import { useUIOverlay } from "./_providers/UIOverlayProvider";
@@ -40,7 +39,7 @@ const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
 const LOGIN_FLAG_KEY = "hamaLoggedIn";
 
-const PER_CATEGORY = 5;
+const PER_CATEGORY = 4;
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -128,19 +127,13 @@ function HomePageContent() {
   const [shuffleKey, setShuffleKey] = useState<number>(0);
   const [modeOverride, setModeOverride] = useState<Mode | null>(null);
 
-  const { mode: baseMode, loc, isLocLoading } = useHomeMode();
+  const { mode: baseMode } = useHomeMode();
   const mode: Mode = modeOverride ?? baseMode;
 
   const [intent, setIntent] = useState<IntentionType>("none");
 
   const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(
     homeTab,
-    shuffleKey,
-    intent
-  );
-  const { cards: nearbyCards, isLoading: isNearbyLoading } = useNearbyCards(
-    homeTab,
-    loc,
     shuffleKey,
     intent
   );
@@ -248,16 +241,14 @@ function HomePageContent() {
     window.location.href = "/api/auth/kakao/login";
   };
 
-  const deckCardsRaw =
-    mode === "explore" ? (nearbyCards.length > 0 ? nearbyCards : recommendCards) : recommendCards;
+  // GPS 기반 근처 매장 비사용 → 항상 추천(DB) 카드만 사용
+  const deckCardsRaw = recommendCards;
+  const deckLoading = isRecommendLoading;
 
-  const deckLoading =
-    mode === "explore"
-      ? (isLocLoading || isNearbyLoading) && recommendCards.length === 0
-      : isRecommendLoading;
-
+  /** 종합 12장, 단일 카테고리 4장 */
+  const TOTAL_DECK_MAX = 12;
   const visibleDeckCards = useMemo(() => {
-    if (homeTab === "all") return deckCardsRaw;
+    if (homeTab === "all") return deckCardsRaw.slice(0, TOTAL_DECK_MAX);
     return deckCardsRaw.slice(0, PER_CATEGORY);
   }, [deckCardsRaw, homeTab]);
 
