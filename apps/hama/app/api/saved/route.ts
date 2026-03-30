@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = process.env
@@ -49,11 +50,11 @@ export async function GET(req: NextRequest) {
   }
 
   const orderMap = new Map(saved_ids.map((id, i) => [id, i]));
-  const sorted = (stores ?? []).sort(
-    (a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999)
-  );
+  const sorted = (stores ?? [])
+    .filter(storeRowMatchesServiceRegion)
+    .sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
 
-  return NextResponse.json({ saved_ids, stores: sorted });
+  return NextResponse.json({ saved_ids: sorted.map((s) => s.id), stores: sorted });
 }
 
 /** POST: 저장/해제 토글 */

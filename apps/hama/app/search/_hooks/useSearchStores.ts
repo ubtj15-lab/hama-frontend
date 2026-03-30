@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@hama/shared";
+import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
 
 export type Category = "cafe" | "restaurant" | "salon" | "activity";
 
@@ -98,8 +99,8 @@ export function mapUrlCategoryToCategory(c: string | null): Category | null {
   return null;
 }
 
-// 검색어로 카테고리 추론
-export function inferCategoryFromQuery(q: string): Category {
+// 검색어로 카테고리 추론 (애매하면 null → 종합, 매장명 검색이 특정 탭에 가려지지 않게 함)
+export function inferCategoryFromQuery(q: string): Category | null {
   const t = String(q ?? "").toLowerCase();
 
   if (t.includes("미용") || t.includes("헤어") || t.includes("뷰티") || t.includes("살롱") || t.includes("salon") || t.includes("beauty")) {
@@ -108,6 +109,7 @@ export function inferCategoryFromQuery(q: string): Category {
   if (
     t.includes("식당") ||
     t.includes("밥") ||
+    t.includes("밥집") ||
     t.includes("한식") ||
     t.includes("레스토랑") ||
     t.includes("맛집") ||
@@ -120,14 +122,43 @@ export function inferCategoryFromQuery(q: string): Category {
     t.includes("혼밥") ||
     t.includes("점심식사") ||
     t.includes("회식") ||
-    t.includes("점심")
+    t.includes("점심") ||
+    t.includes("두부") ||
+    t.includes("순두부") ||
+    t.includes("청국장") ||
+    t.includes("쌈밥") ||
+    t.includes("전골") ||
+    t.includes("찌개") ||
+    t.includes("국밥") ||
+    t.includes("삼겹") ||
+    t.includes("갈비") ||
+    t.includes("족발") ||
+    t.includes("보쌈") ||
+    t.includes("치킨") ||
+    t.includes("피자") ||
+    t.includes("초밥") ||
+    t.includes("짜장") ||
+    t.includes("뷔페")
   ) {
     return "restaurant";
   }
   if (t.includes("박물관") || t.includes("공원") || t.includes("체험") || t.includes("활동") || t.includes("놀") || t.includes("키즈")) {
     return "activity";
   }
-  return "cafe";
+  if (
+    t.includes("카페") ||
+    t.includes("커피") ||
+    t.includes("브런치") ||
+    t.includes("라떼") ||
+    t.includes("아메리카노") ||
+    t.includes("디저트") ||
+    t.includes("케이크") ||
+    t.includes("베이커리") ||
+    t.includes("빵집")
+  ) {
+    return "cafe";
+  }
+  return null;
 }
 
 export function useSearchStores() {
@@ -201,9 +232,11 @@ export function useSearchStores() {
         })
         .filter(Boolean) as Store[];
 
-      console.log("[useSearchStores] cleaned length:", cleaned.length);
+      const regionScoped = cleaned.filter(storeRowMatchesServiceRegion);
 
-      setStores(cleaned);
+      console.log("[useSearchStores] cleaned length:", regionScoped.length);
+
+      setStores(regionScoped);
       setLoading(false);
     };
 

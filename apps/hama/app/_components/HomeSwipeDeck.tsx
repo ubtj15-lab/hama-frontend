@@ -5,6 +5,8 @@ import { getDefaultCardImage } from "@/lib/defaultCardImage";
 
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { logEvent } from "@/lib/logEvent";
+import type { IntentionType } from "@/lib/intention";
+import { openDirections } from "@/lib/openDirections";
 
 type Mode = "recommend" | "explore";
 
@@ -12,6 +14,7 @@ type Props = {
   cards: HomeCard[];
   homeTab: HomeTabKey;
   mode: Mode;
+  intention: IntentionType;
   isLoading: boolean;
   onOpenCard: (card: HomeCard) => void;
   onAddPoints?: (amount: number, reason: string) => void;
@@ -52,10 +55,28 @@ function getPlaceholderImage(card: HomeCard): string {
   return "/images/placeholders/default.jpg";
 }
 
+function cardLatLng(card: HomeCard): { lat?: number; lng?: number } {
+  const anyCard = card as any;
+  const lat =
+    typeof anyCard.lat === "number"
+      ? anyCard.lat
+      : typeof anyCard.latitude === "number"
+        ? anyCard.latitude
+        : undefined;
+  const lng =
+    typeof anyCard.lng === "number"
+      ? anyCard.lng
+      : typeof anyCard.longitude === "number"
+        ? anyCard.longitude
+        : undefined;
+  return { lat, lng };
+}
+
 export default function HomeSwipeDeck({
   cards,
   homeTab,
   mode,
+  intention,
   isLoading,
   onOpenCard,
   onAddPoints,
@@ -87,7 +108,7 @@ export default function HomeSwipeDeck({
     setDragX(0);
     setIsDragging(false);
     movedRef.current = false;
-  }, [homeTab, mode]);
+  }, [homeTab, mode, intention]);
 
   useEffect(() => {
     if (total <= 0) return;
@@ -217,7 +238,7 @@ export default function HomeSwipeDeck({
             boxShadow: sideShadow,
           };
 
-    const onClick = () => {
+    const onCardActivate = () => {
       if (movedRef.current) return;
 
       if (pos === "prev") return goPrev();
@@ -230,14 +251,25 @@ export default function HomeSwipeDeck({
     const distanceKm =
       typeof anyCard?.distanceKm === "number" ? (anyCard.distanceKm as number) : null;
 
-    // ✅ 여기: 추천 이유 우선, 없으면 기존 moodText
-    const reasonText = toText(anyCard?.reasonText ?? anyCard?.moodText ?? anyCard?.mood);
+    const badge = anyCard?.recommendBadge;
+    const reasonFallback = toText(anyCard?.reasonText ?? anyCard?.moodText ?? anyCard?.mood);
+    const phoneRaw = typeof anyCard?.phone === "string" ? anyCard.phone.trim() : "";
+    const phoneDigits = phoneRaw.replace(/\D/g, "");
+    const { lat, lng } = cardLatLng(card);
 
     return (
-      <button
+      <div
         key={String(anyCard?.id ?? `${pos}-${activeIndex}`)}
-        type="button"
-        onClick={onClick}
+        role="button"
+        tabIndex={pos === "curr" ? 0 : -1}
+        onClick={onCardActivate}
+        onKeyDown={(e) => {
+          if (pos !== "curr") return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onCardActivate();
+          }
+        }}
         style={{
           position: "absolute",
           inset: 0,
@@ -287,14 +319,135 @@ export default function HomeSwipeDeck({
             {anyCard?.name}
           </div>
 
-          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>
             {categoryText}
             {distanceKm != null && <> · {distanceKm.toFixed(1)} km</>}
           </div>
 
-          <div style={{ fontSize: 13, color: "#111827", fontWeight: 800 }}>{reasonText}</div>
+          {badge?.primaryLabel ? (
+            <div style={{ marginBottom: 2 }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: "-0.02em",
+                  padding: "3px 10px",
+                  borderRadius: 999,
+                  background: "#EEF2FF",
+                  color: "#3730A3",
+                  maxWidth: "100%",
+                  boxSizing: "border-box",
+                }}
+              >
+                {badge.primaryLabel}
+              </span>
+              {Array.isArray(badge.shortTags) && badge.shortTags.length > 0 ? (
+                <div
+                  title={badge.shortTags.join(" · ")}
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#4B5563",
+                    lineHeight: 1.3,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {badge.shortTags.join(" · ")}
+                </div>
+              ) : null}
+            </div>
+          ) : reasonFallback ? (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#6B7280",
+                fontWeight: 600,
+                lineHeight: 1.35,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+              title={reasonFallback}
+            >
+              {reasonFallback}
+            </div>
+          ) : null}
+
+          {isCurr && mode === "recommend" && (
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                marginTop: 12,
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const name = String(anyCard?.name ?? "").trim();
+                  logEvent("recommend_directions_click", {
+                    id: anyCard?.id,
+                    name,
+                    tab: homeTab,
+                    mode,
+                    intention,
+                  });
+                  openDirections({ name, lat: lat ?? null, lng: lng ?? null });
+                }}
+                style={{
+                  flex: 1,
+                  height: 40,
+                  borderRadius: 12,
+                  border: "none",
+                  background: "#2563EB",
+                  color: "#ffffff",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                길찾기
+              </button>
+              <button
+                type="button"
+                disabled={phoneDigits.length < 8}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (phoneDigits.length < 8) return;
+                  logEvent("recommend_phone_click", {
+                    id: anyCard?.id,
+                    name: String(anyCard?.name ?? "").trim(),
+                    tab: homeTab,
+                    mode,
+                    intention,
+                  });
+                  window.location.href = `tel:${phoneDigits}`;
+                }}
+                style={{
+                  flex: 1,
+                  height: 40,
+                  borderRadius: 12,
+                  border: "none",
+                  background: phoneDigits.length < 8 ? "#e5e7eb" : "#0f172a",
+                  color: phoneDigits.length < 8 ? "#9ca3af" : "#ffffff",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: phoneDigits.length < 8 ? "not-allowed" : "pointer",
+                }}
+              >
+                전화
+              </button>
+            </div>
+          )}
         </div>
-      </button>
+      </div>
     );
   };
 

@@ -1,15 +1,17 @@
 "use client";
 
 import React from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useSaved } from "../_hooks/useSaved";
 import { useRecent } from "../_hooks/useRecent";
 import type { HomeCard } from "@/lib/storeTypes";
+import { getDefaultCardImage } from "@/lib/defaultCardImage";
 
-function getImageUrl(card: HomeCard): string {
+function thumbSrc(card: HomeCard): string {
   const c = card as Record<string, unknown>;
-  return (c.imageUrl ?? c.image ?? c.image_url ?? "/images/category/restaurant.jpg") as string;
+  const u = String(c.imageUrl ?? c.image ?? c.image_url ?? "").trim();
+  if (u) return u;
+  return getDefaultCardImage(card);
 }
 
 export default function MyPage() {
@@ -125,14 +127,19 @@ export default function MyPage() {
                       height: 72,
                       flexShrink: 0,
                       position: "relative",
-                      background: "#111827",
+                      background: "#e2e8f0",
                     }}
                   >
-                    <Image
-                      src={getImageUrl(card)}
-                      alt={card.name ?? ""}
-                      fill
-                      style={{ objectFit: "cover" }}
+                    <img
+                      src={thumbSrc(card)}
+                      alt=""
+                      loading="lazy"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                      onError={(e) => {
+                        const el = e.currentTarget;
+                        el.onerror = null;
+                        el.src = getDefaultCardImage(card);
+                      }}
                     />
                   </div>
                   <div style={{ flex: 1, minWidth: 0, padding: "12px 0" }}>
@@ -228,14 +235,19 @@ export default function MyPage() {
                       height: 72,
                       flexShrink: 0,
                       position: "relative",
-                      background: "#111827",
+                      background: "#e2e8f0",
                     }}
                   >
-                    <Image
-                      src={getImageUrl(card)}
-                      alt={card.name ?? ""}
-                      fill
-                      style={{ objectFit: "cover" }}
+                    <img
+                      src={thumbSrc(card)}
+                      alt=""
+                      loading="lazy"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                      onError={(e) => {
+                        const el = e.currentTarget;
+                        el.onerror = null;
+                        el.src = getDefaultCardImage(card);
+                      }}
                     />
                   </div>
                   <div style={{ flex: 1, minWidth: 0, padding: "12px 12px 12px 0" }}>

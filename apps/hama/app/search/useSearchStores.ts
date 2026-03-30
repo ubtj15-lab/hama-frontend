@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@hama/shared";
 import type { StoreRecord } from "@lib/storeTypes";
+import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
 
 
 export type StoreCategory = "cafe" | "restaurant" | "salon" | "activity";
@@ -72,20 +73,31 @@ export function mapUrlCategoryToStoreCategory(
   return normalizeCategory(c);
 }
 
-export function inferCategoryFromQuery(q: string): StoreCategory {
+export function inferCategoryFromQuery(q: string): StoreCategory | null {
   const t = normText(q);
 
   if (t.includes("미용") || t.includes("헤어") || t.includes("살롱") || t.includes("뷰티"))
     return "salon";
 
-  if (t.includes("식당") || t.includes("밥") || t.includes("한식") || t.includes("맛집") || t.includes("레스토랑"))
+  if (
+    t.includes("식당") ||
+    t.includes("밥") ||
+    t.includes("밥집") ||
+    t.includes("한식") ||
+    t.includes("맛집") ||
+    t.includes("레스토랑") ||
+    t.includes("두부") ||
+    t.includes("순두부") ||
+    t.includes("청국장")
+  )
     return "restaurant";
 
   if (t.includes("박물관") || t.includes("공원") || t.includes("체험") || t.includes("활동") || t.includes("키즈") || t.includes("놀"))
     return "activity";
 
-  // 기본은 카페
-  return "cafe";
+  if (t.includes("카페") || t.includes("커피") || t.includes("브런치")) return "cafe";
+
+  return null;
 }
 
 /** Haversine */
@@ -132,7 +144,7 @@ export function useSearchStores({
     typeof myLng === "number" &&
     Number.isFinite(myLng);
 
-  const activeCategory: StoreCategory = useMemo(() => {
+  const activeCategory: StoreCategory | null = useMemo(() => {
     const byParam = mapUrlCategoryToStoreCategory(rawCategory);
     if (byParam) return byParam;
     return inferCategoryFromQuery(query);
@@ -194,7 +206,8 @@ export function useSearchStores({
         .map((s: Store) => ({
           ...s,
           category: normalizeCategory(s.category)!,
-        }));
+        }))
+        .filter((s: Store) => storeRowMatchesServiceRegion({ area: null, address: s.address }));
 
       setStores(cleaned);
       setLoading(false);
@@ -211,7 +224,7 @@ export function useSearchStores({
     const qKey = effectiveQuery;
 
     const filtered = stores
-      .filter((s) => s.category === activeCategory)
+      .filter((s) => activeCategory == null || s.category === activeCategory)
       .filter((s) => {
         if (!qKey) return true;
         const name = normText(s.name);

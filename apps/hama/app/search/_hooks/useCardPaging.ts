@@ -3,6 +3,12 @@
 import { useMemo } from "react";
 import type { CardInfo, Category } from "./useSearchStores";
 import { normalizeCategory } from "./useSearchStores";
+import {
+  debugSearchIntent,
+  directNameMatchScore,
+  parseSearchIntent,
+  scoreStoreByIntent,
+} from "@/lib/searchIntent";
 
 type Args = {
   stores: CardInfo[];
@@ -159,6 +165,15 @@ export function useCardPaging(args: Args): Result {
 
   return useMemo(() => {
     const keywords = extractKeywords(query, activeCategory);
+    const trimmedQuery = query.trim();
+    const intent = parseSearchIntent(query);
+    const intentActive =
+      !!intent.phraseMatched ||
+      intent.companions.length > 0 ||
+      intent.categories.length > 0 ||
+      intent.moodHints.length > 0 ||
+      intent.conditions.length > 0 ||
+      intent.areaTerms.length > 0;
 
     // 1) normalize + distance
     const normalized: NormalizedCard[] = (stores ?? [])
@@ -192,15 +207,20 @@ export function useCardPaging(args: Args): Result {
     // 2) 카테고리 스코프
     // 회식/혼밥/점심/한정식 등 식당 시나리오는 반드시 restaurant만 (미용실·액티비티·카페 제외)
     let scoped: NormalizedCard[] = normalized;
-    const forceRestaurant = keywords.some((k) =>
-      ["회식", "단체", "모임", "혼밥", "혼자", "점심", "한정식", "한식"].includes(k)
-    );
-    const effectiveCategory = activeCategory || (forceRestaurant ? "restaurant" : null);
+    const forceRestaurant =
+      keywords.some((k) =>
+        ["회식", "단체", "모임", "혼밥", "혼자", "점심", "한정식", "한식"].includes(k)
+      ) ||
+      intent.companions.includes("company") ||
+      intent.companions.includes("solo");
+    const effectiveCategory =
+      activeCategory ||
+      (forceRestaurant ? "restaurant" : null) ||
+      (!activeCategory && !forceRestaurant && intent.categories.length === 1 ? intent.categories[0] : null);
     if (effectiveCategory) {
       scoped = scoped.filter((s) => s.category === effectiveCategory);
     }
 
-    // 3) 키워드 검색(자연어는 키워드가 없으면 필터 자체를 안 건다)
     const beforeKeywordFilter = scoped;
     const hasChineseIntent = activeCategory === "restaurant" && keywords.some((k) =>
       ["중식", "짜장", "짬뽕", "중국집", "중국", "탕수", "마라", "훠궈", "딤섬", "양꼬치", "짜장면"].includes(k)
@@ -212,6 +232,8 @@ export function useCardPaging(args: Args): Result {
     const hasSoloIntent = keywords.some((k) => ["혼밥", "혼자", "1인"].includes(k));
     const hasLunchIntent = keywords.some((k) => ["점심", "런치", "브런치"].includes(k));
     const hasCompanyIntent = keywords.some((k) => ["회식", "단체", "모임"].includes(k));
+    const hasCompanyIntentMerged = hasCompanyIntent || intent.companions.includes("company");
+    const hasSoloIntentMerged = hasSoloIntent || intent.companions.includes("solo");
 
     const scenarioExcludes: Record<string, string[]> = {
       china: ["한정식", "한식", "국밥", "백반", "김치", "삼겹", "갈비", "찌개", "비빔", "냉면", "분식", "족발", "보쌈", "코다리", "명태", "순대국", "해장국"],
@@ -220,24 +242,116 @@ export function useCardPaging(args: Args): Result {
       company: ["혼밥전문", "1인전용"], // 완화: "혼자"만 있으면 회식도 가능한 곳 있을 수 있음
     };
 
-    scoped = scoped.filter((s) => {
-      if (!keywords.length) return true;
-
+    const storeBlob = (s: NormalizedCard) => {
       const name = normText((s as any).name ?? "");
       const addr = normText((s as any).address ?? "");
       const moodRaw = (s as any).mood;
       const mood = Array.isArray(moodRaw) ? normText(moodRaw.join(" ")) : normText(moodRaw ?? "");
       const tagsRaw = (s as any).tags;
       const tags = Array.isArray(tagsRaw) ? normText(tagsRaw.join(" ")) : normText(tagsRaw ?? "");
-      const blob = `${name} ${addr} ${mood} ${tags}`;
+      return { name, addr, mood, tags, blob: `${name} ${addr} ${mood} ${tags}` };
+    };
 
-      if (hasChineseIntent && scenarioExcludes.china.some((k) => blob.includes(k))) return false;
-      if (hasKoreanIntent && scenarioExcludes.korean.some((k) => blob.includes(k))) return false;
-      if (hasSoloIntent && scenarioExcludes.solo.some((k) => blob.includes(k))) return false;
-      if (hasCompanyIntent && scenarioExcludes.company.some((k) => blob.includes(k))) return false;
+    type ScoredRow = {
+      s: NormalizedCard;
+      total: number;
+      breakdown: Record<string, number>;
+      nm: number;
+      kwHit: boolean;
+      blob: string;
+    };
 
-      return keywords.some((k) => name.includes(k) || addr.includes(k) || mood.includes(k) || tags.includes(k));
-    });
+    if (trimmedQuery) {
+      const scoredRows = beforeKeywordFilter
+        .map((s) => {
+          const { name, addr, mood, tags, blob } = storeBlob(s);
+
+          if (hasChineseIntent && scenarioExcludes.china.some((k) => blob.includes(k))) return null;
+          if (hasKoreanIntent && scenarioExcludes.korean.some((k) => blob.includes(k))) return null;
+          if (hasSoloIntentMerged && scenarioExcludes.solo.some((k) => blob.includes(k))) return null;
+          if (hasCompanyIntentMerged && scenarioExcludes.company.some((k) => blob.includes(k))) return null;
+
+          const kwHit =
+            !keywords.length ||
+            keywords.some((k) => name.includes(k) || addr.includes(k) || mood.includes(k) || tags.includes(k));
+          const nm = directNameMatchScore(trimmedQuery, s.name);
+          const { score, breakdown } = scoreStoreByIntent(
+            {
+              name: s.name,
+              category: s.category,
+              area: (s as any).area ?? null,
+              address: (s as any).address ?? null,
+              mood: (s as any).mood ?? null,
+              tags: (s as any).tags ?? null,
+              with_kids: (s as any).with_kids ?? null,
+              lat: s.lat,
+              lng: s.lng,
+              distanceKm: s.distanceKm ?? null,
+            },
+            intent,
+            s.category
+          );
+          const total = nm + score;
+          return { s, total, breakdown, nm, kwHit, blob };
+        })
+        .filter((v): v is ScoredRow => v !== null);
+
+      const catOk = (r: ScoredRow) =>
+        intent.categories.length === 0 ||
+        intent.categories.includes(r.s.category) ||
+        r.nm >= 20;
+
+      let kept = scoredRows.filter((r) => {
+        if (intentActive) return catOk(r) && (r.total > 0 || r.kwHit);
+        if (!keywords.length) return true;
+        return r.kwHit;
+      });
+
+      /* 자연어 의도만 있고 태그/이름에 키워드가 없으면 전부 0점이 되어 목록이 비는 경우가 있음 → 카테고리·제외규칙만 통과한 풀은 그대로 노출 */
+      if (kept.length === 0 && intentActive && scoredRows.length > 0) {
+        kept = scoredRows.filter((r) => catOk(r));
+      }
+      /* 의도 파싱이 있었는데 점수·키워드가 한 건도 안 맞을 때 → 카테고리 스코프 안 매장은 거리순으로 표시 */
+      if (kept.length === 0 && intentActive && beforeKeywordFilter.length > 0) {
+        kept = beforeKeywordFilter.map((s) => ({
+          s,
+          total: directNameMatchScore(trimmedQuery, s.name),
+          breakdown: {} as Record<string, number>,
+          nm: directNameMatchScore(trimmedQuery, s.name),
+          kwHit: false,
+          blob: storeBlob(s).blob,
+        }));
+        kept = kept.filter((r) => catOk(r));
+      }
+
+      kept.sort((a, b) => {
+        if (b.total !== a.total) return b.total - a.total;
+        const da = a.s.distanceKm ?? Number.POSITIVE_INFINITY;
+        const db = b.s.distanceKm ?? Number.POSITIVE_INFINITY;
+        return da - db;
+      });
+      scoped = kept.map((r) => r.s);
+
+      if (
+        intentActive &&
+        typeof process !== "undefined" &&
+        process.env.NODE_ENV === "development" &&
+        typeof window !== "undefined"
+      ) {
+        debugSearchIntent(
+          trimmedQuery,
+          intent,
+          kept.slice(0, 15).map((r) => ({
+            id: r.s.id,
+            name: r.s.name,
+            score: r.total,
+            breakdown: { ...r.breakdown, nameMatch: r.nm },
+          }))
+        );
+      }
+    } else {
+      scoped = beforeKeywordFilter;
+    }
 
     // 3-1) 중국집 검색 시 → 중국집만 표시 (폴백 없이, 일식/양식 등 다른 식당 제외)
     let usedChineseFallback = false;
@@ -257,7 +371,7 @@ export function useCardPaging(args: Args): Result {
         return koreanKeywords.some((k) => blob.includes(k));
       });
     }
-    if (hasCompanyIntent && scoped.length === 0 && beforeKeywordFilter.length > 0) {
+    if (hasCompanyIntentMerged && scoped.length === 0 && beforeKeywordFilter.length > 0) {
       const companyKeywords = ["회식", "단체", "모임", "룸", "단체가능"];
       scoped = beforeKeywordFilter.filter((s) => {
         const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""}`;
@@ -266,7 +380,7 @@ export function useCardPaging(args: Args): Result {
       // 태그 있는 곳 없으면 → 식당 전체 표시 (회식 가능한 곳)
       if (scoped.length === 0) scoped = beforeKeywordFilter;
     }
-    if (hasSoloIntent && scoped.length === 0 && beforeKeywordFilter.length > 0) {
+    if (hasSoloIntentMerged && scoped.length === 0 && beforeKeywordFilter.length > 0) {
       const soloKeywords = ["혼밥", "혼자", "1인", "1인석"];
       scoped = beforeKeywordFilter.filter((s) => {
         const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""}`;
@@ -284,35 +398,78 @@ export function useCardPaging(args: Args): Result {
       if (scoped.length === 0) scoped = beforeKeywordFilter;
     }
 
-    // 4) 정렬: 시나리오별 우선순위 키워드 많은 순 → 거리순
-    const scenarioPriority: Record<string, string[]> = {
-      china: ["중국집", "중국", "중식", "짜장", "짬뽕", "짜장면", "탕수", "마라", "훠궈", "딤섬", "양꼬치"],
-      korean: ["한정식", "한식", "정식", "코스", "가족식사"],
-      solo: ["혼밥", "혼자", "1인", "1인석"],
-      lunch: ["점심", "점심맛집", "점심식사", "런치", "브런치", "가성비"],
-      company: ["회식", "단체", "모임", "룸", "단체가능"],
-    };
-    const activeScenario = hasChineseIntent ? "china" : hasKoreanIntent ? "korean" : hasSoloIntent ? "solo" : hasLunchIntent ? "lunch" : hasCompanyIntent ? "company" : null;
-    if (activeScenario && scenarioPriority[activeScenario]) {
-      const priorityKw = scenarioPriority[activeScenario];
-      const countMatch = (s: NormalizedCard) => {
-        const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""}`;
-        return priorityKw.filter((k) => blob.includes(k)).length;
+    if (trimmedQuery && scoped.length > 0) {
+      scoped = [...scoped].sort((a, b) => {
+        const na = directNameMatchScore(trimmedQuery, a.name) + scoreStoreByIntent(
+          {
+            name: a.name,
+            category: a.category,
+            area: (a as any).area ?? null,
+            address: (a as any).address ?? null,
+            mood: (a as any).mood ?? null,
+            tags: (a as any).tags ?? null,
+            with_kids: (a as any).with_kids ?? null,
+            lat: a.lat,
+            lng: a.lng,
+            distanceKm: a.distanceKm ?? null,
+          },
+          intent,
+          a.category
+        ).score;
+        const nb = directNameMatchScore(trimmedQuery, b.name) + scoreStoreByIntent(
+          {
+            name: b.name,
+            category: b.category,
+            area: (b as any).area ?? null,
+            address: (b as any).address ?? null,
+            mood: (b as any).mood ?? null,
+            tags: (b as any).tags ?? null,
+            with_kids: (b as any).with_kids ?? null,
+            lat: b.lat,
+            lng: b.lng,
+            distanceKm: b.distanceKm ?? null,
+          },
+          intent,
+          b.category
+        ).score;
+        if (nb !== na) return nb - na;
+        const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
+        const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
+        return da - db;
+      });
+    }
+
+    // 4) 정렬: 검색어 없을 때만(추천) 시나리오·거리 정렬 — 검색어 있으면 이미 의도·이름 점수 순
+    if (!trimmedQuery) {
+      const scenarioPriority: Record<string, string[]> = {
+        china: ["중국집", "중국", "중식", "짜장", "짬뽕", "짜장면", "탕수", "마라", "훠궈", "딤섬", "양꼬치"],
+        korean: ["한정식", "한식", "정식", "코스", "가족식사"],
+        solo: ["혼밥", "혼자", "1인", "1인석"],
+        lunch: ["점심", "점심맛집", "점심식사", "런치", "브런치", "가성비"],
+        company: ["회식", "단체", "모임", "룸", "단체가능"],
       };
-      scoped = scoped.sort((a, b) => {
-        const ca = countMatch(a);
-        const cb = countMatch(b);
-        if (cb !== ca) return cb - ca;
-        const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
-        const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
-        return da - db;
-      });
-    } else if (hasMyLocation) {
-      scoped = scoped.sort((a, b) => {
-        const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
-        const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
-        return da - db;
-      });
+      const activeScenario = hasChineseIntent ? "china" : hasKoreanIntent ? "korean" : hasSoloIntentMerged ? "solo" : hasLunchIntent ? "lunch" : hasCompanyIntentMerged ? "company" : null;
+      if (activeScenario && scenarioPriority[activeScenario]) {
+        const priorityKw = scenarioPriority[activeScenario];
+        const countMatch = (s: NormalizedCard) => {
+          const blob = `${normText((s as any).name ?? "")} ${Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : ""} ${Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : ""}`;
+          return priorityKw.filter((k) => blob.includes(k)).length;
+        };
+        scoped = scoped.sort((a, b) => {
+          const ca = countMatch(a);
+          const cb = countMatch(b);
+          if (cb !== ca) return cb - ca;
+          const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
+          const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
+          return da - db;
+        });
+      } else if (hasMyLocation) {
+        scoped = scoped.sort((a, b) => {
+          const da = a.distanceKm ?? Number.POSITIVE_INFINITY;
+          const db = b.distanceKm ?? Number.POSITIVE_INFINITY;
+          return da - db;
+        });
+      }
     }
 
     // 5) 근처 탐색 반경 + fallback
@@ -334,7 +491,8 @@ export function useCardPaging(args: Args): Result {
 
     // 마지막 폴백: 결과 0개면 키워드만 적용
     // 시나리오 검색(회식/혼밥/한정식 등) 시 다른 카테고리(미용실/액티비티/카페) 노출 금지
-    const hasStrictScenario = hasChineseIntent || hasKoreanIntent || hasSoloIntent || hasCompanyIntent || hasLunchIntent;
+    const hasStrictScenario =
+      hasChineseIntent || hasKoreanIntent || hasSoloIntentMerged || hasCompanyIntentMerged || hasLunchIntent;
     if (categoryStores.length === 0 && normalized.length > 0 && !hasStrictScenario) {
       // activeCategory가 있으면 해당 카테고리만 (회식·혼밥은 식당만)
       let pool = normalized;
@@ -349,14 +507,16 @@ export function useCardPaging(args: Args): Result {
       categoryStores = keywordFiltered.length > 0 ? keywordFiltered.slice(0, 200) : pool.slice(0, 200);
     }
 
-    // ✅ 추천 카드 랜덤 순서 (같은 검색어여도 매번 다르게)
-    const shuffled = [...categoryStores].sort(() => Math.random() - 0.5);
+    // ✅ 검색어 없음: 추천 카드 랜덤 — 검색어 있음: 점수·거리 정렬 유지
+    const ordered = trimmedQuery
+      ? categoryStores
+      : [...categoryStores].sort(() => Math.random() - 0.5);
     const pages: CardInfo[][] = [
-      shuffled.slice(0, 3),
-      shuffled.slice(3, 6),
-      shuffled.slice(6, 9),
+      ordered.slice(0, 3),
+      ordered.slice(3, 6),
+      ordered.slice(6, 9),
     ];
 
-    return { categoryStores: shuffled, pages, usedFallbackFar, usedChineseFallback };
+    return { categoryStores: ordered, pages, usedFallbackFar, usedChineseFallback };
   }, [stores, activeCategory, query, hasMyLocation, myLat, myLng, exploreMode, radiusKm]);
 }

@@ -20,6 +20,7 @@ export function logEvent(event: string, payload: LogPayload = {}) {
     const userId = getUserId();
     const sessionId = getOrCreateSessionId();
     const isLoggedIn = userId.startsWith("user_");
+    // TODO(Supabase): user_actions 테이블(또는 analytics.events)로 정식 적재 시 payload 스키마 맞추기
     fetch("/api/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

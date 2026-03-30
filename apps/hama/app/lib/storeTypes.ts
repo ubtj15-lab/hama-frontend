@@ -33,6 +33,12 @@ export type StoreRow = {
   updated_at: string | null;
 };
 
+/** 홈 추천 카드 요약 배지 (짧은 라벨 + 태그) */
+export type RecommendationBadge = {
+  primaryLabel: string;
+  shortTags: string[];
+};
+
 // ✅ API/컴포넌트에서 쓰는 “카드 모델(표준)”
 export type HomeCard = {
   id: string;
@@ -66,6 +72,12 @@ export type HomeCard = {
 
   // UI에서 “조용한 분위기” 같은 텍스트로 쓰는 경우가 있음
   moodText?: string;
+
+  /** 홈 추천 등 규칙 기반 한 줄 이유 (배지 미사용·폴백용) */
+  reasonText?: string;
+
+  /** 추천 카드: [데이트] 등 pill + 짧은 태그 줄 */
+  recommendBadge?: RecommendationBadge;
 
   // “0.5km” 같이 표시하는 경우가 있어서 optional로 둠
   distanceKm?: number;

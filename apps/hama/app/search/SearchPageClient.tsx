@@ -43,7 +43,7 @@ export default function SearchPageClient() {
       if (mapped) return mapped;
     }
 
-    // rawCategory 없고 query가 있으면 query로 추론 (중국집, 카페 등)
+    // rawCategory 없고 query가 있으면 query로 추론 — 없으면 null(종합·매장명 검색)
     if (query.trim()) return inferCategoryFromQuery(query);
     return null;
   }, [rawCategory, query]);
@@ -88,6 +88,21 @@ export default function SearchPageClient() {
   useEffect(() => {
     setOverlayOpen(overlayVisible);
   }, [overlayVisible, setOverlayOpen]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const w = window as Window & { __HAMA_TEST_INTENT__?: () => Promise<unknown> };
+    w.__HAMA_TEST_INTENT__ = async () => {
+      const { runSearchIntentScenarioChecks } = await import("@/lib/searchIntent.scenarios");
+      const r = runSearchIntentScenarioChecks();
+      // eslint-disable-next-line no-console
+      console.log("[HAMA intent scenarios]", r);
+      return r;
+    };
+    return () => {
+      delete w.__HAMA_TEST_INTENT__;
+    };
+  }, []);
 
   // 예약 상태
   const [reserveStep, setReserveStep] = useState<0 | 1 | 2>(0);

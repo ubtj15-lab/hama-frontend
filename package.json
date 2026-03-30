@@ -5,9 +5,11 @@
   "scripts": {
     "dev": "npm run dev:hama",
     "dev:hama": "npm run dev --workspace=apps/hama",
+    "dev:hama:clean": "npm run clean:next && npm run dev:hama",
     "dev:partner": "npm run dev --workspace=apps/partner",
     "build:hama": "npm run build --workspace=apps/hama",
-    "build:partner": "npm run build --workspace=apps/partner"
+    "build:partner": "npm run build --workspace=apps/partner",
+    "clean:next": "node -e \"['.next','apps/hama/.next','apps/partner/.next'].forEach(p=>{try{require('fs').rmSync(p,{recursive:true,force:true})}catch(e){}})\""
   },
   "workspaces": [
     "apps/*",

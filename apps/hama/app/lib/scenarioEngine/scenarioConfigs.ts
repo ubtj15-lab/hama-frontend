@@ -1,0 +1,118 @@
+import type { ScenarioConfig, ScenarioType } from "./types";
+
+const T = {
+  foodKid: { 아이동반: 28, 키즈존: 26, 주차: 20, 유아의자: 18, 실내: 15 },
+  calmParent: { 조용: 26, 좌석: 18, 주차: 18, 예약: 16, 접근: 12 },
+  dateMood: { 분위기: 22, 로맨틱: 20, 사진: 16, 야경: 14, 대화: 14 },
+} as const;
+
+/** 시나리오별 설정 — 새 시나리오는 이 Record에 항목만 추가 */
+export const SCENARIO_CONFIGS: Record<ScenarioType, ScenarioConfig> = {
+  date: {
+    label: "데이트",
+    primaryBadgeLabel: "데이트",
+    preferredPlaceTypes: ["FOOD", "CAFE", "ACTIVITY", "WALK"],
+    tagWeights: { ...T.dateMood, 루프탑: 12, 와인: 10 },
+    defaultStartTime: "18:00",
+    defaultDurationHours: 3,
+    indoorBias: 0.2,
+    activityBias: 0.4,
+    preferredCourseTemplates: [
+      ["FOOD", "ACTIVITY", "CAFE"],
+      ["FOOD", "CAFE", "WALK"],
+      ["CULTURE", "CAFE", "FOOD"],
+    ],
+  },
+  family: {
+    label: "가족 외식",
+    primaryBadgeLabel: "가족",
+    preferredPlaceTypes: ["FOOD", "CAFE", "ACTIVITY", "CULTURE"],
+    tagWeights: { 가족: 24, 주차: 20, 좌석: 18, 메뉴: 15, 웨이팅: 10 },
+    defaultStartTime: "12:00",
+    defaultDurationHours: 2,
+    preferredCourseTemplates: [["FOOD", "CAFE"], ["ACTIVITY", "FOOD", "CAFE"]],
+  },
+  family_kids: {
+    label: "아이랑",
+    primaryBadgeLabel: "아이랑",
+    preferredPlaceTypes: ["ACTIVITY", "FOOD", "CAFE", "CULTURE"],
+    tagWeights: { ...T.foodKid, 놀이: 20, 체험: 18 },
+    defaultStartTime: "11:00",
+    defaultDurationHours: 3,
+    preferredCourseTemplates: [
+      ["ACTIVITY", "FOOD", "CAFE"],
+      ["CULTURE", "FOOD", "CAFE"],
+      ["ACTIVITY", "CAFE"],
+    ],
+  },
+  parent_child_outing: {
+    label: "아이와 함께",
+    primaryBadgeLabel: "아이와 함께",
+    preferredPlaceTypes: ["ACTIVITY", "WALK", "CAFE", "FOOD", "CULTURE"],
+    tagWeights: { ...T.foodKid, 산책: 16, 공원: 18, 나들이: 14 },
+    defaultStartTime: "10:30",
+    defaultDurationHours: 4,
+    indoorBias: -0.1,
+    activityBias: 0.5,
+    preferredCourseTemplates: [
+      ["WALK", "FOOD", "CAFE"],
+      ["ACTIVITY", "CAFE", "FOOD"],
+      ["CULTURE", "CAFE"],
+    ],
+  },
+  parents: {
+    label: "부모님",
+    primaryBadgeLabel: "부모님",
+    preferredPlaceTypes: ["FOOD", "CAFE", "WALK", "CULTURE"],
+    tagWeights: { ...T.calmParent, 한정식: 14, 한식: 12 },
+    defaultStartTime: "12:00",
+    defaultDurationHours: 2,
+    activityBias: 0.2,
+    preferredCourseTemplates: [
+      ["FOOD", "CAFE", "WALK"],
+      ["FOOD", "CAFE"],
+      ["CULTURE", "FOOD"],
+    ],
+  },
+  solo: {
+    label: "혼밥",
+    primaryBadgeLabel: "혼밥",
+    preferredPlaceTypes: ["FOOD", "CAFE", "CULTURE"],
+    tagWeights: { 혼밥: 28, 혼자: 22, 빠른: 18, "1인": 16, 가성비: 12 },
+    defaultDurationHours: 1,
+    preferredCourseTemplates: [["FOOD", "CAFE"], ["CULTURE", "FOOD"]],
+  },
+  group: {
+    label: "회식",
+    primaryBadgeLabel: "회식",
+    preferredPlaceTypes: ["FOOD", "ACTIVITY", "CAFE", "CULTURE"],
+    tagWeights: { 단체: 26, 회식: 24, 예약: 20, 술: 14, 가성비: 12 },
+    defaultStartTime: "18:30",
+    defaultDurationHours: 3,
+    preferredCourseTemplates: [
+      ["FOOD", "ACTIVITY", "CAFE"],
+      ["FOOD", "ACTIVITY"],
+      ["FOOD", "CAFE"],
+    ],
+  },
+  friends: {
+    label: "친구",
+    primaryBadgeLabel: "친구",
+    preferredPlaceTypes: ["CAFE", "ACTIVITY", "FOOD", "CULTURE"],
+    tagWeights: { 친구: 18, 가볍게: 14, 수다: 14, 카페: 12, 놀: 12 },
+    defaultDurationHours: 3,
+    preferredCourseTemplates: [
+      ["CAFE", "ACTIVITY", "FOOD"],
+      ["ACTIVITY", "CAFE"],
+      ["FOOD", "CAFE"],
+    ],
+  },
+  generic: {
+    label: "추천",
+    primaryBadgeLabel: "추천",
+    preferredPlaceTypes: ["FOOD", "CAFE", "ACTIVITY"],
+    tagWeights: { 맛집: 10, 카페: 8 },
+    defaultDurationHours: 2,
+    preferredCourseTemplates: [["FOOD", "CAFE"], ["FOOD", "ACTIVITY", "CAFE"]],
+  },
+};

@@ -33,7 +33,7 @@ export type StoreRow = {
   phone: string | null;
 
   image_url: string | null;
-  cover_image_url: string | null;
+  cover_image_url?: string | null;
 
   kakao_place_url: string | null;
   naver_place_id: string | null;
@@ -156,7 +156,6 @@ export async function fetchHomeCardsByTab(
       lng,
       phone,
       image_url,
-      cover_image_url,
       kakao_place_url,
       naver_place_id,
       mood,
@@ -212,7 +211,6 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
       lng,
       phone,
       image_url,
-      cover_image_url,
       kakao_place_url,
       naver_place_id,
       mood,

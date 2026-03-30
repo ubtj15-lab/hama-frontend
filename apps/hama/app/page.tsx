@@ -15,6 +15,11 @@ import HomeSearchBar from "./_components/HomeSearchBar";
 import HomeSwipeDeck from "./_components/HomeSwipeDeck";
 
 import { useHomeCards } from "./_hooks/useHomeCards";
+import { RECOMMEND_DECK_SIZE, RECENT_EXCLUDE_LIMIT } from "@/lib/recommend/recommendConstants";
+import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
+import { resolveScenarioConfig } from "@/lib/scenarioEngine/resolveScenarioConfig";
+import { generateCourses } from "@/lib/scenarioEngine/courseEngine";
+import HomeCoursePreview from "./_components/HomeCoursePreview";
 import { useHomeMode } from "./_hooks/useHomeMode";
 import { useRecent } from "./_hooks/useRecent";
 import { useSaved } from "./_hooks/useSaved";
@@ -23,6 +28,7 @@ import { openDirections } from "@/lib/openDirections";
 
 import { inferIntention } from "@/lib/intention";
 import type { IntentionType } from "@/lib/intention";
+import { getDefaultCardImage } from "@/lib/defaultCardImage";
 
 interface HamaUser {
   nickname: string;
@@ -38,8 +44,6 @@ interface PointLog {
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
 const LOGIN_FLAG_KEY = "hamaLoggedIn";
-
-const PER_CATEGORY = 4;
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -127,20 +131,45 @@ function HomePageContent() {
   const [shuffleKey, setShuffleKey] = useState<number>(0);
   const [modeOverride, setModeOverride] = useState<Mode | null>(null);
 
-  const { mode: baseMode } = useHomeMode();
+  const { mode: baseMode, loc: userLoc } = useHomeMode();
   const mode: Mode = modeOverride ?? baseMode;
 
   const [intent, setIntent] = useState<IntentionType>("none");
 
-  const { cards: recommendCards, isLoading: isRecommendLoading } = useHomeCards(
-    homeTab,
-    shuffleKey,
-    intent
-  );
-
   const [selectedCard, setSelectedCard] = useState<HomeCard | null>(null);
 
   const { recentCards, recordView } = useRecent();
+
+  const recentExcludeIds = useMemo(
+    () => recentCards.slice(0, RECENT_EXCLUDE_LIMIT).map((c) => c.id),
+    [recentCards]
+  );
+
+  const scenarioFromQuery = useMemo(() => {
+    const q = query.trim();
+    if (!q) return null;
+    return parseScenarioIntent(q);
+  }, [query]);
+
+  const { cards: recommendCards, candidatePool, isLoading: isRecommendLoading } = useHomeCards(
+    homeTab,
+    shuffleKey,
+    intent,
+    {
+      userLat: userLoc?.lat ?? null,
+      userLng: userLoc?.lng ?? null,
+      excludeStoreIds: recentExcludeIds,
+      searchQuery: query.trim() || null,
+      scenarioObject: scenarioFromQuery,
+    }
+  );
+
+  const coursePlans = useMemo(() => {
+    if (!scenarioFromQuery || scenarioFromQuery.intentType !== "course_generation") return [];
+    if (!candidatePool.length) return [];
+    const cfg = resolveScenarioConfig(scenarioFromQuery);
+    return generateCourses(candidatePool, scenarioFromQuery, cfg, 2);
+  }, [scenarioFromQuery, candidatePool]);
   const { toggleSaved, isSaved } = useSaved();
   const { setOverlayOpen } = useUIOverlay();
 
@@ -245,12 +274,11 @@ function HomePageContent() {
   const deckCardsRaw = recommendCards;
   const deckLoading = isRecommendLoading;
 
-  /** 종합 12장, 단일 카테고리 4장 */
-  const TOTAL_DECK_MAX = 12;
-  const visibleDeckCards = useMemo(() => {
-    if (homeTab === "all") return deckCardsRaw.slice(0, TOTAL_DECK_MAX);
-    return deckCardsRaw.slice(0, PER_CATEGORY);
-  }, [deckCardsRaw, homeTab]);
+  /** 추천 덱은 항상 3장 고정 */
+  const visibleDeckCards = useMemo(
+    () => deckCardsRaw.slice(0, RECOMMEND_DECK_SIZE),
+    [deckCardsRaw]
+  );
 
   const getCardLatLng = (card: HomeCard): { lat?: number; lng?: number } => {
     const anyCard = card as any;
@@ -280,6 +308,22 @@ function HomePageContent() {
       anyCard.image_url ??
       anyCard.imageURL ??
       undefined) as string | undefined;
+  };
+
+  const recentThumbSrc = (card: HomeCard) => {
+    const u = getImageUrl(card)?.trim();
+    if (u) return u;
+    return getDefaultCardImage(card);
+  };
+
+  const recentCategoryLine = (card: HomeCard) => {
+    if (card.categoryLabel) return card.categoryLabel;
+    const k = String(card.category ?? "").toLowerCase();
+    if (k === "restaurant") return "식당";
+    if (k === "cafe") return "카페";
+    if (k === "salon") return "미용실";
+    if (k === "activity") return "액티비티";
+    return "장소";
   };
 
   const handlePlaceDetailAction = (card: HomeCard, action: "길안내" | "예약·자세히") => {
@@ -369,23 +413,75 @@ function HomePageContent() {
                   }}
                   style={{
                     flexShrink: 0,
-                    width: 100,
-                    height: 100,
-                    borderRadius: 12,
+                    width: 118,
+                    borderRadius: 14,
                     overflow: "hidden",
                     border: "none",
                     padding: 0,
                     cursor: "pointer",
-                    background: "#111827",
+                    background: "#ffffff",
+                    boxShadow: "0 6px 20px rgba(15,23,42,0.12)",
+                    display: "flex",
+                    flexDirection: "column",
+                    textAlign: "left",
                   }}
                 >
-                  <Image
-                    src={getImageUrl(c) ?? "/images/category/restaurant.jpg"}
-                    alt={c.name ?? ""}
-                    width={100}
-                    height={100}
-                    style={{ objectFit: "cover", width: "100%", height: "100%" }}
-                  />
+                  <div
+                    style={{
+                      width: "100%",
+                      height: 86,
+                      background: "#e2e8f0",
+                      position: "relative",
+                    }}
+                  >
+                    {/* next/image는 외부 도메인 미등록 시 깨짐 → 썸네일은 img + 기본 이미지 폴백 */}
+                    <img
+                      src={recentThumbSrc(c)}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                      onError={(e) => {
+                        const el = e.currentTarget;
+                        el.onerror = null;
+                        el.src = getDefaultCardImage(c);
+                      }}
+                    />
+                  </div>
+                  <div style={{ padding: "8px 9px 10px", minHeight: 52 }}>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: "#0f172a",
+                        lineHeight: 1.3,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        fontFamily: "Noto Sans KR, system-ui, sans-serif",
+                      }}
+                    >
+                      {c.name || "매장"}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "#64748b",
+                        marginTop: 4,
+                        fontFamily: "Noto Sans KR, system-ui, sans-serif",
+                      }}
+                    >
+                      {recentCategoryLine(c)}
+                    </div>
+                  </div>
                 </button>
               ))}
             </div>
@@ -434,16 +530,31 @@ function HomePageContent() {
           })}
         </div>
 
+        <HomeCoursePreview
+          plans={coursePlans}
+          onPick={(plan) => {
+            logEvent("home_course_pick", { courseId: plan.id, title: plan.title, scenario: plan.scenario });
+          }}
+        />
+
         <HomeSwipeDeck
           key={`${mode}-${homeTab}-${shuffleKey}`}
           cards={visibleDeckCards}
           homeTab={homeTab}
           mode={mode}
+          intention={intent}
           isLoading={deckLoading}
           onOpenCard={(c) => {
             setSelectedCard(c);
             recordView(c.id);
             addPoints(2, "홈 추천 카드 열람");
+            logEvent("recommend_card_click", {
+              id: c.id,
+              name: c.name,
+              tab: homeTab,
+              mode,
+              intention: intent,
+            });
             logEvent("home_card_open", {
               id: c.id,
               name: c.name,

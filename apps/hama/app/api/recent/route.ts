@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = process.env
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabase();
   if (!supabase) {
-    return NextResponse.json({ error: "DB not configured" }, { status: 500 });
+    return NextResponse.json({ store_ids: [], stores: [] });
   }
 
   const { data: views, error } = await supabase
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     console.error("recent GET error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ store_ids: [], stores: [] });
   }
 
   const storeIds = (views ?? []).map((v) => v.store_id);
@@ -52,9 +53,9 @@ export async function GET(req: NextRequest) {
   }
 
   const orderMap = new Map(storeIds.map((id, i) => [id, i]));
-  const sorted = (stores ?? []).sort(
-    (a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999)
-  );
+  const sorted = (stores ?? [])
+    .filter(storeRowMatchesServiceRegion)
+    .sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
 
-  return NextResponse.json({ store_ids: storeIds, stores: sorted });
+  return NextResponse.json({ store_ids: sorted.map((s) => s.id), stores: sorted });
 }

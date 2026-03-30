@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import { storeToHomeCard } from "@/lib/storeMappers";
+import { applyDefaultImage } from "@/lib/defaultCardImage";
 import { getUserId } from "@hama/shared";
 
 export function useRecent() {
@@ -19,7 +20,11 @@ export function useRecent() {
       );
       const json = await res.json();
       const stores = json.stores ?? [];
-      setRecentCards(stores.map((s: Record<string, unknown>) => storeToHomeCard(s)));
+      setRecentCards(
+        stores.map((s: Record<string, unknown>) =>
+          applyDefaultImage(storeToHomeCard(s))
+        )
+      );
     } catch {
       setRecentCards([]);
     } finally {

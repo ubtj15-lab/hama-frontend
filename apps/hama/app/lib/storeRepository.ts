@@ -4,6 +4,11 @@
 import { supabase } from "@hama/shared";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { applyDefaultImage } from "@/lib/defaultCardImage";
+import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
+import {
+  RECOMMEND_POOL_PER_CATEGORY_MIXED,
+  RECOMMEND_POOL_SINGLE_TAB,
+} from "@/lib/recommend/recommendConstants";
 
 /** ---------- Options ---------- */
 export type FetchHomeOptions = {
@@ -33,7 +38,7 @@ export type StoreRow = {
   phone: string | null;
 
   image_url: string | null;
-  cover_image_url: string | null;
+  cover_image_url?: string | null;
 
   kakao_place_url: string | null;
   naver_place_id: string | null;
@@ -156,7 +161,6 @@ export async function fetchHomeCardsByTab(
       lng,
       phone,
       image_url,
-      cover_image_url,
       kakao_place_url,
       naver_place_id,
       mood,
@@ -182,8 +186,27 @@ export async function fetchHomeCardsByTab(
     return [];
   }
 
-  const rows = (data ?? []) as StoreRow[];
+  const rows = ((data ?? []) as StoreRow[]).filter(storeRowMatchesServiceRegion);
   return rows.map(toHomeCard);
+}
+
+/** 홈 점수 추천용: 탭별로 더 많이 가져와 클라이언트에서 랭킹 */
+export async function fetchHomeRecommendCandidates(tab: HomeTabKey): Promise<HomeCard[]> {
+  if (tab === "all") {
+    const per = RECOMMEND_POOL_PER_CATEGORY_MIXED;
+    const [restaurants, cafes, salons, activities] = await Promise.all([
+      fetchHomeCardsByTab("restaurant", { count: per }),
+      fetchHomeCardsByTab("cafe", { count: per }),
+      fetchHomeCardsByTab("salon", { count: per }),
+      fetchHomeCardsByTab("activity", { count: per }),
+    ]);
+    const byId = new Map<string, HomeCard>();
+    for (const c of [...restaurants, ...cafes, ...salons, ...activities]) {
+      if (!byId.has(c.id)) byId.set(c.id, c);
+    }
+    return Array.from(byId.values());
+  }
+  return fetchHomeCardsByTab(tab, { count: RECOMMEND_POOL_SINGLE_TAB });
 }
 
 /** ---------- Fetch: Nearby (Bounding box) ---------- */
@@ -212,7 +235,6 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
       lng,
       phone,
       image_url,
-      cover_image_url,
       kakao_place_url,
       naver_place_id,
       mood,
@@ -242,7 +264,7 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
     return [];
   }
 
-  const rows = (data ?? []) as StoreRow[];
+  const rows = ((data ?? []) as StoreRow[]).filter(storeRowMatchesServiceRegion);
   return rows.map(toHomeCard);
 }
 function homeTabCount(tab: HomeTabKey): number {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
 
 type HomeTabKey = "all" | "restaurant" | "cafe" | "salon" | "activity";
 
@@ -114,7 +115,7 @@ async function fetchDbNearbyPool(params: {
     console.error("[dbNearbyPool]", error);
     return [];
   }
-  return (data ?? []) as any[];
+  return ((data ?? []) as any[]).filter(storeRowMatchesServiceRegion);
 }
 
 async function fetchKakaoNearby(params: {
@@ -301,7 +302,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const cards = merged.map(rowToHomeCard);
+    const cards = merged.filter(storeRowMatchesServiceRegion).map(rowToHomeCard);
     return NextResponse.json({ ok: true, cards });
   } catch (e: any) {
     console.error("[/api/places/nearby]", e);
