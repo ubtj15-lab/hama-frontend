@@ -1,6 +1,9 @@
 export type {
   ScenarioType,
   UserIntentType,
+  RecommendationMode,
+  IntentCategory,
+  FoodSubCategory,
   ScenarioObject,
   PlaceType,
   ScenarioConfig,
@@ -12,8 +15,29 @@ export type {
 } from "./types";
 
 export { SCENARIO_CONFIGS } from "./scenarioConfigs";
-export { SCENARIO_ALIAS_GROUPS, COURSE_INTENT_MARKERS } from "./scenarioAliases";
-export { parseScenarioIntent } from "./parseScenarioIntent";
+export { SCENARIO_ALIAS_GROUPS } from "./scenarioAliases";
+export {
+  parseScenarioIntent,
+  parseCompositeIntent,
+  classifyIntent,
+  explainCourseGenerationMatch,
+  isCourseGenerationQuery,
+  detectStrictCategory,
+  detectFoodSubCategory,
+  detectMenuIntent,
+  detectScenario,
+  detectMoodAndConstraints,
+  buildFoodTagsForCard,
+  inferFoodSubFromMenus,
+  FOOD_SUB_RULES,
+  augmentScenarioWithComposite,
+  detectVibePreference,
+  detectHardConstraints,
+  detectSoftConstraints,
+  detectFoodPreference,
+  buildCompositeTagsForCard,
+  inferRecommendationMode,
+} from "./parseScenarioIntent";
 export { resolveScenarioConfig } from "./resolveScenarioConfig";
 export { getScenarioTagWeights } from "./getScenarioTagWeights";
 export { mapPlaceToPlaceType } from "./placeTypeMap";
@@ -24,9 +48,13 @@ export {
   collectCandidatesByType,
   buildCourseCombination,
   buildTimeline,
-  generateCourseTitle,
   generateCourses,
 } from "./courseEngine";
+export { buildFunctionalCourseTitle, buildSituationCourseTitle, buildCourseBadges } from "./coursePresentation";
+export { runCourseEngineScenarioChecks } from "./courseEngine.scenarios";
+export { runIntentClassificationChecks } from "./intentClassification.scenarios";
+export { runCompositeIntentChecks } from "./compositeIntent.scenarios";
+export { runConversationScenarioChecks } from "@/lib/conversation/conversation.scenarios";
 export { DEFAULT_DWELL_MINUTES, estimateTravelMinutes } from "./courseConstants";
 export {
   logScenarioEngineDebug,

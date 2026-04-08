@@ -5,7 +5,7 @@ export {
   type RecommendScoreBreakdown,
   type ScoredRecommendItem,
 } from "./scoring";
-export { buildTopRecommendations as rankPlacesForScenario } from "./scoring";
+export { rankPlacesForScenario } from "./scoring";
 export {
   SCENARIO_TAG_RULES,
   SCENARIO_RAW_CAP,
@@ -24,6 +24,8 @@ export {
   WEIGHT_KEYWORD,
   WEIGHT_QUALITY,
   WEIGHT_SCENARIO,
+  WEIGHT_FOOD_INTENT,
+  WEIGHT_COMPOSITE,
   DIVERSITY_PENALTY_SAME_BRAND,
   DIVERSITY_PENALTY_SAME_MAIN_CATEGORY,
   DIVERSITY_PENALTY_SAME_SUB_CATEGORY,
@@ -47,3 +49,15 @@ export {
   GENERIC_PRIMARY_LABEL,
   BADGE_MIN_RAW_FOR_INFERRED_LABEL,
 } from "./recommendationBadgeConstants";
+export {
+  filterFoodCandidatesByMenuIntent,
+  rankFoodPlaces,
+  foodMenuMatchRaw,
+  foodMenuMatchNormalized,
+  placeTextBlob,
+} from "./foodIntentRanking";
+export {
+  rankPlacesWithCompositeIntent,
+  compositeIntentRawScore,
+  violatesHardConstraints,
+} from "./compositeRanking";

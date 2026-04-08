@@ -28,6 +28,8 @@ export type BuildRecommendationBadgeOptions = {
   neutralInference?: { key: RecommendScenarioKey; raw: number };
   /** scenario config 의 primaryBadgeLabel 등 — 장소 태그보다 우선 */
   primaryLabelOverride?: string;
+  /** 음식 의도(중식·짜장면 등) — shortTags 앞에 우선 표시 */
+  extraShortTags?: string[];
 };
 
 export function getPrimaryLabel(scenario: RecommendScenarioKey): string {
@@ -126,6 +128,7 @@ function placeBlob(card: HomeCard): string {
   if (Array.isArray(c?.mood)) parts.push(c.mood.join(" "));
   if (c?.moodText) parts.push(String(c.moodText));
   if (typeof c?.description === "string") parts.push(c.description);
+  if (Array.isArray(c?.menu_keywords)) parts.push(c.menu_keywords.join(" "));
   return parts
     .join(" ")
     .toLowerCase()
@@ -202,18 +205,19 @@ const MAX_SHORT_TAGS = 3;
 const MIN_REPRESENTATIVE_TAGS = 2;
 
 /**
- * 시나리오·편의·(부족 시) 영업·거리 태그를 최대 3개까지 고릅니다.
+ * 시나리오·편의·(부족 시) 영업·거리 태그를 최대 maxTags개까지 고릅니다.
  */
 export function pickShortTags(
   place: HomeCard,
   scenario: RecommendScenarioKey,
   blob: string,
-  opts: { businessState: BusinessState; distanceKm: number | null }
+  opts: { businessState: BusinessState; distanceKm: number | null },
+  maxTags: number = MAX_SHORT_TAGS
 ): string[] {
   const tier0 = collectScenarioCandidates(scenario, blob);
   const scenarioLabels: string[] = [];
   for (const t of tier0) {
-    if (scenarioLabels.length >= MAX_SHORT_TAGS) break;
+    if (scenarioLabels.length >= maxTags) break;
     if (tagOverlapsExisting(scenarioLabels, t.label)) continue;
     scenarioLabels.push(t.label);
   }
@@ -222,7 +226,7 @@ export function pickShortTags(
   const tier1 = collectFacilityTier(place, blob, merged);
   tier1.sort((a, b) => b.weight - a.weight);
   for (const t of tier1) {
-    if (merged.length >= MAX_SHORT_TAGS) break;
+    if (merged.length >= maxTags) break;
     if (tagOverlapsExisting(merged, t.label)) continue;
     merged.push(t.label);
   }
@@ -232,14 +236,14 @@ export function pickShortTags(
     const aux = collectAuxiliaryTier(opts.businessState, opts.distanceKm);
     aux.sort((a, b) => b.weight - a.weight);
     for (const t of aux) {
-      if (merged.length >= MAX_SHORT_TAGS) break;
+      if (merged.length >= maxTags) break;
       if (tagOverlapsExisting(merged, t.label)) continue;
       merged.push(t.label);
     }
     merged = dedupeTags(merged);
   }
 
-  return merged.slice(0, MAX_SHORT_TAGS);
+  return merged.slice(0, maxTags);
 }
 
 export function buildRecommendationBadge(place: HomeCard, options?: BuildRecommendationBadgeOptions): RecommendationBadge {
@@ -263,9 +267,14 @@ export function buildRecommendationBadge(place: HomeCard, options?: BuildRecomme
     neutralInference: explicit ? undefined : inference,
   });
 
+  const extras = options?.extraShortTags?.filter(Boolean) ?? [];
+  const maxTags = extras.length ? 4 : MAX_SHORT_TAGS;
+  const core = pickShortTags(place, tagScenario, blob, { businessState, distanceKm }, maxTags);
+  const shortTags = dedupeTags([...extras, ...core]).slice(0, maxTags);
+
   return {
     primaryLabel: options?.primaryLabelOverride ?? baseLabel,
-    shortTags: pickShortTags(place, tagScenario, blob, { businessState, distanceKm }),
+    shortTags,
   };
 }
 

@@ -381,68 +381,98 @@ export default function HomeSwipeDeck({
             <div
               style={{
                 display: "flex",
+                flexDirection: "column",
                 gap: 8,
                 marginTop: 12,
               }}
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const name = String(anyCard?.name ?? "").trim();
+                    logEvent("recommend_directions_click", {
+                      id: anyCard?.id,
+                      name,
+                      tab: homeTab,
+                      mode,
+                      intention,
+                    });
+                    openDirections({ name, lat: lat ?? null, lng: lng ?? null });
+                  }}
+                  style={{
+                    flex: 1,
+                    height: 40,
+                    borderRadius: 12,
+                    border: "none",
+                    background: "#2563EB",
+                    color: "#ffffff",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  길찾기
+                </button>
+                <button
+                  type="button"
+                  disabled={phoneDigits.length < 8}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (phoneDigits.length < 8) return;
+                    logEvent("recommend_phone_click", {
+                      id: anyCard?.id,
+                      name: String(anyCard?.name ?? "").trim(),
+                      tab: homeTab,
+                      mode,
+                      intention,
+                    });
+                    window.location.href = `tel:${phoneDigits}`;
+                  }}
+                  style={{
+                    flex: 1,
+                    height: 40,
+                    borderRadius: 12,
+                    border: "none",
+                    background: phoneDigits.length < 8 ? "#e5e7eb" : "#0f172a",
+                    color: phoneDigits.length < 8 ? "#9ca3af" : "#ffffff",
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: phoneDigits.length < 8 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  전화
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const name = String(anyCard?.name ?? "").trim();
-                  logEvent("recommend_directions_click", {
-                    id: anyCard?.id,
-                    name,
-                    tab: homeTab,
-                    mode,
-                    intention,
-                  });
-                  openDirections({ name, lat: lat ?? null, lng: lng ?? null });
-                }}
-                style={{
-                  flex: 1,
-                  height: 40,
-                  borderRadius: 12,
-                  border: "none",
-                  background: "#2563EB",
-                  color: "#ffffff",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  cursor: "pointer",
-                }}
-              >
-                길찾기
-              </button>
-              <button
-                type="button"
-                disabled={phoneDigits.length < 8}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (phoneDigits.length < 8) return;
-                  logEvent("recommend_phone_click", {
+                  logEvent("recommend_detail_click", {
                     id: anyCard?.id,
                     name: String(anyCard?.name ?? "").trim(),
                     tab: homeTab,
                     mode,
                     intention,
                   });
-                  window.location.href = `tel:${phoneDigits}`;
+                  onOpenCard(card);
                 }}
                 style={{
-                  flex: 1,
-                  height: 40,
+                  width: "100%",
+                  height: 38,
                   borderRadius: 12,
-                  border: "none",
-                  background: phoneDigits.length < 8 ? "#e5e7eb" : "#0f172a",
-                  color: phoneDigits.length < 8 ? "#9ca3af" : "#ffffff",
+                  border: "1px solid #2563EB",
+                  background: "#ffffff",
+                  color: "#2563EB",
                   fontSize: 13,
                   fontWeight: 800,
-                  cursor: phoneDigits.length < 8 ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                 }}
               >
-                전화
+                매장 정보
               </button>
             </div>
           )}

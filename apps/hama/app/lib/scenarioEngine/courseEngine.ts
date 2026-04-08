@@ -1,10 +1,49 @@
-import type { HomeCard } from "@/lib/storeTypes";
+import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { businessStateFromCard, qualityScoreFromCard } from "@/lib/recommend/scoreParts";
 import { DEFAULT_DWELL_MINUTES, estimateTravelMinutes } from "./courseConstants";
 import { mapPlaceToPlaceType } from "./placeTypeMap";
 import type { ScenarioConfig, ScenarioObject, PlaceType, CoursePlan, CourseStop } from "./types";
+import { buildCourseBadges, buildFunctionalCourseTitle, buildSituationCourseTitle } from "./coursePresentation";
 
 const DEFAULT_TEMPLATES: PlaceType[][] = [["FOOD", "CAFE"]];
+
+const TAB_CATEGORY_BOOST = 25;
+
+/** 기본 데이트 코스에서 제외(미용실 전용 플로우). */
+function isExcludedFromDefaultCourse(p: HomeCard): boolean {
+  return String(p.category ?? "").toLowerCase() === "salon";
+}
+
+function tabCategoryBoost(p: HomeCard, tab: HomeTabKey): number {
+  if (tab === "all" || tab === "salon") return 0;
+  const c = String(p.category ?? "").toLowerCase();
+  if (tab === "restaurant" && c === "restaurant") return TAB_CATEGORY_BOOST;
+  if (tab === "cafe" && c === "cafe") return TAB_CATEGORY_BOOST;
+  if (tab === "activity" && c === "activity") return TAB_CATEGORY_BOOST;
+  return 0;
+}
+
+function mainCategory(p: HomeCard): string {
+  const c = String(p.category ?? "").toLowerCase();
+  return c || "_none";
+}
+
+function fallbackOrderForStep(step: PlaceType): PlaceType[] {
+  switch (step) {
+    case "FOOD":
+      return ["CAFE", "ACTIVITY", "CULTURE", "WALK"];
+    case "CAFE":
+      return ["FOOD", "ACTIVITY", "CULTURE", "WALK"];
+    case "ACTIVITY":
+      return ["CULTURE", "FOOD", "CAFE", "WALK"];
+    case "CULTURE":
+      return ["ACTIVITY", "FOOD", "CAFE", "WALK"];
+    case "WALK":
+      return ["ACTIVITY", "CULTURE", "FOOD", "CAFE"];
+    default:
+      return ["FOOD", "CAFE", "ACTIVITY", "CULTURE", "WALK"];
+  }
+}
 
 export function selectCourseTemplates(obj: ScenarioObject, config: ScenarioConfig): PlaceType[][] {
   const base = (config.preferredCourseTemplates ?? DEFAULT_TEMPLATES) as PlaceType[][];
@@ -29,9 +68,10 @@ export type CandidatesByType = Record<PlaceType, HomeCard[]>;
 export function collectCandidatesByType(
   places: HomeCard[],
   config: ScenarioConfig,
-  opts: { maxPerType?: number } = {}
+  opts: { maxPerType?: number; homeTab?: HomeTabKey } = {}
 ): CandidatesByType {
   const maxPer = opts.maxPerType ?? 24;
+  const homeTab = opts.homeTab ?? "all";
   const bucket: CandidatesByType = {
     FOOD: [],
     CAFE: [],
@@ -41,6 +81,7 @@ export function collectCandidatesByType(
   };
 
   const usable = places.filter((p) => {
+    if (isExcludedFromDefaultCourse(p)) return false;
     const st = businessStateFromCard(p as any);
     return st !== "CLOSED";
   });
@@ -51,7 +92,12 @@ export function collectCandidatesByType(
   }
 
   const rank = (arr: HomeCard[]) =>
-    [...arr].sort((a, b) => qualityScoreFromCard(b as any) - qualityScoreFromCard(a as any));
+    [...arr].sort(
+      (a, b) =>
+        qualityScoreFromCard(b as any) +
+        tabCategoryBoost(b, homeTab) -
+        (qualityScoreFromCard(a as any) + tabCategoryBoost(a, homeTab))
+    );
 
   (Object.keys(bucket) as PlaceType[]).forEach((k) => {
     bucket[k] = rank(bucket[k]);
@@ -65,32 +111,48 @@ function brandPrefix(name: string): string | null {
   return first.length >= 2 ? first.toLowerCase() : null;
 }
 
+function pickCardForStep(
+  pool: HomeCard[],
+  out: HomeCard[],
+  usedBrands: Set<string>,
+  usedCategories: Set<string>
+): HomeCard | undefined {
+  const baseOk = (p: HomeCard) => {
+    if (out.some((o) => o.id === p.id)) return false;
+    const b = brandPrefix(p.name ?? "");
+    if (b && usedBrands.has(b)) return false;
+    return true;
+  };
+  return (
+    pool.find((p) => baseOk(p) && !usedCategories.has(mainCategory(p))) ?? pool.find((p) => baseOk(p))
+  );
+}
+
 export function buildCourseCombination(
   template: PlaceType[],
   byType: CandidatesByType,
   usedBrands: Set<string>
 ): HomeCard[] {
   const out: HomeCard[] = [];
+  const usedCategories = new Set<string>();
   for (const step of template) {
-    let pool = byType[step] ?? [];
-    if (pool.length === 0) {
-      const fallbacks: PlaceType[] = ["FOOD", "CAFE", "ACTIVITY", "CULTURE", "WALK"];
-      for (const f of fallbacks) {
-        if (f === step) continue;
-        if ((byType[f] ?? []).length > 0) {
-          pool = byType[f];
-          break;
-        }
-      }
+    const pools: HomeCard[][] = [];
+    const primary = byType[step] ?? [];
+    if (primary.length) pools.push(primary);
+    for (const f of fallbackOrderForStep(step)) {
+      if (f === step) continue;
+      const pl = byType[f] ?? [];
+      if (pl.length) pools.push(pl);
     }
-    const chosen = pool.find((p) => {
-      const b = brandPrefix(p.name ?? "");
-      if (b && usedBrands.has(b)) return false;
-      return !out.some((o) => o.id === p.id);
-    });
+    let chosen: HomeCard | undefined;
+    for (const pool of pools) {
+      chosen = pickCardForStep(pool, out, usedBrands, usedCategories);
+      if (chosen) break;
+    }
     if (chosen) {
       const b = brandPrefix(chosen.name ?? "");
       if (b) usedBrands.add(b);
+      usedCategories.add(mainCategory(chosen));
       out.push(chosen);
     }
   }
@@ -129,17 +191,16 @@ export function buildTimeline(
       dwellMinutes: dwell,
       travelMinutesToNext: travelNext,
       businessState: businessStateFromCard(p as any),
+      lat: p.lat ?? null,
+      lng: p.lng ?? null,
+      mood: p.mood,
+      tags: p.tags,
     });
     cursor += dwell + (travelNext ?? 0);
   }
 
   const totalMinutes = out.reduce((s, x) => s + x.dwellMinutes + (x.travelMinutesToNext ?? 0), 0);
   return { stops: out, totalMinutes };
-}
-
-export function generateCourseTitle(obj: ScenarioObject, config: ScenarioConfig, summaryLine: string): string {
-  const head = obj.intentType === "course_generation" ? `${config.label} 코스` : config.label;
-  return `${head} · ${summaryLine}`;
 }
 
 function summaryFromStops(stops: CourseStop[]): string {
@@ -157,10 +218,12 @@ export function generateCourses(
   places: HomeCard[],
   obj: ScenarioObject,
   config: ScenarioConfig,
-  maxCourses = 2
+  maxCourses = 2,
+  opts: { homeTab?: HomeTabKey } = {}
 ): CoursePlan[] {
+  const homeTab = opts.homeTab ?? "all";
   const templates = selectCourseTemplates(obj, config);
-  const byType = collectCandidatesByType(places, config);
+  const byType = collectCandidatesByType(places, config, { homeTab });
   const usedGlobally = new Set<string>();
   const plans: CoursePlan[] = [];
 
@@ -175,9 +238,18 @@ export function generateCourses(
     });
     const { stops, totalMinutes } = buildTimeline(combo, tpl, config);
     const summaryLine = summaryFromStops(stops);
+    const courseRank = plans.length;
+    const id = `course-${courseRank}-${tpl.join("-")}`;
+    const situationTitle = buildSituationCourseTitle(obj, config, id, tpl, stops, courseRank);
+    const functionalTitle = buildFunctionalCourseTitle(obj, config, summaryLine);
+    const badges = buildCourseBadges(obj, tpl, stops, courseRank);
     plans.push({
-      id: `course-${plans.length}-${tpl.join("-")}`,
-      title: generateCourseTitle(obj, config, summaryLine),
+      id,
+      title: situationTitle,
+      situationTitle,
+      functionalTitle,
+      badges,
+      courseRank,
       scenario: obj.scenario,
       totalMinutes,
       template: tpl,
@@ -187,17 +259,27 @@ export function generateCourses(
   }
 
   if (plans.length === 0 && places.length > 0) {
-    const p0 = places.find((p) => businessStateFromCard(p as any) !== "CLOSED") ?? places[0]!;
+    const allowed = places.filter((p) => !isExcludedFromDefaultCourse(p));
+    if (allowed.length === 0) return plans;
+    const p0 = allowed.find((p) => businessStateFromCard(p as any) !== "CLOSED") ?? allowed[0]!;
     const tpl: PlaceType[] = [mapPlaceToPlaceType(p0)];
     const { stops, totalMinutes } = buildTimeline([p0], tpl, config);
+    const summaryLine = summaryFromStops(stops);
+    const courseRank = plans.length;
+    const fid = "course-fallback-0";
+    const sit = buildSituationCourseTitle(obj, config, fid, tpl, stops, courseRank);
     plans.push({
-      id: "course-fallback-0",
-      title: generateCourseTitle(obj, config, summaryFromStops(stops)),
+      id: fid,
+      title: sit,
+      situationTitle: sit,
+      functionalTitle: buildFunctionalCourseTitle(obj, config, summaryLine),
+      badges: buildCourseBadges(obj, tpl, stops, courseRank),
+      courseRank,
       scenario: obj.scenario,
       totalMinutes,
       template: tpl,
       stops,
-      summaryLine: summaryFromStops(stops),
+      summaryLine,
     });
   }
 

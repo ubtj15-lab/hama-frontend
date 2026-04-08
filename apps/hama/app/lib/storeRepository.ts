@@ -4,7 +4,7 @@
 import { supabase } from "@hama/shared";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import { applyDefaultImage } from "@/lib/defaultCardImage";
-import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
+import { filterRowsByServiceRegion } from "@/lib/serviceRegion";
 import {
   RECOMMEND_POOL_PER_CATEGORY_MIXED,
   RECOMMEND_POOL_SINGLE_TAB,
@@ -45,6 +45,10 @@ export type StoreRow = {
 
   mood: string[] | null;
   tags: string[] | null;
+
+  description?: string | null;
+  menu_keywords?: string[] | null;
+  food_sub_category?: string | null;
 
   with_kids: boolean | null;
   for_work: boolean | null;
@@ -125,6 +129,16 @@ export function toHomeCard(row: StoreRow): HomeCard {
 
     tags: row.tags ?? [],
 
+    ...(Array.isArray((row as StoreRow).menu_keywords) && (row as StoreRow).menu_keywords!.length
+      ? { menu_keywords: (row as StoreRow).menu_keywords }
+      : {}),
+    ...((row as StoreRow).description
+      ? { description: (row as StoreRow).description }
+      : {}),
+    ...((row as StoreRow).food_sub_category
+      ? { food_sub_category: (row as StoreRow).food_sub_category }
+      : {}),
+
     with_kids: row.with_kids ?? null,
     for_work: row.for_work ?? null,
     reservation_required: row.reservation_required ?? null,
@@ -165,6 +179,9 @@ export async function fetchHomeCardsByTab(
       naver_place_id,
       mood,
       tags,
+      description,
+      menu_keywords,
+      food_sub_category,
       with_kids,
       for_work,
       reservation_required,
@@ -186,7 +203,7 @@ export async function fetchHomeCardsByTab(
     return [];
   }
 
-  const rows = ((data ?? []) as StoreRow[]).filter(storeRowMatchesServiceRegion);
+  const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
   return rows.map(toHomeCard);
 }
 
@@ -207,6 +224,24 @@ export async function fetchHomeRecommendCandidates(tab: HomeTabKey): Promise<Hom
     return Array.from(byId.values());
   }
   return fetchHomeCardsByTab(tab, { count: RECOMMEND_POOL_SINGLE_TAB });
+}
+
+/**
+ * 코스 생성 전용: 탭과 무관하게 역할별(식사/액티비티/카페) 후보를 확보.
+ * 미용실(salon)은 기본 코스에서 제외(뷰티는 별도 플로우로 두기 위함).
+ */
+export async function fetchHomeCourseCandidatePool(): Promise<HomeCard[]> {
+  const per = RECOMMEND_POOL_PER_CATEGORY_MIXED;
+  const [restaurants, cafes, activities] = await Promise.all([
+    fetchHomeCardsByTab("restaurant", { count: per }),
+    fetchHomeCardsByTab("cafe", { count: per }),
+    fetchHomeCardsByTab("activity", { count: per }),
+  ]);
+  const byId = new Map<string, HomeCard>();
+  for (const c of [...restaurants, ...cafes, ...activities]) {
+    if (!byId.has(c.id)) byId.set(c.id, c);
+  }
+  return Array.from(byId.values());
 }
 
 /** ---------- Fetch: Nearby (Bounding box) ---------- */
@@ -239,6 +274,9 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
       naver_place_id,
       mood,
       tags,
+      description,
+      menu_keywords,
+      food_sub_category,
       with_kids,
       for_work,
       reservation_required,
@@ -264,7 +302,7 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
     return [];
   }
 
-  const rows = ((data ?? []) as StoreRow[]).filter(storeRowMatchesServiceRegion);
+  const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
   return rows.map(toHomeCard);
 }
 function homeTabCount(tab: HomeTabKey): number {

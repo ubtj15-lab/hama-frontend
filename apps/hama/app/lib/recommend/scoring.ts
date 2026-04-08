@@ -1,6 +1,7 @@
 import type { HomeCard } from "@/lib/storeTypes";
 import type { IntentionType } from "@/lib/intention";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
+import { storeCategoryMatchesIntentCategory } from "@/lib/scenarioEngine/intentClassification";
 import { resolveScenarioConfig } from "@/lib/scenarioEngine/resolveScenarioConfig";
 import { configTagBoostRaw, placeTypePreferenceRaw } from "@/lib/scenarioEngine/scoringBoost";
 import { scenarioObjectToIntention, scenarioTypeToRankKey } from "@/lib/scenarioEngine/scenarioRankBridge";
@@ -9,6 +10,8 @@ import {
   WEIGHT_BONUS,
   WEIGHT_BUSINESS,
   WEIGHT_DISTANCE,
+  WEIGHT_FOOD_INTENT,
+  WEIGHT_COMPOSITE,
   WEIGHT_KEYWORD,
   WEIGHT_QUALITY,
   WEIGHT_SCENARIO,
@@ -17,6 +20,16 @@ import {
   DIVERSITY_PENALTY_SAME_MAIN_CATEGORY,
   DIVERSITY_PENALTY_SAME_SUB_CATEGORY,
 } from "./recommendConstants";
+import {
+  cardMatchesStrictFoodIntent,
+  filterFoodCandidatesByMenuIntent,
+  foodMenuMatchNormalized,
+  inferPlaceFoodSub,
+} from "./foodIntentRanking";
+import { compositeIntentRawScore, violatesHardConstraints } from "./compositeRanking";
+import { buildCompositeTagsForCard } from "@/lib/scenarioEngine/compositeIntent";
+import { buildFoodTagsForCard } from "@/lib/scenarioEngine/foodIntent";
+import { dedupeTags } from "./recommendationBadge";
 import {
   SCENARIO_RAW_CAP,
   SCENARIO_TAG_RULES,
@@ -44,6 +57,8 @@ export type RecommendScoreBreakdown = {
   qualityScore: number;
   keywordScore: number;
   bonusScore: number;
+  foodIntentScore: number;
+  compositeScore: number;
   scenarioRaw: number;
   finalScore: number;
   businessState: BusinessState;
@@ -62,9 +77,9 @@ export type BuildRecommendationsContext = {
   userLat?: number | null;
   userLng?: number | null;
   excludeStoreIds?: string[];
-  /** Home search box text ? low-weight keyword score */
+  /** Home search box text; low-weight keyword score */
   searchQuery?: string | null;
-  /** ???? ?? ? ??? ????????? ? ?? ?? */
+  /** Parsed scenario from natural language (ranking, badges) */
   scenarioObject?: ScenarioObject | null;
 };
 
@@ -78,10 +93,18 @@ function normBlob(card: HomeCard): string {
   if (Array.isArray(c?.mood)) parts.push(c.mood.join(" "));
   if (c?.moodText) parts.push(String(c.moodText));
   if (typeof c?.description === "string") parts.push(c.description);
+  if (Array.isArray(c?.menu_keywords)) parts.push(c.menu_keywords.join(" "));
   return parts
     .join(" ")
     .toLowerCase()
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normCompactBlobStr(s: string): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
     .trim();
 }
 
@@ -219,18 +242,75 @@ export function buildTopRecommendations(
   ctx: BuildRecommendationsContext
 ): ScoredRecommendItem[] {
   const exclude = new Set((ctx.excludeStoreIds ?? []).filter(Boolean));
-  const scored: ScoredRecommendItem[] = [];
 
-  for (const card of candidates) {
-    if (exclude.has(card.id)) continue;
+  const so = ctx.scenarioObject;
+  const strictFood =
+    so?.intentType === "search_strict" &&
+    so.intentCategory === "FOOD" &&
+    so.intentStrict !== false;
 
-    const businessState = businessStateFromCard(card);
-    if (businessState === "CLOSED") continue;
+  let pool = candidates;
+  if (strictFood && so) {
+    pool = filterFoodCandidatesByMenuIntent(candidates, so);
+  }
 
-    const blob = normBlob(card);
-    const km = distanceKmToCard(card, ctx);
+  const runPass = (relaxed: boolean): ScoredRecommendItem[] => {
+    const out: ScoredRecommendItem[] = [];
+    for (const card of pool) {
+      if (exclude.has(card.id)) continue;
 
-    const distS = distanceScoreFromKm(km);
+      const strict = ctx.scenarioObject;
+      if (
+        strict?.intentType === "search_strict" &&
+        strict.intentCategory &&
+        strict.intentStrict !== false &&
+        !storeCategoryMatchesIntentCategory(card, strict.intentCategory)
+      ) {
+        continue;
+      }
+
+      if (strictFood && so && !cardMatchesStrictFoodIntent(card, so)) {
+        continue;
+      }
+
+      if (
+        !relaxed &&
+        strict?.intentType === "search_strict" &&
+        strict.hardConstraints?.length &&
+        violatesHardConstraints(card, strict)
+      ) {
+        continue;
+      }
+
+      const businessState = businessStateFromCard(card);
+      if (!relaxed && businessState === "CLOSED") continue;
+
+      const blob = normBlob(card);
+      const km = distanceKmToCard(card, ctx);
+
+      if (!relaxed && strict?.conversationExcludeMenuTerms?.length) {
+        const blobC = normCompactBlobStr(blob);
+        let skipMenu = false;
+        for (const term of strict.conversationExcludeMenuTerms) {
+          const t = normCompactBlobStr(term);
+          if (t.length >= 2 && blobC.includes(t)) {
+            skipMenu = true;
+            break;
+          }
+        }
+        if (skipMenu) continue;
+      }
+
+      if (!relaxed && strict?.conversationRejectedFoodSubs?.length) {
+        const ps = inferPlaceFoodSub(card);
+        if (ps && strict.conversationRejectedFoodSubs.includes(ps)) continue;
+      }
+
+    let distS = distanceScoreFromKm(km);
+    if (strict?.distanceTolerance === "near_only" && km != null && Number.isFinite(km)) {
+      if (km > 1.2) distS *= Math.max(0.2, 1 - (km - 1.2) * 0.42);
+      if (km > 3.5) distS *= 0.55;
+    }
     const scenarioCfg = ctx.scenarioObject ? resolveScenarioConfig(ctx.scenarioObject) : null;
     const rankKeyFromObj = ctx.scenarioObject ? scenarioTypeToRankKey(ctx.scenarioObject.scenario) : null;
 
@@ -266,13 +346,36 @@ export function buildTopRecommendations(
     const kwS = keywordScoreFromQuery(ctx.searchQuery, card, blob);
     const bonS = bonusScoreFromCard(card, blob);
 
+    const useFoodRanking =
+      strictFood &&
+      so &&
+      ((so.menuIntent?.length ?? 0) > 0 || so.foodSubCategory != null);
+    const foodS = useFoodRanking
+      ? foodMenuMatchNormalized(card, so.menuIntent, so.foodSubCategory)
+      : 0;
+
+    const useComposite =
+      !!so &&
+      ((so.foodPreference?.length ?? 0) > 0 ||
+        (so.vibePreference?.length ?? 0) > 0 ||
+        (so.softConstraints?.length ?? 0) > 0 ||
+        so.timeOfDay != null ||
+        (so.hardConstraints?.length ?? 0) > 0 ||
+        so.distanceTolerance != null ||
+        so.parkingPreferred === true ||
+        (so.scenario !== "generic" && so.scenario !== "friends"));
+
+    const compS = useComposite ? compositeIntentRawScore(card, so) : 0;
+
     const finalScore =
       distS * WEIGHT_DISTANCE +
       scenarioS * WEIGHT_SCENARIO +
       bizS * WEIGHT_BUSINESS +
       qualS * WEIGHT_QUALITY +
       kwS * WEIGHT_KEYWORD +
-      bonS * WEIGHT_BONUS;
+      bonS * WEIGHT_BONUS +
+      foodS * (useFoodRanking ? WEIGHT_FOOD_INTENT : 0) +
+      compS * (useComposite ? WEIGHT_COMPOSITE : 0);
 
     const breakdown: RecommendScoreBreakdown = {
       distanceScore: distS,
@@ -281,6 +384,8 @@ export function buildTopRecommendations(
       qualityScore: qualS,
       keywordScore: kwS,
       bonusScore: bonS,
+      foodIntentScore: foodS,
+      compositeScore: compS,
       scenarioRaw: rawScenario,
       finalScore,
       businessState,
@@ -297,6 +402,17 @@ export function buildTopRecommendations(
       category: card.category,
     });
 
+    const foodExtras =
+      strictFood &&
+      ctx.scenarioObject &&
+      cardMatchesStrictFoodIntent(card, ctx.scenarioObject)
+        ? buildFoodTagsForCard(ctx.scenarioObject)
+        : [];
+    const compositeExtras = ctx.scenarioObject
+      ? buildCompositeTagsForCard(ctx.scenarioObject)
+      : [];
+    const badgeExtras = dedupeTags([...foodExtras, ...compositeExtras]).slice(0, 5);
+
     const recommendBadge =
       ctx.scenarioObject && scenarioCfg
         ? buildRecommendationBadge(card, {
@@ -305,11 +421,13 @@ export function buildTopRecommendations(
             distanceKm: km,
             explicitScenario: rankKeyFromObj!,
             primaryLabelOverride: scenarioCfg.primaryBadgeLabel,
+            ...(badgeExtras.length ? { extraShortTags: badgeExtras } : {}),
           })
         : buildRecommendationBadge(card, {
             blob,
             businessState,
             distanceKm: km,
+            ...(badgeExtras.length ? { extraShortTags: badgeExtras } : {}),
             ...(userScenarioKey !== "neutral"
               ? { explicitScenario: userScenarioKey }
               : { neutralInference: inferScenarioForBadgeWhenNeutral(card, blob) }),
@@ -322,12 +440,22 @@ export function buildTopRecommendations(
       recommendBadge,
     };
 
-    scored.push({
-      card: withDist,
-      reasonText,
-      reasonVoice: voiceForContent,
-      breakdown,
-    });
+      out.push({
+        card: withDist,
+        reasonText,
+        reasonVoice: voiceForContent,
+        breakdown,
+      });
+    }
+    return out;
+  };
+
+  let scored = runPass(false);
+  if (scored.length === 0 && pool.length > 0) {
+    if (typeof process !== "undefined" && process.env.NODE_ENV === "development") {
+      console.warn("[buildTopRecommendations] strict pass produced 0 cards; using relaxed pass");
+    }
+    scored = runPass(true);
   }
 
   scored.sort((a, b) => b.breakdown.finalScore - a.breakdown.finalScore);
@@ -347,4 +475,12 @@ export function buildTopRecommendations(
   });
 
   return selectWithDiversity(scored, RECOMMEND_DECK_SIZE);
+}
+
+/** strict 시나리오 랭킹 — 내부적으로 buildTopRecommendations와 동일 */
+export function rankPlacesForScenario(
+  candidates: HomeCard[],
+  ctx: BuildRecommendationsContext
+): ScoredRecommendItem[] {
+  return buildTopRecommendations(candidates, ctx);
 }

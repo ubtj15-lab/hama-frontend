@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@hama/shared";
-import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
+import { filterRowsByServiceRegion } from "@/lib/serviceRegion";
+import { PLACE_NAME_SELECT, PLACES_TABLE } from "@/lib/places/placeNameSearch";
 
 export type Category = "cafe" | "restaurant" | "salon" | "activity";
 
@@ -123,7 +124,6 @@ export function inferCategoryFromQuery(q: string): Category | null {
     t.includes("점심식사") ||
     t.includes("회식") ||
     t.includes("점심") ||
-    t.includes("두부") ||
     t.includes("순두부") ||
     t.includes("청국장") ||
     t.includes("쌈밥") ||
@@ -173,22 +173,17 @@ export function useSearchStores() {
       setLoading(true);
       setErrorMsg(null);
 
-      const { data, error } = await supabase
-        .from("stores")
-        .select(
-          "id,name,category,area,address,lat,lng,phone,kakao_place_url,source,mood,with_kids,for_work,price_level,tags,reservation_required"
-        )
-        .limit(5000);
+      const { data, error } = await supabase.from(PLACES_TABLE).select(PLACE_NAME_SELECT).limit(5000);
 
       if (!alive) return;
 
-      // ✅ 진단 로그(이게 핵심)
+      console.log("[useSearchStores] table:", PLACES_TABLE);
       console.log("[useSearchStores] error:", error);
       console.log("[useSearchStores] raw data length:", (data ?? []).length);
       if (data?.[0]) console.log("[useSearchStores] sample row:", data[0]);
 
       if (error) {
-        console.error("Supabase stores fetch error:", error);
+        console.error("Supabase places fetch error:", error);
         setStores([]);
         setErrorMsg(error.message ?? "Supabase error");
         setLoading(false);
@@ -197,11 +192,10 @@ export function useSearchStores() {
 
       const cleaned: Store[] = (data ?? [])
         .map((s: any) => {
-          const catNorm = normalizeCategory(s.category);
-          if (!catNorm) return null;
-
           const name = String(s.name ?? "").trim();
           if (!name) return null;
+
+          const catNorm = normalizeCategory(s.category) ?? ("restaurant" as Category);
 
           return {
             id: String(s.id),
@@ -232,7 +226,7 @@ export function useSearchStores() {
         })
         .filter(Boolean) as Store[];
 
-      const regionScoped = cleaned.filter(storeRowMatchesServiceRegion);
+      const regionScoped = filterRowsByServiceRegion(cleaned);
 
       console.log("[useSearchStores] cleaned length:", regionScoped.length);
 

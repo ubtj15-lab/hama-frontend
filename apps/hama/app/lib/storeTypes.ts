@@ -25,6 +25,10 @@ export type StoreRow = {
   mood: string[] | null;
   tags: string[] | null;
 
+  description?: string | null;
+  menu_keywords?: string[] | null;
+  food_sub_category?: string | null;
+
   with_kids: boolean | null;
   for_work: boolean | null;
   reservation_required: boolean | null;
@@ -69,6 +73,12 @@ export type HomeCard = {
 
   mood?: string[];
   tags?: string[];
+  /** Supabase stores.menu_keywords — 음식 메뉴 키워드(선택 컬럼) */
+  menu_keywords?: string[];
+  /** 소개 문구(선택 컬럼) */
+  description?: string | null;
+  /** CHINESE | JAPANESE | … — stores.food_sub_category(선택) */
+  food_sub_category?: string | null;
 
   // UI에서 “조용한 분위기” 같은 텍스트로 쓰는 경우가 있음
   moodText?: string;

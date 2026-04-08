@@ -14,6 +14,8 @@ export const SCENARIO_ALIAS_GROUPS: { scenario: ScenarioType; phrases: string[] 
   {
     scenario: "family_kids",
     phrases: [
+      "아이와 함께",
+      "아이랑 밥 먹기 좋은 곳",
       "아이랑 갈만한 곳",
       "아이랑 갈만한",
       "애 데리고 밥",
@@ -21,13 +23,22 @@ export const SCENARIO_ALIAS_GROUPS: { scenario: ScenarioType; phrases: string[] 
       "유아 동반",
       "초등학생이랑",
       "아이랑 데이트",
+      "애 데리고",
       "키즈",
       "아이랑",
     ],
   },
   {
     scenario: "parents",
-    phrases: ["부모님 모시고", "부모님과", "어른들이랑", "부모님이랑", "조용한 곳", "조용한곳"],
+    phrases: [
+      "부모님 모시고",
+      "부모님과",
+      "어른들이랑",
+      "부모님이랑",
+      "조용한 식사",
+      "조용한곳",
+      "조용한 곳",
+    ],
   },
   {
     scenario: "family",
@@ -55,12 +66,7 @@ export const SCENARIO_ALIAS_GROUPS: { scenario: ScenarioType; phrases: string[] 
   { scenario: "solo", phrases: ["혼자 가기 좋은", "혼자 시간", "혼밥", "혼자", "1인"] },
 ];
 
-export const COURSE_INTENT_MARKERS = [
-  "코스",
-  "일정",
-  "루트",
-  "플랜",
-  "짜줘",
-  "추천 코스",
-  "코스 짜",
-];
+/**
+ * 코스 의도 트리거는 intentClassification.ts 의 정규식 목록으로 판별합니다.
+ * (일반 '추천·맛집'만으로 course_generation 으로 가는 오탐 방지)
+ */

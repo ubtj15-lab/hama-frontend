@@ -1,7 +1,7 @@
 // app/api/home-recommend/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
+import { filterRowsByServiceRegion } from "@/lib/serviceRegion";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -93,7 +93,7 @@ export async function GET(req: Request) {
       }
 
       // ✅ 서버에서 랜덤 셔플 (DB random() 없이도 새로고침마다 바뀜)
-      const arr = (Array.isArray(data) ? [...data] : []).filter(storeRowMatchesServiceRegion);
+      const arr = filterRowsByServiceRegion(Array.isArray(data) ? [...data] : []);
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
@@ -132,7 +132,7 @@ export async function GET(req: Request) {
     }
 
     const pickedByCat = results.flatMap((r, idx) => {
-      const arr = (Array.isArray(r.data) ? [...r.data] : []).filter(storeRowMatchesServiceRegion);
+      const arr = filterRowsByServiceRegion(Array.isArray(r.data) ? [...r.data] : []);
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];

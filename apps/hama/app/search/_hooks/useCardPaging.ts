@@ -178,8 +178,11 @@ export function useCardPaging(args: Args): Result {
     // 1) normalize + distance
     const normalized: NormalizedCard[] = (stores ?? [])
       .map((s) => {
-        const categoryNorm = normalizeCategory((s as any).category);
-        if (!categoryNorm) return null;
+        /** places 등 category 컬럼이 비어도 useSearchStores에서 categoryNorm을 넣음 — 여기서 raw만 보면 전부 탈락함 */
+        const categoryNorm: Category =
+          ((s as CardInfo).categoryNorm as Category | undefined) ??
+          normalizeCategory((s as any).category) ??
+          "restaurant";
 
         const lat = toNumberOrNull((s as any).lat);
         const lng = toNumberOrNull((s as any).lng);

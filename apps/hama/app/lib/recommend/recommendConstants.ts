@@ -11,12 +11,16 @@ export const RECENT_EXCLUDE_LIMIT = 8;
 /**
  * 최종 점수 (각 항목은 0~100)
  */
-export const WEIGHT_DISTANCE = 0.3;
-export const WEIGHT_SCENARIO = 0.3;
-export const WEIGHT_BUSINESS = 0.2;
-export const WEIGHT_QUALITY = 0.1;
-export const WEIGHT_KEYWORD = 0.07;
-export const WEIGHT_BONUS = 0.03;
+export const WEIGHT_DISTANCE = 0.26;
+export const WEIGHT_SCENARIO = 0.18;
+export const WEIGHT_BUSINESS = 0.15;
+export const WEIGHT_QUALITY = 0.09;
+export const WEIGHT_KEYWORD = 0.05;
+export const WEIGHT_BONUS = 0.02;
+/** search_strict + FOOD + (menuIntent | foodSubCategory) 일 때만 가산 */
+export const WEIGHT_FOOD_INTENT = 0.17;
+/** 복합 의도(취향·시나리오 fit·hard/soft·시간대) */
+export const WEIGHT_COMPOSITE = 0.08;
 
 /** 거리 알 수 없을 때 거리 점수 (0~100) */
 export const DISTANCE_SCORE_WHEN_UNKNOWN = 45;
