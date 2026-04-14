@@ -19,7 +19,10 @@ import { HomeHero } from "./_components/home/HomeHero";
 import { SearchInput } from "./_components/home/SearchInput";
 import { QuickScenarioGrid } from "./_components/home/QuickScenarioGrid";
 import { HomeTrustPickSection } from "./_components/home/HomeTrustPickSection";
+import { HomeRecentStrip } from "./_components/home/HomeRecentStrip";
 import { useRecent } from "./_hooks/useRecent";
+import { useSaved } from "./_hooks/useSaved";
+import { HamaEvents } from "@/lib/analytics/events";
 import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { recordRecentIntent } from "@/lib/recentIntents";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
@@ -100,6 +103,7 @@ function HomePageContent() {
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const { recentCards, recordView } = useRecent();
+  const { savedCards } = useSaved();
 
   const openId = searchParams.get("open");
 
@@ -146,7 +150,7 @@ function HomePageContent() {
     recordRecentIntent(t);
     const parsed = parseScenarioIntent(t);
     logEvent(
-      "search_submit",
+      HamaEvents.home_scenario_submit,
       mergeLogPayload(analyticsFromScenario(parsed), { query: t, source, page: "home" })
     );
     if (isNearbyIntent(t)) {
@@ -179,11 +183,21 @@ function HomePageContent() {
     <main
       style={{
         minHeight: "100vh",
-        paddingBottom: 48,
-        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, #EEF2FF 100%)`,
+        /** 하단 FAB·iOS 홈 인디케이터 위로 마지막 카드·버튼이 잘리지 않게 */
+        paddingBottom: "calc(120px + env(safe-area-inset-bottom, 0px))",
+        overflowX: "visible",
+        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, #f1f5f9 100%)`,
       }}
     >
-      <div style={{ maxWidth: 430, margin: "0 auto", padding: `12px ${space.pageX}px 0` }}>
+      <div
+        style={{
+          maxWidth: 430,
+          margin: "0 auto",
+          padding: `12px ${space.pageX}px 0`,
+          paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+          overflowX: "visible",
+        }}
+      >
         <HomeTopBar
           isLoggedIn={isLoggedIn}
           nickname={user.nickname}
@@ -205,7 +219,12 @@ function HomePageContent() {
             logEvent("voice_mic_click", { page: "home" });
           }}
         />
-        <QuickScenarioGrid onPick={(q) => goResults(q, "quick_grid")} />
+        <QuickScenarioGrid
+          onPick={(q) => {
+            logEvent(HamaEvents.home_quick_scenario, { query: q, page: "home" });
+            goResults(q, "quick_grid");
+          }}
+        />
 
         <HomeTrustPickSection
           onPlaceOpen={(card) => {
@@ -214,6 +233,16 @@ function HomePageContent() {
             router.push(`/place/${encodeURIComponent(card.id)}`);
           }}
           onScenarioGo={(q) => goResults(q, "home_trust_pick")}
+        />
+
+        <HomeRecentStrip
+          recentCards={recentCards}
+          savedCards={savedCards}
+          onOpenPlace={(card) => {
+            stashPlaceForSession(card);
+            recordView(card.id);
+            router.push(`/place/${encodeURIComponent(card.id)}`);
+          }}
         />
 
         <FeedbackFab />

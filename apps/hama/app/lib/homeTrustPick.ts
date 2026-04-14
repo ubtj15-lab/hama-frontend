@@ -88,15 +88,32 @@ export function shortTagsForTrustCard(card: HomeCard): string[] {
 }
 
 export async function fetchTrustPickPlaceCards(count = 12): Promise<HomeCard[]> {
+  const mapRows = (items: StoreRow[]) => items.map((r) => toHomeCard(r));
+
   try {
     const res = await fetch(`/api/home-recommend?tab=all&count=${encodeURIComponent(String(count))}`, {
       cache: "no-store",
     });
-    if (!res.ok) return [];
-    const json = (await res.json()) as { items?: StoreRow[] };
-    const rows = json.items ?? [];
-    return rows.map((r) => toHomeCard(r as StoreRow));
+    if (res.ok) {
+      const json = (await res.json()) as { items?: StoreRow[] };
+      const items = json.items ?? [];
+      if (items.length > 0) return mapRows(items as StoreRow[]);
+    }
   } catch {
-    return [];
+    // 다음 폴백으로
   }
+
+  /** home-recommend 가 비었거나 실패 시(환경·필터 등) 동일 DB의 단순 목록 시도 */
+  try {
+    const res = await fetch(`/api/stores/home`, { cache: "no-store" });
+    if (res.ok) {
+      const json = (await res.json()) as { items?: StoreRow[] };
+      const items = json.items ?? [];
+      if (items.length > 0) return mapRows(items as StoreRow[]);
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
 }

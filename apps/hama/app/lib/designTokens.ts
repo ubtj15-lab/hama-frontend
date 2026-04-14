@@ -1,38 +1,78 @@
-/** 결정형 UX — 색·간격·타이포 토큰 (인라인 스타일용) */
+/** 결정형 UX — 색·간격·타이포·그림자 토큰 (인라인 스타일용) */
 
 export const colors = {
+  /** 목업: 옅은 쿨그레이 페이지 배경 */
   bgDefault: "#F8FAFC",
+  bgSurface: "#ffffff",
   bgCard: "#ffffff",
   bgMuted: "#f1f5f9",
+  bgInput: "#f8fafc",
   textPrimary: "#0f172a",
   textSecondary: "#64748b",
+  textMuted: "#94a3b8",
   borderSubtle: "#e2e8f0",
-  accentPrimary: "#2563eb",
-  accentSoft: "#dbeafe",
-  accentStrong: "#1d4ed8",
+  borderStrong: "#cbd5e1",
+  /** 브랜드 프라이머리 */
+  accentPrimary: "#3b82f6",
+  accentSoft: "#eff6ff",
+  accentStrong: "#2563eb",
+  accentOnPrimary: "#ffffff",
+  /** 추천 이유 강조(🔥 라인) */
+  reasonHot: "#ea580c",
+  /** 태그·칩 — 소프트 블루(목업 칩) */
+  tagMutedBg: "#eff6ff",
+  tagMutedText: "#1d4ed8",
   statusOpen: "#16a34a",
   statusWarning: "#ca8a04",
   statusClosed: "#94a3b8",
+  successSoft: "#dcfce7",
+  warningSoft: "#fef9c3",
+  /** 히어로 그라데이션 힌트 */
+  heroTint: "#EEF2FF",
 } as const;
 
 export const radius = {
-  largeCard: 24,
+  /** 카드 메인 — 목업 24~28px */
+  largeCard: 26,
   card: 20,
+  input: 999,
+  searchBar: 999,
   button: 14,
+  chip: 10,
   pill: 999,
+  fab: 999,
 } as const;
 
 export const space = {
   pageX: 20,
-  section: 24,
+  /** 섹션 간 세로 간격 */
+  section: 28,
+  sectionTight: 20,
   card: 12,
   chip: 8,
+  buttonGap: 10,
+  heroBottom: 20,
+  /** 카드 내부 패딩 */
+  cardPadding: 16,
+} as const;
+
+export const shadow = {
+  soft: "0 4px 18px rgba(15, 23, 42, 0.06)",
+  card: "0 8px 24px rgba(15, 23, 42, 0.07)",
+  elevated: "0 12px 32px rgba(15, 23, 42, 0.09)",
+  cta: "0 6px 20px rgba(59, 130, 246, 0.22)",
+  headerBtn: "0 4px 14px rgba(15, 23, 42, 0.08)",
 } as const;
 
 export const typo = {
-  title: { fontSize: 28, fontWeight: 800 as const },
-  sectionTitle: { fontSize: 22, fontWeight: 700 as const },
-  cardTitle: { fontSize: 18, fontWeight: 700 as const },
-  body: { fontSize: 15, fontWeight: 400 as const },
+  heroTitle: { fontSize: 30, fontWeight: 900 as const, letterSpacing: "-0.035em" as const },
+  sectionTitle: { fontSize: 18, fontWeight: 800 as const, letterSpacing: "-0.02em" as const },
+  cardTitle: { fontSize: 17, fontWeight: 800 as const },
+  cardReason: { fontSize: 14, fontWeight: 700 as const },
+  body: { fontSize: 15, fontWeight: 500 as const },
   caption: { fontSize: 13, fontWeight: 500 as const },
+  button: { fontSize: 14, fontWeight: 800 as const },
+  chip: { fontSize: 12, fontWeight: 700 as const },
+  /** 하위 호환 */
+  title: { fontSize: 30, fontWeight: 900 as const },
 } as const;

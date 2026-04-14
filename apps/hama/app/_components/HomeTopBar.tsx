@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import Link from "next/link";
 import { PARTNER_APP_URL } from "../lib/partnerUrl";
+import { colors, radius, shadow, typo } from "@/lib/designTokens";
 
 type Props = {
   isLoggedIn: boolean;
@@ -12,6 +12,20 @@ type Props = {
   onGoPoints: () => void;
   onGoMy?: () => void;
   onGoBeta: () => void;
+};
+
+const btnBase = {
+  height: 42,
+  borderRadius: radius.pill,
+  fontWeight: 800,
+  fontSize: 13,
+  cursor: "pointer" as const,
+  border: "none" as const,
+  boxShadow: shadow.headerBtn,
+  display: "inline-flex" as const,
+  alignItems: "center" as const,
+  justifyContent: "center" as const,
+  padding: "0 14px",
 };
 
 export default function HomeTopBar({
@@ -50,7 +64,8 @@ export default function HomeTopBar({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          marginBottom: 18,
+          marginBottom: 14,
+          gap: 8,
         }}
       >
         <button
@@ -59,37 +74,45 @@ export default function HomeTopBar({
           onClick={() => setMenuOpen((v) => !v)}
           aria-label="메뉴 열기"
           style={{
+            ...btnBase,
             width: 42,
-            height: 42,
-            borderRadius: 999,
-            border: "none",
-            background: "#ffffff",
-            boxShadow: "0 6px 18px rgba(15,23,42,0.12)",
-            cursor: "pointer",
+            padding: 0,
+            background: colors.bgSurface,
+            color: colors.textPrimary,
             fontSize: 18,
           }}
         >
           ☰
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontWeight: 900, letterSpacing: 1.2, fontSize: 22, color: "#2563EB" }}>HAMA</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div
+            style={{
+              fontWeight: 900,
+              letterSpacing: "0.12em",
+              fontSize: 20,
+              color: colors.accentPrimary,
+            }}
+          >
+            HAMA
+          </div>
           <a
             href={PARTNER_APP_URL}
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#1e40af",
+              ...typo.caption,
+              fontWeight: 800,
+              color: colors.accentStrong,
               textDecoration: "none",
-              padding: "6px 12px",
-              borderRadius: 999,
-              background: "#dbeafe",
-              border: "1px solid #93c5fd",
+              padding: "8px 12px",
+              borderRadius: radius.pill,
+              background: colors.accentSoft,
+              border: `1px solid ${colors.borderSubtle}`,
+              whiteSpace: "nowrap",
             }}
           >
-            매장주 대시보드
+            매장주
           </a>
         </div>
 
@@ -97,18 +120,13 @@ export default function HomeTopBar({
           type="button"
           onClick={onLoginClick}
           style={{
-            height: 42,
-            borderRadius: 999,
-            border: "none",
-            padding: "0 14px",
-            background: isLoggedIn ? "#111827" : "#FEE500",
-            color: isLoggedIn ? "#ffffff" : "#111827",
-            fontWeight: 800,
-            cursor: "pointer",
-            boxShadow: "0 6px 18px rgba(15,23,42,0.12)",
+            ...btnBase,
+            background: isLoggedIn ? colors.textPrimary : "#FEE500",
+            color: isLoggedIn ? colors.accentOnPrimary : colors.textPrimary,
+            minWidth: 96,
           }}
         >
-          {isLoggedIn ? "로그아웃" : "카카오 로그인"}
+          {isLoggedIn ? "로그아웃" : "로그인"}
         </button>
       </header>
 
@@ -128,19 +146,20 @@ export default function HomeTopBar({
               position: "absolute",
               top: menuPos.top,
               left: menuPos.left,
-              width: 200,
+              width: 220,
               maxHeight: "min(70vh, 400px)",
-              borderRadius: 16,
-              background: "#ffffff",
-              boxShadow: "0 16px 40px rgba(15,23,42,0.18)",
+              borderRadius: radius.card,
+              background: colors.bgSurface,
+              boxShadow: shadow.elevated,
               overflowY: "auto",
               overflowX: "hidden",
+              border: `1px solid ${colors.borderSubtle}`,
             }}
           >
-            <div style={{ padding: "10px 12px", borderBottom: "1px solid #E5E7EB" }}>
-              <div style={{ fontSize: 12, color: "#6B7280" }}>닉네임</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>{nickname}</div>
-              <div style={{ marginTop: 6, fontSize: 12, color: "#2563EB", fontWeight: 800 }}>
+            <div style={{ padding: "12px 14px", borderBottom: `1px solid ${colors.borderSubtle}` }}>
+              <div style={{ fontSize: 12, color: colors.textSecondary }}>닉네임</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: colors.textPrimary }}>{nickname}</div>
+              <div style={{ marginTop: 6, fontSize: 12, color: colors.accentStrong, fontWeight: 800 }}>
                 {points.toLocaleString()}P
               </div>
             </div>
@@ -153,15 +172,15 @@ export default function HomeTopBar({
               style={{
                 display: "block",
                 width: "100%",
-                padding: "12px 12px",
+                padding: "12px 14px",
                 textAlign: "left",
-                background: "#EFF6FF",
+                background: colors.accentSoft,
                 border: "none",
-                borderBottom: "1px solid #E5E7EB",
+                borderBottom: `1px solid ${colors.borderSubtle}`,
                 cursor: "pointer",
                 fontSize: 14,
                 fontWeight: 700,
-                color: "#1d4ed8",
+                color: colors.accentStrong,
                 textDecoration: "none",
               }}
             >
@@ -176,13 +195,13 @@ export default function HomeTopBar({
               }}
               style={{
                 width: "100%",
-                padding: "12px 12px",
+                padding: "12px 14px",
                 textAlign: "left",
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
                 fontSize: 13,
-                color: "#111827",
+                color: colors.textPrimary,
               }}
             >
               포인트 내역
@@ -197,13 +216,13 @@ export default function HomeTopBar({
                 }}
                 style={{
                   width: "100%",
-                  padding: "12px 12px",
+                  padding: "12px 14px",
                   textAlign: "left",
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
                   fontSize: 13,
-                  color: "#111827",
+                  color: colors.textPrimary,
                 }}
               >
                 저장·최근본
@@ -218,13 +237,13 @@ export default function HomeTopBar({
               }}
               style={{
                 width: "100%",
-                padding: "12px 12px",
+                padding: "12px 14px",
                 textAlign: "left",
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
                 fontSize: 13,
-                color: "#111827",
+                color: colors.textPrimary,
               }}
             >
               베타 안내

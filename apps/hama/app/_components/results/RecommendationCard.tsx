@@ -3,12 +3,11 @@
 import React from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
-import { resolveScenarioConfig } from "@/lib/scenarioEngine/resolveScenarioConfig";
 import { businessStateFromCard, type BusinessState } from "@/lib/recommend/scoreParts";
 import { Thumbnail } from "@/_components/common/Thumbnail";
-import { Chip } from "@/_components/common/Chip";
-import { colors, radius, space, typo } from "@/lib/designTokens";
+import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
 import { getDefaultCardImage } from "@/lib/defaultCardImage";
+import { buildRecommendationReason } from "@/lib/recommend/buildRecommendationReason";
 
 function bizLabel(s: BusinessState): string {
   switch (s) {
@@ -43,18 +42,13 @@ type Props = {
 export function RecommendationCard({
   card,
   rank,
-  scenarioObject,
+  scenarioObject: _scenarioObject,
   onCardClick,
   onNavigate,
   onCall,
 }: Props) {
-  const cfg = scenarioObject ? resolveScenarioConfig(scenarioObject) : null;
-  const primary =
-    cfg?.primaryBadgeLabel ??
-    card.recommendBadge?.primaryLabel ??
-    (card.categoryLabel || "추천");
-
-  const tags = (card.recommendBadge?.shortTags ?? []).slice(0, 3);
+  const reason = buildRecommendationReason(card);
+  const featured = rank === 0;
   const thumb =
     (card as any).imageUrl ?? (card as any).image_url ?? getDefaultCardImage(card);
   const bs = businessStateFromCard(card);
@@ -77,32 +71,57 @@ export function RecommendationCard({
       style={{
         display: "flex",
         gap: 12,
-        padding: 12,
+        padding: space.cardPadding,
         minHeight: 132,
-        borderRadius: radius.card,
+        borderRadius: radius.largeCard,
         background: colors.bgCard,
-        border: `1px solid ${colors.borderSubtle}`,
-        boxShadow: "0 6px 20px rgba(15,23,42,0.06)",
+        border: featured ? `2px solid ${colors.accentSoft}` : `1px solid ${colors.borderSubtle}`,
+        boxShadow: featured ? shadow.elevated : shadow.card,
         cursor: "pointer",
+        position: "relative",
       }}
     >
-      <Thumbnail src={thumb} alt="" size={84} radius={14} />
+      {featured && (
+        <span
+          style={{
+            position: "absolute",
+            top: 10,
+            left: 10,
+            fontSize: 10,
+            fontWeight: 900,
+            color: colors.accentOnPrimary,
+            background: colors.accentPrimary,
+            padding: "4px 8px",
+            borderRadius: radius.pill,
+            zIndex: 1,
+          }}
+        >
+          가장 추천
+        </span>
+      )}
+      <div style={{ marginTop: featured ? 18 : 0 }}>
+        <Thumbnail src={thumb} alt="" size={featured ? 92 : 84} radius={14} />
+      </div>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <div style={{ ...typo.cardTitle, fontSize: 16, color: colors.textPrimary, lineHeight: 1.25 }}>
           {card.name}
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
-          <Chip>{primary}</Chip>
-          {tags.map((t) => (
+        <p style={{ ...typo.cardReason, color: colors.accentStrong, margin: "6px 0 0", lineHeight: 1.35 }}>
+          {reason.headline}
+        </p>
+        <p style={{ ...typo.caption, color: colors.textSecondary, margin: "4px 0 0", lineHeight: 1.45 }}>
+          {reason.subline}
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {reason.badges.map((t) => (
             <span
               key={t}
               style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: colors.textSecondary,
-                background: colors.bgMuted,
-                padding: "3px 8px",
-                borderRadius: radius.pill,
+                ...typo.chip,
+                color: colors.tagMutedText,
+                background: colors.tagMutedBg,
+                padding: "4px 9px",
+                borderRadius: radius.chip,
               }}
             >
               {t}
@@ -110,7 +129,7 @@ export function RecommendationCard({
           ))}
         </div>
         {line2 && (
-          <div style={{ ...typo.caption, color: colors.textSecondary, marginTop: 8 }}>{line2}</div>
+          <div style={{ ...typo.caption, color: colors.textMuted, marginTop: 8 }}>{line2}</div>
         )}
         <div
           style={{
@@ -134,7 +153,8 @@ export function RecommendationCard({
                 borderRadius: radius.button,
                 border: "none",
                 background: colors.accentPrimary,
-                color: "#fff",
+                color: colors.accentOnPrimary,
+                boxShadow: shadow.cta,
                 fontWeight: 800,
                 fontSize: 14,
                 cursor: "pointer",
@@ -161,7 +181,7 @@ export function RecommendationCard({
                 cursor: phone ? "pointer" : "not-allowed",
               }}
             >
-              전화
+              지금 전화하기
             </button>
           </div>
           <button
