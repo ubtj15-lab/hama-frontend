@@ -29,3 +29,5 @@ export const DISTANCE_SCORE_WHEN_UNKNOWN = 45;
 export const DIVERSITY_PENALTY_SAME_MAIN_CATEGORY = 12;
 export const DIVERSITY_PENALTY_SAME_SUB_CATEGORY = 8;
 export const DIVERSITY_PENALTY_SAME_BRAND = 15;
+/** 동일 시나리오 축(date/family/solo/group) 반복 억제 */
+export const DIVERSITY_PENALTY_SAME_SCENARIO_VOICE = 22;

@@ -202,7 +202,7 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
 
   const renderPlaceCard = (row: Extract<TrustRow, { kind: "place" }>, idx: number, featured: boolean) => {
     const { card } = row;
-    const reason = buildRecommendationReason(card);
+    const reason = buildRecommendationReason(card, { deckSlot: idx });
     const bizState = businessStateFromCard(card);
     const reasonIsClosed = bizState === "CLOSED";
     const lat = typeof card.lat === "number" ? card.lat : null;

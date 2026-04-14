@@ -130,20 +130,14 @@ export function detectScenario(rawQuery: string): ScenarioDetect {
 
   for (const { scenario, phrase } of pairs) {
     if (q.includes(phrase.toLowerCase())) {
-      const base = Math.min(0.95, 0.55 + phrase.length * 0.02);
+      const base = Math.min(0.95, 0.52 + Math.min(phrase.length, 18) * 0.022);
       return { scenario, confidence: base };
     }
   }
   if (/(비 오는 날|비오는 날|장마|우산)/.test(q)) {
     return { scenario: "date", confidence: 0.45 };
   }
-  if (
-    /(조용한|한적)/.test(q) &&
-    !q.includes("조용한 식사") &&
-    !/(카페|커피|디저트|빵집)/.test(q)
-  ) {
-    return { scenario: "parents", confidence: 0.42 };
-  }
+  /** '조용한'만으로는 부모 동행(parents)으로 보지 않음 — 무드는 detectMoodAndConstraints */
   return { scenario: "generic", confidence: 0.25 };
 }
 
@@ -236,6 +230,39 @@ function mergeScenarioObject(
   };
 }
 
+/** 가족/아이 시나리오는 명시적 키워드가 있을 때만 유지 (모호한 문장의 family 오분류 방지) */
+function explicitFamilyKeywordsInQuery(q: string): boolean {
+  return /(아이랑|아이\s|아이와|가족|부모님|부모와|유아|영유아|초등|애\s*데리고|가족\s*외식|가족끼리|가족이랑|키즈\s*나들이|키즈\s*메뉴|유아\s*동반|나들이\s*갈)/.test(
+    q
+  );
+}
+
+/**
+ * alias 매칭만으로 family로 붙은 경우, 쿼리에 가족/아이 근거가 없으면 generic 으로 되돌림.
+ * 편한/넓은/무난한 등은 여기서 family로 승격되지 않음.
+ */
+export function resolveAmbiguousScenario(obj: ScenarioObject): ScenarioObject {
+  const q = normIntentQuery(obj.rawQuery ?? "");
+  const fam: ScenarioType[] = ["family", "family_kids", "parent_child_outing"];
+  let next: ScenarioObject = { ...obj };
+
+  if (fam.includes(next.scenario) && !explicitFamilyKeywordsInQuery(q)) {
+    const keepKidsFlag = /(아이|키즈|유아|영유아|초등|가족)/.test(q);
+    next = {
+      ...next,
+      scenario: "generic",
+      confidence: Math.min(next.confidence ?? 0.28, 0.32),
+      withKids: keepKidsFlag ? next.withKids : false,
+    };
+  }
+
+  if (next.scenario === "parents" && !/(부모님|부모|어머니|아버지|어른)/.test(q)) {
+    next = { ...next, scenario: "generic", confidence: Math.min(next.confidence ?? 0.28, 0.3), withParents: false };
+  }
+
+  return next;
+}
+
 /**
  * 자연어 → ScenarioObject (의도 3분기 + 시나리오·제약 병합).
  */
@@ -300,6 +327,8 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
   if (scenario === "parents") {
     obj.withParents = true;
   }
+
+  obj = resolveAmbiguousScenario(obj);
 
   return augmentScenarioWithComposite(obj);
 }

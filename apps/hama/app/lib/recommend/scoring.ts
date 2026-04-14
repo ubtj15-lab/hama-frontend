@@ -19,7 +19,9 @@ import {
   DIVERSITY_PENALTY_SAME_BRAND,
   DIVERSITY_PENALTY_SAME_MAIN_CATEGORY,
   DIVERSITY_PENALTY_SAME_SUB_CATEGORY,
+  DIVERSITY_PENALTY_SAME_SCENARIO_VOICE,
 } from "./recommendConstants";
+import { enrichBlobForScenarioScoring, hasExplicitFamilySignalsInBlob } from "./enrichScenarioBlob";
 import {
   cardMatchesStrictFoodIntent,
   filterFoodCandidatesByMenuIntent,
@@ -135,9 +137,16 @@ function scenarioRawForKey(blob: string, key: RecommendScenarioKey, card: HomeCa
   }
   sum += scenarioCategoryBonusMax(blob, key);
   const c = card as any;
-  if (key === "family" && c?.with_kids === true) sum += 20;
-  if (key === "solo" && c?.for_work === true) sum += 12;
+  if (key === "family" && c?.with_kids === true && hasExplicitFamilySignalsInBlob(blob)) sum += 14;
+  else if (key === "family" && c?.with_kids === true) sum += 6;
+  if (key === "solo" && c?.for_work === true) sum += 14;
   if (key === "group" && c?.reservation_required === true) sum += 14;
+
+  if (key === "family" && !hasExplicitFamilySignalsInBlob(blob) && c?.with_kids !== true) {
+    sum *= 0.52;
+  } else if (key === "family" && !hasExplicitFamilySignalsInBlob(blob) && c?.with_kids === true) {
+    sum *= 0.72;
+  }
   return sum;
 }
 
@@ -209,12 +218,14 @@ function diversityPenalty(item: ScoredRecommendItem, picked: ScoredRecommendItem
   const m1 = mainCategoryKey(item.card);
   const s1 = inferSubCategory(normBlob(item.card));
   const b1 = brandKey(item.card);
+  const v1 = item.reasonVoice;
   for (const o of picked) {
     if (mainCategoryKey(o.card) === m1) p += DIVERSITY_PENALTY_SAME_MAIN_CATEGORY;
     const s2 = inferSubCategory(normBlob(o.card));
     if (s1 && s2 && s1 === s2) p += DIVERSITY_PENALTY_SAME_SUB_CATEGORY;
     const b2 = brandKey(o.card);
     if (b1 && b2 && b1 === b2) p += DIVERSITY_PENALTY_SAME_BRAND;
+    if (v1 && o.reasonVoice === v1) p += DIVERSITY_PENALTY_SAME_SCENARIO_VOICE;
   }
   return p;
 }
@@ -285,11 +296,12 @@ export function buildTopRecommendations(
       const businessState = businessStateFromCard(card);
       if (!relaxed && businessState === "CLOSED") continue;
 
-      const blob = normBlob(card);
+      const blobBase = normBlob(card);
+      const blob = enrichBlobForScenarioScoring(blobBase);
       const km = distanceKmToCard(card, ctx);
 
       if (!relaxed && strict?.conversationExcludeMenuTerms?.length) {
-        const blobC = normCompactBlobStr(blob);
+        const blobC = normCompactBlobStr(blobBase);
         let skipMenu = false;
         for (const term of strict.conversationExcludeMenuTerms) {
           const t = normCompactBlobStr(term);
@@ -343,8 +355,8 @@ export function buildTopRecommendations(
 
     const bizS = businessScoreFromState(businessState);
     const qualS = qualityScoreFromCard(card);
-    const kwS = keywordScoreFromQuery(ctx.searchQuery, card, blob);
-    const bonS = bonusScoreFromCard(card, blob);
+    const kwS = keywordScoreFromQuery(ctx.searchQuery, card, blobBase);
+    const bonS = bonusScoreFromCard(card, blobBase);
 
     const useFoodRanking =
       strictFood &&
@@ -438,6 +450,7 @@ export function buildTopRecommendations(
       distanceKm: km ?? card.distanceKm,
       reasonText,
       recommendBadge,
+      recommendationVoice: voiceForContent,
     };
 
       out.push({

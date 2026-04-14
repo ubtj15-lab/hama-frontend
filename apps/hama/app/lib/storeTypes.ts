@@ -101,6 +101,9 @@ export type HomeCard = {
 
   // 혹시 검색/추천 카드에서 쓰는 키(있으면 사용)
   quickQuery?: string;
+
+  /** 랭킹 시 선택된 시나리오 축 — 추천 카피 다양화용(optional) */
+  recommendationVoice?: "date" | "family" | "solo" | "group";
 };
 
 // ✅ 기존 코드들이 Place 타입을 import하는 경우가 있어서 alias 제공

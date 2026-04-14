@@ -47,7 +47,7 @@ export function RecommendationCard({
   onNavigate,
   onCall,
 }: Props) {
-  const reason = buildRecommendationReason(card);
+  const reason = buildRecommendationReason(card, { deckSlot: rank });
   const featured = rank === 0;
   const thumb =
     (card as any).imageUrl ?? (card as any).image_url ?? getDefaultCardImage(card);

@@ -24,7 +24,6 @@ export const SCENARIO_ALIAS_GROUPS: { scenario: ScenarioType; phrases: string[] 
       "초등학생이랑",
       "아이랑 데이트",
       "애 데리고",
-      "키즈",
       "아이랑",
     ],
   },
@@ -35,9 +34,6 @@ export const SCENARIO_ALIAS_GROUPS: { scenario: ScenarioType; phrases: string[] 
       "부모님과",
       "어른들이랑",
       "부모님이랑",
-      "조용한 식사",
-      "조용한곳",
-      "조용한 곳",
     ],
   },
   {

@@ -23,10 +23,10 @@ function sumWeights(rules: { weight: number }[]): number {
 }
 
 export const DATE_TAG_RULES: ScenarioTagRule[] = [
-  { id: "분위기좋음", weight: 30, patterns: [/분위기|로맨틱|감성|예쁜|인스타|감각적/] },
+  { id: "분위기좋음", weight: 30, patterns: [/분위기|로맨틱|감성|예쁜|인스타|감각적|야경|야외\s*테라스/] },
   { id: "조용함", weight: 20, patterns: [/조용|한적|프라이빗|은밀|잔잔/] },
   { id: "사진맛집", weight: 15, patterns: [/사진|포토|인생샷|포토존/] },
-  { id: "디저트가능", weight: 12, patterns: [/디저트|베이커리|케이크|마카롱|티라미수/] },
+  { id: "디저트가능", weight: 14, patterns: [/디저트|베이커리|케이크|마카롱|티라미수|브런치/] },
   { id: "야간분위기", weight: 12, patterns: [/야경|야간|루프탑|나이트|캔들|조명/] },
   { id: "산책연계", weight: 10, patterns: [/산책|공원|호수|강변|둘레/] },
   { id: "와인가능", weight: 8, patterns: [/와인|페어링|바텐더/] },
@@ -43,11 +43,12 @@ export const DATE_CATEGORY_BONUSES: ScenarioCategoryBonusRule[] = [
 export const FAMILY_TAG_RULES: ScenarioTagRule[] = [
   {
     id: "아이동반가능",
-    weight: 30,
+    weight: 28,
     patterns: [/아이(?!스)|키즈|유아|어린이|아이동반|키즈룸/],
   },
-  { id: "주차가능", weight: 20, patterns: [/주차|무료주차|발렛/] },
-  { id: "좌석넓음", weight: 18, patterns: [/넓은|좌석|룸|가족석|테이블넓/] },
+  { id: "주차가능", weight: 18, patterns: [/주차|무료주차|발렛/] },
+  /** '넓은' 단독 매칭 제거 — 가족석/테이블 등과 함께일 때만 가산 */
+  { id: "좌석넓음", weight: 16, patterns: [/가족석|테이블.{0,4}넓|넓은\s*좌석|룸\s*식사|좌석.{0,4}넓/] },
   {
     id: "메뉴다양함",
     weight: 15,
@@ -55,7 +56,7 @@ export const FAMILY_TAG_RULES: ScenarioTagRule[] = [
   },
   { id: "웨이팅적음", weight: 12, patterns: [/웨이팅|대기.{0,3}적|바로입장/] },
   { id: "유아의자", weight: 12, patterns: [/유아의자|아기의자|아기식기/] },
-  { id: "가족모임적합", weight: 18, patterns: [/가족|가족모임|가족단위/] },
+  { id: "가족모임적합", weight: 16, patterns: [/가족모임|가족단위|가족\s*단위/] },
   { id: "시끄러워도부담없음", weight: 10, patterns: [/시끌|활기|키즈환영|아이환영/] },
 ];
 
@@ -67,7 +68,7 @@ export const FAMILY_CATEGORY_BONUSES: ScenarioCategoryBonusRule[] = [
 ];
 
 export const SOLO_TAG_RULES: ScenarioTagRule[] = [
-  { id: "혼밥가능", weight: 30, patterns: [/혼밥|혼자|1인|나혼자/] },
+  { id: "혼밥가능", weight: 32, patterns: [/혼밥가능|혼밥|혼자|1인|나혼자/] },
   { id: "빠른식사", weight: 20, patterns: [/빠른|간단|백반|분식|도시락|스피드/] },
   { id: "부담없는가격", weight: 18, patterns: [/가성비|착한\s*가격|저렴|부담없/] },
   { id: "접근쉬움", weight: 15, patterns: [/역\s*앞|도보|접근|가까운|로컬/] },
