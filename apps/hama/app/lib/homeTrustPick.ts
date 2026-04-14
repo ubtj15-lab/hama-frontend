@@ -1,6 +1,8 @@
 import type { HomeCard } from "@/lib/storeTypes";
 import type { StoreRow } from "@/lib/storeRepository";
 import { toHomeCard } from "@/lib/storeRepository";
+import { inferNeutralRecommendationVoice } from "@/lib/recommend/scoring";
+import type { RecommendScenarioKey } from "@/lib/recommend/scenarioWeights";
 
 export const HOME_TRUST_PICK_MAX = 3;
 
@@ -18,30 +20,52 @@ export const TRUST_SCENARIO_SEEDS: TrustScenarioSeed[] = [
   { id: "seed-3", title: "가족 외식", tags: ["아이랑", "넓은 곳", "식사"], query: "아이랑 밥 먹기 좋은 곳" },
 ];
 
-/** 카테고리 골고루 최대 3장. */
+type ScoredPick = {
+  card: HomeCard;
+  voice: RecommendScenarioKey;
+  cat: string;
+};
+
+function withInferredVoice(c: HomeCard): ScoredPick {
+  const voice = c.recommendationVoice ?? inferNeutralRecommendationVoice(c);
+  return {
+    card: { ...c, recommendationVoice: voice },
+    voice,
+    cat: String(c.category ?? ""),
+  };
+}
+
+/** 카테고리 + 시나리오 축이 겹치지 않게 최대 3장(가능하면 서로 다른 voice). */
 export function pickDiverseHomeCards(cards: HomeCard[], max = HOME_TRUST_PICK_MAX): HomeCard[] {
-  const pool = [...cards].filter((c) => c.name?.trim());
+  const pool = [...cards].filter((c) => c.name?.trim()).map(withInferredVoice);
   if (pool.length === 0) return [];
 
   const seen = new Set<string>();
   const out: HomeCard[] = [];
+  const usedVoices = new Set<RecommendScenarioKey>();
   const preferOrder = ["restaurant", "cafe", "activity", "salon"] as const;
+
+  const scorePick = (p: ScoredPick) => (usedVoices.has(p.voice) ? 1 : 0);
 
   for (const cat of preferOrder) {
     if (out.length >= max) break;
-    const next = pool.find((c) => (c.category ?? "") === cat && !seen.has(c.id));
-    if (next) {
-      out.push(next);
-      seen.add(next.id);
-    }
+    const candidates = pool.filter((p) => p.cat === cat && !seen.has(p.card.id));
+    if (candidates.length === 0) continue;
+    candidates.sort((a, b) => scorePick(a) - scorePick(b));
+    const pick = candidates[0]!;
+    out.push(pick.card);
+    seen.add(pick.card.id);
+    usedVoices.add(pick.voice);
   }
 
-  for (const c of pool) {
-    if (out.length >= max) break;
-    if (!seen.has(c.id)) {
-      out.push(c);
-      seen.add(c.id);
-    }
+  while (out.length < max) {
+    const rest = pool.filter((p) => !seen.has(p.card.id));
+    if (rest.length === 0) break;
+    rest.sort((a, b) => scorePick(a) - scorePick(b));
+    const pick = rest[0]!;
+    out.push(pick.card);
+    seen.add(pick.card.id);
+    usedVoices.add(pick.voice);
   }
 
   return out.slice(0, max);

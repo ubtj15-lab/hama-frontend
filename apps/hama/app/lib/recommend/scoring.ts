@@ -51,6 +51,12 @@ import {
 import { buildHomeRecommendationReason } from "./reasonPhrases";
 import diversityHints from "./diversityHints.json";
 import { buildRecommendationBadge, inferScenarioForBadgeWhenNeutral } from "./recommendationBadge";
+import {
+  isCategoryAllowedForScenarioStrict,
+  isCategoryAllowedRelaxed,
+  isPreferredScenarioCategory,
+  isHardExcludedNonPoi,
+} from "./scenarioCategoryRules";
 
 export type RecommendScoreBreakdown = {
   distanceScore: number;
@@ -248,13 +254,56 @@ function selectWithDiversity(sorted: ScoredRecommendItem[], limit: number): Scor
   return picked;
 }
 
+/** 시나리오 객체·의도 → 카테고리 필터 축 */
+function resolveRankKeyForCategoryFilter(ctx: BuildRecommendationsContext): RecommendScenarioKey | "neutral" {
+  const so = ctx.scenarioObject;
+  if (so) {
+    if (so.scenario === "generic") return "neutral";
+    return scenarioTypeToRankKey(so.scenario);
+  }
+  const k = intentionToScenarioKey(ctx.intent);
+  if (k === "neutral") return "neutral";
+  return k as RecommendScenarioKey;
+}
+
+/**
+ * 시나리오 적합 카드 우선 — 3장 중 최소 2장은 허용 업종(가능할 때).
+ * 부족하면 relaxed 풀에서만 채운 카드로 보완.
+ */
+function selectDeckWithScenarioGuarantee(
+  sorted: ScoredRecommendItem[],
+  rankKey: RecommendScenarioKey | "neutral",
+  limit: number
+): ScoredRecommendItem[] {
+  const pref = sorted.filter((s) => isPreferredScenarioCategory(s.card, rankKey));
+  const fb = sorted.filter((s) => !isPreferredScenarioCategory(s.card, rankKey));
+
+  const minPref = Math.min(2, limit);
+  if (pref.length >= minPref) {
+    const first = selectWithDiversity(pref, minPref);
+    const pickedIds = new Set(first.map((x) => x.card.id));
+    const restPool = [...pref.filter((x) => !pickedIds.has(x.card.id)), ...fb];
+    const second = selectWithDiversity(restPool, limit - first.length);
+    return [...first, ...second].slice(0, limit);
+  }
+
+  const first = selectWithDiversity(pref, pref.length);
+  const pickedIds = new Set(first.map((x) => x.card.id));
+  const restPool = fb.filter((x) => !pickedIds.has(x.card.id));
+  const second = selectWithDiversity(restPool, limit - first.length);
+  return [...first, ...second].slice(0, limit);
+}
+
 export function buildTopRecommendations(
   candidates: HomeCard[],
   ctx: BuildRecommendationsContext
 ): ScoredRecommendItem[] {
   const exclude = new Set((ctx.excludeStoreIds ?? []).filter(Boolean));
+  const rankKeyForCategory = resolveRankKeyForCategoryFilter(ctx);
 
   const so = ctx.scenarioObject;
+  /** 단일 목적 검색(음식·카페·액티비티·미용) — 시나리오별 허용 업종 대신 intentCategory 매칭만 사용 */
+  const strictIntentCategorySearch = Boolean(so?.intentType === "search_strict" && so.intentCategory);
   const strictFood =
     so?.intentType === "search_strict" &&
     so.intentCategory === "FOOD" &&
@@ -269,6 +318,14 @@ export function buildTopRecommendations(
     const out: ScoredRecommendItem[] = [];
     for (const card of pool) {
       if (exclude.has(card.id)) continue;
+
+      if (strictIntentCategorySearch) {
+        if (isHardExcludedNonPoi(card)) continue;
+      } else if (relaxed) {
+        if (!isCategoryAllowedRelaxed(card, false)) continue;
+      } else if (!isCategoryAllowedForScenarioStrict(card, rankKeyForCategory)) {
+        continue;
+      }
 
       const strict = ctx.scenarioObject;
       if (
@@ -487,7 +544,10 @@ export function buildTopRecommendations(
     })),
   });
 
-  return selectWithDiversity(scored, RECOMMEND_DECK_SIZE);
+  if (strictIntentCategorySearch) {
+    return selectWithDiversity(scored, RECOMMEND_DECK_SIZE);
+  }
+  return selectDeckWithScenarioGuarantee(scored, rankKeyForCategory, RECOMMEND_DECK_SIZE);
 }
 
 /** strict 시나리오 랭킹 — 내부적으로 buildTopRecommendations와 동일 */
@@ -496,4 +556,11 @@ export function rankPlacesForScenario(
   ctx: BuildRecommendationsContext
 ): ScoredRecommendItem[] {
   return buildTopRecommendations(candidates, ctx);
+}
+
+/** 홈 신뢰 픽 등 — 사용자 시나리오 없이 카드 텍스트만으로 대표 시나리오 축 추정 */
+export function inferNeutralRecommendationVoice(card: HomeCard): RecommendScenarioKey {
+  const blobBase = normBlob(card);
+  const blob = enrichBlobForScenarioScoring(blobBase);
+  return pickActiveScenario(card, "none", blob).key;
 }

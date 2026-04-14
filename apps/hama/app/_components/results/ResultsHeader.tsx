@@ -17,16 +17,16 @@ export function ResultsHeader({ resultCount, isLoading }: Props) {
 
   const title =
     loading || n == null
-      ? "지금 상황에 맞춰 골라볼게"
+      ? "상황에 맞춰 골라볼게"
       : n === 0
-        ? "곧 보여줄 수 있는 곳을 찾아볼게"
-        : `고민 안 해도 되는 선택 ${n}개`;
+        ? "지금은 보여줄 카드가 없어"
+        : `오늘의 결정 ${n}개`;
 
   const subtitle = loading
-    ? "조금만 기다려줘…"
+    ? "잠만, 골라오는 중…"
     : n === 0
-      ? "조건은 이해했어. 데이터가 맞으면 바로 카드가 뜰 거야."
-      : "지금 상황에 딱 맞게 골랐어";
+      ? "조건은 알았어. 다른 말로 한 번만 더 말해줄래?"
+      : "왜 이 곳인지 카드에 적어뒀어. 마음에 들면 바로 가면 돼";
 
   return (
     <header style={{ marginBottom: space.section }}>

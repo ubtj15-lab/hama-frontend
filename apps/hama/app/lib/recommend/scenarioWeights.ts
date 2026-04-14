@@ -72,7 +72,7 @@ export const SOLO_TAG_RULES: ScenarioTagRule[] = [
   { id: "빠른식사", weight: 20, patterns: [/빠른|간단|백반|분식|도시락|스피드/] },
   { id: "부담없는가격", weight: 18, patterns: [/가성비|착한\s*가격|저렴|부담없/] },
   { id: "접근쉬움", weight: 15, patterns: [/역\s*앞|도보|접근|가까운|로컬/] },
-  { id: "1인석", weight: 14, patterns: [/1인석|바좌석|카운터|싱글/] },
+  { id: "1인석", weight: 14, patterns: [/1인석|바좌석|카운터|카운터좌석|싱글/] },
   { id: "회전빠름", weight: 12, patterns: [/회전|빨리|즉석/] },
   { id: "간단식사", weight: 10, patterns: [/간단|한\s*끼|가벼운/] },
 ];

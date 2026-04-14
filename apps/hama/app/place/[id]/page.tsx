@@ -14,7 +14,11 @@ import { getNextSuggestions } from "@/lib/recommendation/getNextSuggestions";
 import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { openPlace } from "@/lib/openPlace";
-import { buildRecommendationBullets, buildRecommendationReason } from "@/lib/recommend/buildRecommendationReason";
+import {
+  buildRecommendationBullets,
+  buildRecommendationReason,
+  getClientTimeOfDay,
+} from "@/lib/recommend/buildRecommendationReason";
 import { useSaved } from "@/_hooks/useSaved";
 
 function bizKr(card: HomeCard): string {
@@ -83,7 +87,7 @@ export default function PlaceDetailPage() {
   const img =
     (card as any).imageUrl ?? (card as any).image_url ?? getDefaultCardImage(card);
   const tel = String(card.phone ?? "").trim();
-  const reason = buildRecommendationReason(card);
+  const reason = buildRecommendationReason(card, { timeOfDay: getClientTimeOfDay() });
   const bullets = buildRecommendationBullets(card);
   const scenarioGuess = parseScenarioIntent(
     `${card.categoryLabel ?? ""} ${card.name} 추천`
@@ -99,14 +103,15 @@ export default function PlaceDetailPage() {
   };
 
   return (
-    <main style={{ maxWidth: 430, margin: "0 auto", paddingBottom: 40, background: colors.bgDefault }}>
-      <div style={{ height: 280, background: "#e2e8f0", position: "relative" }}>
+    <main style={{ maxWidth: 430, margin: "0 auto", paddingBottom: 48, background: colors.bgDefault }}>
+      <div style={{ height: 260, background: colors.bgMuted, position: "relative" }}>
         <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         <div
           style={{
             position: "absolute",
             inset: 0,
-            background: "linear-gradient(180deg, rgba(15,23,42,0.45) 0%, rgba(15,23,42,0.05) 45%, rgba(15,23,42,0.55) 100%)",
+            background:
+              "linear-gradient(180deg, rgba(15,23,42,0.45) 0%, rgba(15,23,42,0.08) 42%, rgba(15,23,42,0.65) 100%)",
             pointerEvents: "none",
           }}
         />
@@ -132,45 +137,52 @@ export default function PlaceDetailPage() {
         </button>
       </div>
 
-      <div style={{ padding: `0 ${space.pageX}px 24px`, marginTop: -28, position: "relative", zIndex: 2 }}>
+      <div style={{ padding: `0 ${space.pageX}px 24px`, marginTop: -32, position: "relative", zIndex: 2 }}>
         <div
           style={{
             borderRadius: radius.largeCard,
-            background: colors.bgSurface,
-            padding: space.cardPadding,
+            background: `linear-gradient(135deg, ${colors.accentSoft} 0%, #fff7ed 100%)`,
+            padding: "16px 18px",
             boxShadow: shadow.elevated,
-            border: `1px solid ${colors.borderSubtle}`,
+            border: `1px solid ${colors.tagDeepBorder}`,
           }}
         >
-          <p style={{ ...typo.cardReason, color: colors.accentStrong, margin: 0 }}>{reason.headline}</p>
-          <p style={{ ...typo.caption, color: colors.textSecondary, margin: "6px 0 0", lineHeight: 1.5 }}>
-            {reason.subline}
+          <p style={{ ...typo.caption, color: colors.textMuted, margin: 0, fontWeight: 700, letterSpacing: "0.04em" }}>
+            왜 추천했는지
           </p>
+          <p style={{ ...typo.cardReason, fontSize: 17, color: colors.reasonHot, margin: "8px 0 0", fontWeight: 900 }}>
+            {reason.headline}
+          </p>
+          <p style={{ ...typo.body, color: colors.textSecondary, margin: "8px 0 0", lineHeight: 1.55 }}>{reason.subline}</p>
           {reason.regionTrust && (
-            <p style={{ ...typo.caption, color: colors.textMuted, margin: "6px 0 0", fontSize: 12 }}>
+            <p style={{ ...typo.caption, color: colors.textMuted, margin: "8px 0 0", fontSize: 12 }}>
               {reason.regionTrust}
             </p>
           )}
         </div>
 
-        <h1 style={{ ...typo.cardTitle, fontSize: 22, margin: "18px 0 0", lineHeight: 1.25 }}>{card.name}</h1>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+        <h1 style={{ ...typo.cardTitle, fontSize: 22, margin: "20px 0 0", lineHeight: 1.25, fontWeight: 900 }}>
+          {card.name}
+        </h1>
+        <p style={{ ...typo.caption, color: colors.textMuted, margin: "6px 0 0", fontWeight: 700 }}>상황 태그</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
           {reason.badges.map((t) => (
             <span
               key={t}
               style={{
                 ...typo.chip,
-                color: colors.tagMutedText,
-                background: colors.tagMutedBg,
+                color: colors.tagDeepText,
+                background: colors.tagDeepBg,
                 padding: "6px 11px",
                 borderRadius: radius.chip,
+                border: `1px solid ${colors.tagDeepBorder}`,
               }}
             >
               {t}
             </span>
           ))}
         </div>
-        <p style={{ ...typo.body, color: colors.textSecondary, marginTop: 12 }}
+        <p style={{ ...typo.body, color: colors.textSecondary, marginTop: 14, fontWeight: 600 }}
         >
           {typeof card.distanceKm === "number" ? `${card.distanceKm.toFixed(1)}km · ` : ""}
           {bizKr(card)}
@@ -230,7 +242,7 @@ export default function PlaceDetailPage() {
               opacity: tel ? 1 : 0.45,
             }}
           >
-            지금 전화하기
+            전화하기
           </button>
         </div>
 

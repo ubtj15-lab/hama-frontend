@@ -21,7 +21,8 @@ const HOME_ITEMS = QUICK_SCENARIO_CANDIDATES.slice(0, HOME_QUICK_SCENARIO_LIMIT)
 type Props = { onPick: (query: string) => void };
 
 export function QuickScenarioGrid({ onPick }: Props) {
-  const [selected, setSelected] = useState<string>(HOME_ITEMS[0]!.label);
+  /** 탭하기 전에는 아무 칩도 ‘선택됨’으로 두지 않음 */
+  const [selected, setSelected] = useState<string | null>(null);
 
   return (
     <div

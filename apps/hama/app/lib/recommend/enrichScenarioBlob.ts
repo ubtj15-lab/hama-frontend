@@ -17,7 +17,10 @@ export function enrichBlobForScenarioScoring(baseBlob: string): string {
     hints.push("조용함 대화하기좋음");
   }
   if (/혼밥|1인|카운터|빠른|가성비|회전/.test(b)) {
-    hints.push("혼밥가능 빠른식사 카운터좌석 가성비");
+    hints.push("혼밥가능 빠른식사 카운터좌석 가성비 회전빠름");
+  }
+  if (/야외|테라스|루프탑|정원|캠핑/.test(b)) {
+    hints.push("야외 테라스");
   }
 
   if (hints.length === 0) return baseBlob;

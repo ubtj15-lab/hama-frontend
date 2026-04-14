@@ -47,6 +47,27 @@ function allowFamilyHeadline(card: HomeCard, b: string): boolean {
   return card.with_kids === true && hasExplicitFamilySignalsInBlob(b);
 }
 
+/** 배지에 쓰기 좋게 짧은 라벨로 정규화 */
+const TAG_BADGE_HINTS: { re: RegExp; label: string }[] = [
+  { re: /아이동반|키즈|유아|가족/, label: "아이동반" },
+  { re: /주차|발렛|parking/i, label: "주차가능" },
+  { re: /좌석.{0,3}넓|넓은\s*좌석|룸/, label: "좌석넉넉" },
+  { re: /웨이팅|대기/, label: "대기 적음" },
+  { re: /분위기|감성|야경|브런치|디저트/, label: "분위기" },
+  { re: /혼밥|1인|카운터/, label: "혼밥가능" },
+  { re: /가성비|저렴/, label: "가성비" },
+  { re: /조용|한적/, label: "조용함" },
+];
+
+function inferBadgesFromBlob(b: string): string[] {
+  const found: string[] = [];
+  for (const { re, label } of TAG_BADGE_HINTS) {
+    if (re.test(b) && !found.includes(label)) found.push(label);
+    if (found.length >= 3) break;
+  }
+  return found;
+}
+
 function pickBadges(card: HomeCard, voice: RecommendScenarioKey | undefined, max = 3): string[] {
   const out: string[] = [];
   const push = (s: string) => {
@@ -58,25 +79,33 @@ function pickBadges(card: HomeCard, voice: RecommendScenarioKey | undefined, max
   const b = blob(card);
 
   if (voice === "date") {
-    push("분위기");
+    push("분위기좋음");
     push("데이트");
   } else if (/분위기|데이트|감성|야경|브런치|디저트/.test(b)) {
     push("분위기");
   }
   if (voice === "solo") {
-    push("혼밥·가벼운 식사");
+    push("혼밥가능");
     push("가성비");
-  } else if (/혼밥|1인|카운터|가성비|빠른/.test(b)) {
-    push("혼밥");
+  } else if (/혼밥|1인|카운터|가성비|빠른|회전/.test(b)) {
+    push("혼밥가능");
   }
   if (voice === "family") {
     push("가족·아이");
   } else if (allowFamilyHeadline(card, b) && /아이|키즈|가족|유아/.test(b)) {
-    push("아이 동반");
+    push("아이동반");
   }
-  if (/(주차|발렛|parking)/i.test(b)) push("주차 확인");
+  if (voice === "group") push("단체·모임");
+  if (/(주차|발렛|parking)/i.test(b)) push("주차가능");
+  if (/좌석.{0,3}넓|넓은\s*좌석|가족석|룸/.test(b)) push("좌석넉넉");
+  if (/웨이팅\s*적|대기\s*적|바로\s*입장/.test(b)) push("대기 적음");
   if (card.reservation_required === true) push("예약 권장");
-  if (/(조용|한적|차분)/.test(b)) push("조용한 편");
+  if (/(조용|한적|차분)/.test(b)) push("조용함");
+
+  for (const x of inferBadgesFromBlob(b)) {
+    push(x);
+    if (out.length >= max) break;
+  }
 
   const cat = String(card.category ?? "").toLowerCase();
   if (out.length < max) {
@@ -86,8 +115,11 @@ function pickBadges(card: HomeCard, voice: RecommendScenarioKey | undefined, max
     else if (cat === "salon") push("미용");
   }
 
-  for (const t of card.tags ?? []) {
-    push(String(t));
+  const rawTags = card.tags ?? [];
+  for (const t of rawTags) {
+    const s = String(t).trim();
+    if (s.length > 12) continue;
+    push(s);
     if (out.length >= max) break;
   }
 
@@ -129,11 +161,22 @@ const HEADLINE_VARIATIONS: Record<
 export type BuildRecommendationReasonOptions = {
   /** 결과 덱에서의 순번(0~2) — 같은 voice여도 문구 분산 */
   deckSlot?: number;
+  /** 클라이언트에서만 넘기면 점심/저녁 등 시간 문구 보조 */
+  timeOfDay?: "morning" | "lunch" | "afternoon" | "evening" | "night";
 };
 
-/**
- * 홈 카드·상세 상단 배너에서 동일 사용.
- */
+/** 클라이언트에서 점심/저녁 추천 문구 보조용 */
+export function getClientTimeOfDay(): BuildRecommendationReasonOptions["timeOfDay"] | undefined {
+  if (typeof window === "undefined") return undefined;
+  const h = new Date().getHours();
+  if (h < 11) return "morning";
+  if (h < 15) return "lunch";
+  if (h < 18) return "afternoon";
+  if (h < 21) return "evening";
+  return "night";
+}
+
+/** 홈 카드·상세 상단 배너에서 동일 사용 */
 export function buildRecommendationReason(
   card: HomeCard,
   opts?: BuildRecommendationReasonOptions
@@ -174,7 +217,14 @@ export function buildRecommendationReason(
     subline = pick.subline;
   } else {
     /** generic / voice 없음: 태그만으로 family 문구 금지, 거리·분위기·조용 우선 */
-    if (km != null && km <= 1.2) {
+    const tod = opts?.timeOfDay;
+    if (tod === "lunch" && biz === "OPEN" && !/데이트|혼밥|가족|아이/.test(b)) {
+      headline = "점심으로 무난해요";
+      subline = "한 끼 부담 없이 들르기 좋은 편이에요";
+    } else if (tod === "evening" && biz === "OPEN" && /식당|restaurant|한식|양식|고기/.test(b)) {
+      headline = "저녁 식사로 괜찮아요";
+      subline = "부담 없이 자리 잡기 좋은 편이에요";
+    } else if (km != null && km <= 1.2) {
       headline = "지금 가기 편해요";
       subline = dist ?? "이동 부담이 적은 편이에요";
     } else if (/데이트|분위기|감성|야경|브런치/.test(b)) {
@@ -214,7 +264,7 @@ export function buildRecommendationReason(
 
 /** 상세 "이런 이유로 추천했어요"용 불릿 2~3개 */
 export function buildRecommendationBullets(card: HomeCard): string[] {
-  const reason = buildRecommendationReason(card);
+  const reason = buildRecommendationReason(card, { timeOfDay: getClientTimeOfDay() });
   const bullets: string[] = [];
   const v = card.recommendationVoice;
   if (v === "family" || /아이|가족/.test(reason.headline)) {

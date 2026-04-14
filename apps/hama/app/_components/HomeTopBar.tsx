@@ -88,13 +88,26 @@ export default function HomeTopBar({
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <div
             style={{
-              fontWeight: 900,
-              letterSpacing: "0.12em",
-              fontSize: 20,
-              color: colors.accentPrimary,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "6px 12px",
+              borderRadius: radius.pill,
+              background: `linear-gradient(135deg, ${colors.accentSoft} 0%, #fff7ed 100%)`,
+              border: `1px solid ${colors.borderSubtle}`,
+              boxShadow: shadow.headerBtn,
             }}
           >
-            HAMA
+            <span
+              style={{
+                fontWeight: 900,
+                letterSpacing: "0.14em",
+                fontSize: 18,
+                color: colors.accentStrong,
+              }}
+            >
+              HAMA
+            </span>
           </div>
           <a
             href={PARTNER_APP_URL}

@@ -4,10 +4,9 @@ import React from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { businessStateFromCard, type BusinessState } from "@/lib/recommend/scoreParts";
-import { Thumbnail } from "@/_components/common/Thumbnail";
-import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
 import { getDefaultCardImage } from "@/lib/defaultCardImage";
-import { buildRecommendationReason } from "@/lib/recommend/buildRecommendationReason";
+import { buildRecommendationReason, getClientTimeOfDay } from "@/lib/recommend/buildRecommendationReason";
+import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
 
 function bizLabel(s: BusinessState): string {
   switch (s) {
@@ -47,15 +46,21 @@ export function RecommendationCard({
   onNavigate,
   onCall,
 }: Props) {
-  const reason = buildRecommendationReason(card, { deckSlot: rank });
+  const reason = buildRecommendationReason(card, {
+    deckSlot: rank,
+    timeOfDay: getClientTimeOfDay(),
+  });
   const featured = rank === 0;
   const thumb =
     (card as any).imageUrl ?? (card as any).image_url ?? getDefaultCardImage(card);
   const bs = businessStateFromCard(card);
   const dist = kmLine(card);
   const biz = bizLabel(bs);
-  const line2 = [dist, biz].filter(Boolean).join(" · ");
+  const metaLine = [dist, biz].filter(Boolean).join(" · ");
   const phone = String(card.phone ?? "").trim();
+  const imgH = featured ? 200 : 168;
+  const closed = bs === "CLOSED";
+  const reasonLead = closed ? reason.headline : reason.headline.startsWith("🔥") ? reason.headline : `🔥 ${reason.headline}`;
 
   return (
     <div
@@ -68,147 +73,183 @@ export function RecommendationCard({
           onCardClick();
         }
       }}
+      className="hama-press"
       style={{
         display: "flex",
-        gap: 12,
-        padding: space.cardPadding,
-        minHeight: 132,
+        flexDirection: "column",
         borderRadius: radius.largeCard,
         background: colors.bgCard,
         border: featured ? `2px solid ${colors.accentSoft}` : `1px solid ${colors.borderSubtle}`,
         boxShadow: featured ? shadow.elevated : shadow.card,
         cursor: "pointer",
+        overflow: "hidden",
         position: "relative",
       }}
     >
-      {featured && (
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: imgH,
+          flexShrink: 0,
+          background: colors.bgMuted,
+        }}
+      >
+        <img
+          src={thumb}
+          alt=""
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          loading={rank === 0 ? "eager" : "lazy"}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(180deg, rgba(15,23,42,0.12) 0%, rgba(15,23,42,0.45) 100%)",
+            pointerEvents: "none",
+          }}
+        />
+        {featured && (
+          <span
+            style={{
+              position: "absolute",
+              top: 12,
+              left: 12,
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: "0.02em",
+              color: colors.accentOnPrimary,
+              background: "linear-gradient(135deg, #ea580c 0%, #c2410c 100%)",
+              padding: "6px 12px",
+              borderRadius: radius.pill,
+              boxShadow: "0 2px 12px rgba(194,65,12,0.35)",
+            }}
+          >
+            오늘의 1순위
+          </span>
+        )}
         <span
           style={{
             position: "absolute",
-            top: 10,
-            left: 10,
-            fontSize: 10,
-            fontWeight: 900,
-            color: colors.accentOnPrimary,
-            background: colors.accentPrimary,
-            padding: "4px 8px",
-            borderRadius: radius.pill,
-            zIndex: 1,
+            bottom: 10,
+            right: 12,
+            fontSize: 12,
+            fontWeight: 800,
+            color: "rgba(255,255,255,0.92)",
+            textShadow: "0 1px 4px rgba(0,0,0,0.4)",
           }}
         >
-          가장 추천
+          {rank + 1}/3
         </span>
-      )}
-      <div style={{ marginTop: featured ? 18 : 0 }}>
-        <Thumbnail src={thumb} alt="" size={featured ? 92 : 84} radius={14} />
       </div>
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <div style={{ ...typo.cardTitle, fontSize: 16, color: colors.textPrimary, lineHeight: 1.25 }}>
+
+      <div style={{ padding: featured ? 18 : space.cardPadding, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div
+          style={{
+            ...typo.cardTitle,
+            fontSize: featured ? 19 : 17,
+            color: colors.textPrimary,
+            lineHeight: 1.25,
+            fontWeight: 900,
+            letterSpacing: "-0.02em",
+          }}
+        >
           {card.name}
         </div>
-        <p style={{ ...typo.cardReason, color: colors.accentStrong, margin: "6px 0 0", lineHeight: 1.35 }}>
-          {reason.headline}
+
+        <p
+          style={{
+            ...typo.cardReason,
+            fontSize: 15,
+            color: closed ? colors.textSecondary : colors.reasonHot,
+            margin: 0,
+            lineHeight: 1.35,
+            fontWeight: 900,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {reasonLead}
         </p>
-        <p style={{ ...typo.caption, color: colors.textSecondary, margin: "4px 0 0", lineHeight: 1.45 }}>
+        <p
+          style={{
+            ...typo.caption,
+            fontSize: 14,
+            color: colors.textSecondary,
+            margin: 0,
+            lineHeight: 1.5,
+            fontWeight: 500,
+          }}
+        >
           {reason.subline}
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-          {reason.badges.map((t) => (
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {reason.badges.slice(0, 3).map((t) => (
             <span
               key={t}
               style={{
                 ...typo.chip,
-                color: colors.tagMutedText,
-                background: colors.tagMutedBg,
-                padding: "4px 9px",
-                borderRadius: radius.chip,
+                color: colors.tagDeepText,
+                background: colors.tagDeepBg,
+                padding: "5px 11px",
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.tagDeepBorder}`,
               }}
             >
               {t}
             </span>
           ))}
         </div>
-        {line2 && (
-          <div style={{ ...typo.caption, color: colors.textMuted, marginTop: 8 }}>{line2}</div>
+
+        {metaLine && (
+          <div style={{ ...typo.caption, color: colors.textMuted, marginTop: 2 }}>{metaLine}</div>
         )}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            marginTop: "auto",
-            paddingTop: 10,
-          }}
-        >
-          <div style={{ display: "flex", gap: space.chip }}>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate();
-              }}
-              style={{
-                flex: 1,
-                height: 44,
-                borderRadius: radius.button,
-                border: "none",
-                background: colors.accentPrimary,
-                color: colors.accentOnPrimary,
-                boxShadow: shadow.cta,
-                fontWeight: 800,
-                fontSize: 14,
-                cursor: "pointer",
-              }}
-            >
-              길찾기
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCall();
-              }}
-              disabled={!phone}
-              style={{
-                flex: 1,
-                height: 44,
-                borderRadius: radius.button,
-                border: `1px solid ${colors.borderSubtle}`,
-                background: colors.bgCard,
-                color: phone ? colors.textPrimary : colors.textSecondary,
-                fontWeight: 800,
-                fontSize: 14,
-                cursor: phone ? "pointer" : "not-allowed",
-              }}
-            >
-              지금 전화하기
-            </button>
-          </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onCardClick();
+              onNavigate();
             }}
             style={{
-              width: "100%",
-              height: 40,
+              flex: 1,
+              height: 46,
               borderRadius: radius.button,
-              border: `1px solid ${colors.accentPrimary}`,
-              background: colors.bgCard,
-              color: colors.accentPrimary,
+              border: "none",
+              background: `linear-gradient(135deg, ${colors.accentPrimary} 0%, ${colors.accentStrong} 100%)`,
+              color: colors.accentOnPrimary,
+              boxShadow: shadow.cta,
               fontWeight: 800,
-              fontSize: 13,
+              fontSize: 14,
               cursor: "pointer",
             }}
           >
-            매장 정보
+            길찾기
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCall();
+            }}
+            disabled={!phone}
+            style={{
+              flex: 1,
+              height: 46,
+              borderRadius: radius.button,
+              border: `1px solid ${colors.borderSubtle}`,
+              background: colors.bgMuted,
+              color: phone ? colors.textPrimary : colors.textSecondary,
+              fontWeight: 800,
+              fontSize: 14,
+              cursor: phone ? "pointer" : "not-allowed",
+            }}
+          >
+            전화하기
           </button>
         </div>
       </div>
-      <span style={{ ...typo.caption, color: colors.textSecondary, alignSelf: "flex-start" }}>
-        #{rank + 1}
-      </span>
     </div>
   );
 }

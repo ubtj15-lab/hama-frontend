@@ -36,6 +36,7 @@ import { RecommendationModeToggle } from "@/_components/results/RecommendationMo
 import { NextSuggestions } from "@/_components/results/NextSuggestions";
 import { colors, space } from "@/lib/designTokens";
 import { logEvent } from "@/lib/logEvent";
+import { HamaEvents } from "@/lib/analytics/events";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { openDirections } from "@/lib/openDirections";
 import { stashPlaceForSession } from "@/lib/session/placeSession";
@@ -283,6 +284,7 @@ function ResultsContent() {
 
   const impressionLogged = useRef(false);
   const placeNameSearchLogged = useRef(false);
+  const recommendDeckLogged = useRef(false);
 
   useEffect(() => {
     if (!qRaw || bootstrapBusy || placeLookupBusy) return;
@@ -291,6 +293,24 @@ function ResultsContent() {
     const latency_ms = Math.round(performance.now() - started.current);
     logEvent("result_impression", mergeLogPayload(logBase, { query: qRaw, latency_ms }));
   }, [qRaw, bootstrapBusy, placeLookupBusy, logBase]);
+
+  useEffect(() => {
+    if (!qRaw || pageBusy || showNameSearch) return;
+    if (!showRecommendationList || cards.length === 0) return;
+    if (recommendDeckLogged.current) return;
+    recommendDeckLogged.current = true;
+    const slice = cards.slice(0, RECOMMEND_DECK_SIZE);
+    logEvent(
+      HamaEvents.recommend_deck_impression,
+      mergeLogPayload(logBase, {
+        query: qRaw,
+        place_ids: slice.map((c) => c.id),
+        recommendation_voices: slice.map((c) => c.recommendationVoice ?? null),
+        count: slice.length,
+        page: "results",
+      })
+    );
+  }, [qRaw, pageBusy, showNameSearch, showRecommendationList, cards, logBase]);
 
   useEffect(() => {
     if (!showNameSearch) return;
@@ -302,6 +322,7 @@ function ResultsContent() {
   useEffect(() => {
     impressionLogged.current = false;
     placeNameSearchLogged.current = false;
+    recommendDeckLogged.current = false;
   }, [qRaw, shuffleKey]);
 
   const applyNewQuery = (next: string, src?: string) => {

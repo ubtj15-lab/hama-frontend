@@ -44,8 +44,8 @@ export function SearchInput({ value, onChange, onSubmit, onMicClick }: Props) {
         marginBottom: space.section,
       }}
     >
-      <span style={{ fontSize: 18, opacity: 0.45, lineHeight: 1, flexShrink: 0 }} aria-hidden>
-        🔍
+      <span style={{ fontSize: 20, opacity: 0.55, lineHeight: 1, flexShrink: 0 }} aria-hidden title="상황 입력">
+        💬
       </span>
       <input
         value={value}

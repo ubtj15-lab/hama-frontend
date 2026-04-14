@@ -114,6 +114,7 @@ function HomePageContent() {
     };
     logEvent("session_start", { page: "home" });
     logEvent("page_view", { page: "home" });
+    logEvent(HamaEvents.home_enter, { page: "home", surface: "first_paint" });
     sync();
     window.addEventListener("focus", sync);
     window.addEventListener("storage", sync);
@@ -186,7 +187,7 @@ function HomePageContent() {
         /** 하단 FAB·iOS 홈 인디케이터 위로 마지막 카드·버튼이 잘리지 않게 */
         paddingBottom: "calc(120px + env(safe-area-inset-bottom, 0px))",
         overflowX: "visible",
-        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, #f1f5f9 100%)`,
+        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, #eef2ff 100%)`,
       }}
     >
       <div

@@ -14,7 +14,7 @@ import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
 import { logEvent } from "@/lib/logEvent";
 import { HamaEvents } from "@/lib/analytics/events";
 import { openDirections } from "@/lib/openDirections";
-import { buildRecommendationReason } from "@/lib/recommend/buildRecommendationReason";
+import { buildRecommendationReason, getClientTimeOfDay } from "@/lib/recommend/buildRecommendationReason";
 import { businessStateFromCard } from "@/lib/recommend/scoreParts";
 
 type TrustRow =
@@ -202,7 +202,7 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
 
   const renderPlaceCard = (row: Extract<TrustRow, { kind: "place" }>, idx: number, featured: boolean) => {
     const { card } = row;
-    const reason = buildRecommendationReason(card, { deckSlot: idx });
+    const reason = buildRecommendationReason(card, { deckSlot: idx, timeOfDay: getClientTimeOfDay() });
     const bizState = businessStateFromCard(card);
     const reasonIsClosed = bizState === "CLOSED";
     const lat = typeof card.lat === "number" ? card.lat : null;
@@ -357,11 +357,11 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
                 key={t}
                 style={{
                   ...typo.chip,
-                  color: colors.tagMutedText,
-                  background: colors.tagMutedBg,
+                  color: colors.tagDeepText,
+                  background: colors.tagDeepBg,
                   padding: "5px 10px",
                   borderRadius: radius.pill,
-                  border: `1px solid ${colors.accentSoft}`,
+                  border: `1px solid ${colors.tagDeepBorder}`,
                 }}
               >
                 {t}
@@ -504,7 +504,7 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
           letterSpacing: "-0.01em",
         }}
       >
-        오산·동탄·평택 데이터로 골라요
+        오늘의 결정 제안 · 이 지역 데이터로 3곳만 골랐어요
       </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: space.sectionTight }}>

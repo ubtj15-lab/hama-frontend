@@ -1,34 +1,37 @@
-/** 결정형 UX — 색·간격·타이포·그림자 토큰 (인라인 스타일용) */
+/** 결정형 UX — 색·간격·타이포·그림자 토큰 (인라인 스타일용). globals.css --hama-* 토큰과 맞춤. */
 
 export const colors = {
-  /** 목업: 옅은 쿨그레이 페이지 배경 */
-  bgDefault: "#F8FAFC",
+  /** 따뜻한 캔버스(라이프스타일 추천 톤) */
+  bgDefault: "#faf8f5",
   bgSurface: "#ffffff",
   bgCard: "#ffffff",
-  bgMuted: "#f1f5f9",
-  bgInput: "#f8fafc",
+  bgMuted: "#f4f0ea",
+  bgInput: "#faf8f5",
   textPrimary: "#0f172a",
-  textSecondary: "#64748b",
+  textSecondary: "#57534e",
   textMuted: "#94a3b8",
-  borderSubtle: "#e2e8f0",
-  borderStrong: "#cbd5e1",
-  /** 브랜드 프라이머리 */
-  accentPrimary: "#3b82f6",
+  borderSubtle: "#e7e5e4",
+  borderStrong: "#d6d3d1",
+  /** 브랜드 프라이머리 — 신뢰 블루 유지 */
+  accentPrimary: "#2563eb",
   accentSoft: "#eff6ff",
-  accentStrong: "#2563eb",
+  accentStrong: "#1d4ed8",
   accentOnPrimary: "#ffffff",
   /** 추천 이유 강조(🔥 라인) */
-  reasonHot: "#ea580c",
-  /** 태그·칩 — 소프트 블루(목업 칩) */
+  reasonHot: "#c2410c",
+  /** 태그·칩 — 소프트 블루 */
   tagMutedBg: "#eff6ff",
   tagMutedText: "#1d4ed8",
+  /** 상황 배지 — 스톤 톤(프로토 pill 느낌 완화) */
+  tagDeepBg: "#fff7ed",
+  tagDeepText: "#9a3412",
+  tagDeepBorder: "rgba(234, 88, 12, 0.22)",
   statusOpen: "#16a34a",
   statusWarning: "#ca8a04",
   statusClosed: "#94a3b8",
   successSoft: "#dcfce7",
   warningSoft: "#fef9c3",
-  /** 히어로 그라데이션 힌트 */
-  heroTint: "#EEF2FF",
+  heroTint: "#FFF7ED",
 } as const;
 
 export const radius = {
@@ -65,7 +68,7 @@ export const shadow = {
 } as const;
 
 export const typo = {
-  heroTitle: { fontSize: 30, fontWeight: 900 as const, letterSpacing: "-0.035em" as const },
+  heroTitle: { fontSize: 32, fontWeight: 900 as const, letterSpacing: "-0.038em" as const, lineHeight: 1.18 as const },
   sectionTitle: { fontSize: 18, fontWeight: 800 as const, letterSpacing: "-0.02em" as const },
   cardTitle: { fontSize: 17, fontWeight: 800 as const },
   cardReason: { fontSize: 14, fontWeight: 700 as const },
