@@ -3,9 +3,14 @@
 import React from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
+import { scenarioRankKeyForRecommendationCopy } from "@/lib/scenarioEngine/scenarioRankBridge";
 import { businessStateFromCard, type BusinessState } from "@/lib/recommend/scoreParts";
 import { getDefaultCardImage } from "@/lib/defaultCardImage";
-import { buildRecommendationReason, getClientTimeOfDay } from "@/lib/recommend/buildRecommendationReason";
+import {
+  buildRecommendationReason,
+  getClientTimeOfDay,
+  type RecommendationReasonBlock,
+} from "@/lib/recommend/buildRecommendationReason";
 import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
 
 function bizLabel(s: BusinessState): string {
@@ -33,6 +38,8 @@ type Props = {
   card: HomeCard;
   rank: number;
   scenarioObject: ScenarioObject | null;
+  /** 목록에서 미리 계산한 이유(덱 variation) — 없으면 카드 내부에서 생성 */
+  reason?: RecommendationReasonBlock;
   onCardClick: () => void;
   onNavigate: () => void;
   onCall: () => void;
@@ -41,15 +48,20 @@ type Props = {
 export function RecommendationCard({
   card,
   rank,
-  scenarioObject: _scenarioObject,
+  scenarioObject,
+  reason: reasonOverride,
   onCardClick,
   onNavigate,
   onCall,
 }: Props) {
-  const reason = buildRecommendationReason(card, {
-    deckSlot: rank,
-    timeOfDay: getClientTimeOfDay(),
-  });
+  const requestedScenario = scenarioRankKeyForRecommendationCopy(scenarioObject);
+  const reason =
+    reasonOverride ??
+    buildRecommendationReason(card, {
+      deckSlot: rank,
+      timeOfDay: getClientTimeOfDay(),
+      requestedScenario,
+    });
   const featured = rank === 0;
   const thumb =
     (card as any).imageUrl ?? (card as any).image_url ?? getDefaultCardImage(card);
@@ -144,19 +156,6 @@ export function RecommendationCard({
       </div>
 
       <div style={{ padding: featured ? 18 : space.cardPadding, display: "flex", flexDirection: "column", gap: 8 }}>
-        <div
-          style={{
-            ...typo.cardTitle,
-            fontSize: featured ? 19 : 17,
-            color: colors.textPrimary,
-            lineHeight: 1.25,
-            fontWeight: 900,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {card.name}
-        </div>
-
         <p
           style={{
             ...typo.cardReason,
@@ -182,6 +181,19 @@ export function RecommendationCard({
         >
           {reason.subline}
         </p>
+
+        <div
+          style={{
+            ...typo.cardTitle,
+            fontSize: featured ? 19 : 17,
+            color: colors.textPrimary,
+            lineHeight: 1.25,
+            fontWeight: 900,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {card.name}
+        </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {reason.badges.slice(0, 3).map((t) => (

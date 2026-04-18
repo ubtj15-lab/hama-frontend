@@ -12,7 +12,41 @@ export type {
   RejectReason,
   RankDebugEntry,
   ScenarioEngineDebugBundle,
+  ChildAgeGroup,
+  WeatherCondition,
+  FamilyActivityType,
+  DateTimeBand,
 } from "./types";
+export {
+  inferChildAgeGroupFromQuery,
+  resolveWeatherCondition,
+  inferFamilyActivityType,
+  isFamilyLikeScenario,
+} from "./familyCourseContext";
+export {
+  inferDateTimeBandFromQuery,
+  resolveDateTimeBand,
+  defaultStartTimeForDateBand,
+} from "./dateCourseContext";
+export { inferDateCourseKind } from "./courseTemplateCatalog";
+export {
+  CourseLearningStore,
+  logCourseLearningEvent,
+  computeLearnedBoosts,
+  computeTemplateSelectionLearnedBoost,
+  COURSE_LEARNING_EVENT_WEIGHTS,
+  MIN_IMPRESSIONS_FULL_WEIGHT,
+  MIN_IMPRESSIONS_ANY,
+  LEARNED_BOOST_MAX_TOTAL,
+} from "@/lib/courseLearning";
+export type {
+  CourseLearningEventName,
+  CourseLearningLogPayload,
+  CoursePatternStats,
+  PlaceCourseStats,
+  LearnedBoostParts,
+} from "@/lib/courseLearning";
+export { runCourseLearningChecks } from "@/lib/courseLearning/courseLearning.scenarios";
 
 export { SCENARIO_CONFIGS } from "./scenarioConfigs";
 export { SCENARIO_ALIAS_GROUPS } from "./scenarioAliases";
@@ -51,7 +85,16 @@ export {
   generateCourses,
 } from "./courseEngine";
 export { buildFunctionalCourseTitle, buildSituationCourseTitle, buildCourseBadges } from "./coursePresentation";
-export { runCourseEngineScenarioChecks } from "./courseEngine.scenarios";
+export {
+  runCourseEngineScenarioChecks,
+  runFamilyCourseTemplateChecks,
+  runFamilyCourseWeatherAgeChecks,
+  runDateCourseTimeWeatherChecks,
+  runAdvancedCourseEngineChecks,
+  runToddlerRainyIndoorPreferenceChecks,
+  runDateEveningRestaurantCafeChecks,
+  runLearningBoostRankImprovesChecks,
+} from "./courseEngine.scenarios";
 export { runIntentClassificationChecks } from "./intentClassification.scenarios";
 export { runCompositeIntentChecks } from "./compositeIntent.scenarios";
 export { runConversationScenarioChecks } from "@/lib/conversation/conversation.scenarios";

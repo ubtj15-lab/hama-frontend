@@ -24,6 +24,7 @@ export function buildReasonWordLine(params: {
   blob: string;
   withKids: boolean;
   category: string | null | undefined;
+  blockKidMessaging?: boolean;
 }): string {
   const { km, voice, intent, blob, withKids } = params;
   const has = (re: RegExp) => re.test(blob);
@@ -44,8 +45,13 @@ export function buildReasonWordLine(params: {
       else if (has(/디저트|브런치/)) tags.push("디저트");
       break;
     case "family":
-      tags.push(kidSignal ? "아이와" : "가족");
-      if (has(/주차/)) tags.push("주차");
+      if (params.blockKidMessaging) {
+        tags.push("근처");
+        if (has(/주차/)) tags.push("주차");
+      } else {
+        tags.push(kidSignal ? "아이와" : "가족");
+        if (has(/주차/)) tags.push("주차");
+      }
       break;
     case "solo": {
       const cat = String(params.category ?? "").toLowerCase();
@@ -102,6 +108,8 @@ function scenarioClause(params: {
   blob: string;
   withKids: boolean;
   category: string | null | undefined;
+  /** 횟집·술집 등 — 아이 동반 문구 금지 */
+  blockKidMessaging?: boolean;
 }): string {
   const { voice, intent, blob, withKids } = params;
   const kidSignal =
@@ -111,6 +119,9 @@ function scenarioClause(params: {
     case "date":
       return "데이트 상황에 어울리는 곳이에요";
     case "family":
+      if (params.blockKidMessaging) {
+        return "메뉴와 분위기는 방문 전에 한 번 더 확인해 보세요";
+      }
       return kidSignal ? "아이 동반에 무난한 곳이에요" : "가족 단위로 가기 좋아요";
     case "solo": {
       const cat = String(params.category ?? "").toLowerCase();
@@ -136,6 +147,7 @@ export function buildHomeRecommendationReason(params: {
   blob: string;
   withKids: boolean;
   category: string | null | undefined;
+  blockKidMessaging?: boolean;
 }): string {
   const { voice, business, km, blob } = params;
   const head = scenarioClause(params);

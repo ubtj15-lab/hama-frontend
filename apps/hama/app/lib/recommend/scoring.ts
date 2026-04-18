@@ -12,6 +12,7 @@ import {
   WEIGHT_DISTANCE,
   WEIGHT_FOOD_INTENT,
   WEIGHT_COMPOSITE,
+  WEIGHT_CHILD_FRIENDLY,
   WEIGHT_KEYWORD,
   WEIGHT_QUALITY,
   WEIGHT_SCENARIO,
@@ -56,7 +57,17 @@ import {
   isCategoryAllowedRelaxed,
   isPreferredScenarioCategory,
   isHardExcludedNonPoi,
+  normalizeCategory,
 } from "./scenarioCategoryRules";
+import {
+  childFriendlyScore,
+  isHardExcludedForKidsScenario,
+  shouldBlockKidFriendlyMessaging,
+} from "./childFriendlyScore";
+import {
+  isDrinkOnlyCafeCard,
+  shouldExcludeDrinkOnlyForScenarioRanking,
+} from "./mealContextSignals";
 
 export type RecommendScoreBreakdown = {
   distanceScore: number;
@@ -136,6 +147,16 @@ function distanceKmToCard(card: HomeCard, ctx: BuildRecommendationsContext): num
   return haversineKm({ lat: ctx.userLat, lng: ctx.userLng }, { lat, lng });
 }
 
+/** 데이트 시나리오 랭킹: 가족·혼밥·회식 느낌이 강하면 감점(텍스트 휴리스틱) */
+function dateScenarioMismatchPenalty(blob: string): number {
+  let pen = 0;
+  if (/아이동반|키즈존|키즈룸|유아(?:의자)?|어린이\s*식당|가족\s*단위|가족\s*식당|키즈\s*환영|아이\s*환영/.test(blob)) pen += 28;
+  if (/혼밥|1인\s*석|혼자\s*식사|카운터\s*좌석|빠른\s*회전|회전\s*빠름/.test(blob)) pen += 22;
+  if (/회식|단체\s*모임|단체\s*전문|야유회|포장마차\s*회식/.test(blob)) pen += 18;
+  if (/푸드코트|food\s*court/i.test(blob)) pen += 12;
+  return pen;
+}
+
 function scenarioRawForKey(blob: string, key: RecommendScenarioKey, card: HomeCard): number {
   let sum = 0;
   for (const rule of SCENARIO_TAG_RULES[key]) {
@@ -148,12 +169,16 @@ function scenarioRawForKey(blob: string, key: RecommendScenarioKey, card: HomeCa
   if (key === "solo" && c?.for_work === true) sum += 14;
   if (key === "group" && c?.reservation_required === true) sum += 14;
 
+  if (key === "date") {
+    sum += dateScenarioMismatchPenalty(blob);
+  }
+
   if (key === "family" && !hasExplicitFamilySignalsInBlob(blob) && c?.with_kids !== true) {
     sum *= 0.52;
   } else if (key === "family" && !hasExplicitFamilySignalsInBlob(blob) && c?.with_kids === true) {
     sum *= 0.72;
   }
-  return sum;
+  return Math.max(0, sum);
 }
 
 function scenarioNormFromRaw(raw: number, key: RecommendScenarioKey): number {
@@ -278,7 +303,8 @@ function selectDeckWithScenarioGuarantee(
   const pref = sorted.filter((s) => isPreferredScenarioCategory(s.card, rankKey));
   const fb = sorted.filter((s) => !isPreferredScenarioCategory(s.card, rankKey));
 
-  const minPref = Math.min(2, limit);
+  /** 가능하면 덱 전부(3장) 시나리오 허용 업종으로 채움 */
+  const minPref = pref.length >= limit ? limit : Math.min(2, limit);
   if (pref.length >= minPref) {
     const first = selectWithDiversity(pref, minPref);
     const pickedIds = new Set(first.map((x) => x.card.id));
@@ -342,6 +368,38 @@ export function buildTopRecommendations(
       }
 
       if (
+        strict &&
+        !relaxed &&
+        (strict.scenario === "family" ||
+          strict.scenario === "family_kids" ||
+          strict.scenario === "parent_child_outing")
+      ) {
+        if (isHardExcludedForKidsScenario(card)) continue;
+        const cat = normalizeCategory(card);
+        if (
+          (cat === "restaurant" || cat === "cafe") &&
+          childFriendlyScore(card) < 0.28
+        ) {
+          continue;
+        }
+      }
+
+      const rankKeyFromObjEarly = ctx.scenarioObject ? scenarioTypeToRankKey(ctx.scenarioObject.scenario) : null;
+      const rankKeyForDrink =
+        rankKeyFromObjEarly ??
+        (intentionToScenarioKey(ctx.intent) !== "neutral"
+          ? (intentionToScenarioKey(ctx.intent) as RecommendScenarioKey)
+          : null);
+      if (
+        !relaxed &&
+        rankKeyForDrink &&
+        isDrinkOnlyCafeCard(card) &&
+        shouldExcludeDrinkOnlyForScenarioRanking(rankKeyForDrink, strict, ctx.searchQuery ?? null)
+      ) {
+        continue;
+      }
+
+      if (
         !relaxed &&
         strict?.intentType === "search_strict" &&
         strict.hardConstraints?.length &&
@@ -381,18 +439,17 @@ export function buildTopRecommendations(
       if (km > 3.5) distS *= 0.55;
     }
     const scenarioCfg = ctx.scenarioObject ? resolveScenarioConfig(ctx.scenarioObject) : null;
-    const rankKeyFromObj = ctx.scenarioObject ? scenarioTypeToRankKey(ctx.scenarioObject.scenario) : null;
 
     let activeScenario: RecommendScenarioKey;
     let scenarioS: number;
     let rawScenario: number;
 
-    if (rankKeyFromObj && scenarioCfg) {
-      activeScenario = rankKeyFromObj;
+    if (rankKeyFromObjEarly && scenarioCfg) {
+      activeScenario = rankKeyFromObjEarly;
       const boost = configTagBoostRaw(blob, scenarioCfg);
       const typeFit = placeTypePreferenceRaw(card, scenarioCfg);
-      rawScenario = scenarioRawForKey(blob, rankKeyFromObj, card) + boost + typeFit;
-      const cap = (SCENARIO_RAW_CAP[rankKeyFromObj] || 1) + 55;
+      rawScenario = scenarioRawForKey(blob, rankKeyFromObjEarly, card) + boost + typeFit;
+      const cap = (SCENARIO_RAW_CAP[rankKeyFromObjEarly] || 1) + 55;
       scenarioS = Math.min(100, (rawScenario / cap) * 100);
     } else {
       const picked = pickActiveScenario(card, ctx.intent, blob);
@@ -436,7 +493,7 @@ export function buildTopRecommendations(
 
     const compS = useComposite ? compositeIntentRawScore(card, so) : 0;
 
-    const finalScore =
+    let finalScore =
       distS * WEIGHT_DISTANCE +
       scenarioS * WEIGHT_SCENARIO +
       bizS * WEIGHT_BUSINESS +
@@ -445,6 +502,13 @@ export function buildTopRecommendations(
       bonS * WEIGHT_BONUS +
       foodS * (useFoodRanking ? WEIGHT_FOOD_INTENT : 0) +
       compS * (useComposite ? WEIGHT_COMPOSITE : 0);
+
+    const familyRank =
+      rankKeyFromObjEarly === "family" ||
+      (!ctx.scenarioObject && intentionToScenarioKey(ctx.intent) === "family");
+    if (familyRank) {
+      finalScore += childFriendlyScore(card) * 100 * WEIGHT_CHILD_FRIENDLY;
+    }
 
     const breakdown: RecommendScoreBreakdown = {
       distanceScore: distS,
@@ -469,6 +533,7 @@ export function buildTopRecommendations(
       blob,
       withKids: (card as any).with_kids === true,
       category: card.category,
+      blockKidMessaging: voiceForContent === "family" ? shouldBlockKidFriendlyMessaging(card) : false,
     });
 
     const foodExtras =
@@ -488,7 +553,7 @@ export function buildTopRecommendations(
             blob,
             businessState,
             distanceKm: km,
-            explicitScenario: rankKeyFromObj!,
+            explicitScenario: rankKeyFromObjEarly!,
             primaryLabelOverride: scenarioCfg.primaryBadgeLabel,
             ...(badgeExtras.length ? { extraShortTags: badgeExtras } : {}),
           })

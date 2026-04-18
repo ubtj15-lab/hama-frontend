@@ -21,6 +21,8 @@ export const WEIGHT_BONUS = 0.02;
 export const WEIGHT_FOOD_INTENT = 0.17;
 /** 복합 의도(취향·시나리오 fit·hard/soft·시간대) */
 export const WEIGHT_COMPOSITE = 0.08;
+/** 가족·아이 시나리오 랭킹 — childFriendlyScore(0~1) 가산 */
+export const WEIGHT_CHILD_FRIENDLY = 0.1;
 
 /** 거리 알 수 없을 때 거리 점수 (0~100) */
 export const DISTANCE_SCORE_WHEN_UNKNOWN = 45;

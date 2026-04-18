@@ -1,7 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useLayoutEffect, useRef } from "react";
 import type { CoursePlan } from "@/lib/scenarioEngine/types";
+import type { AnalyticsContext } from "@/lib/analytics/buildLogPayload";
+import { mergeLogPayload } from "@/lib/analytics/buildLogPayload";
+import { logEvent } from "@/lib/logEvent";
 import { Chip } from "@/_components/common/Chip";
 import { Thumbnail } from "@/_components/common/Thumbnail";
 import { colors, radius, space, typo } from "@/lib/designTokens";
@@ -13,6 +16,8 @@ type Props = {
   rank: number;
   thumbCard: HomeCard | null;
   badges: string[];
+  /** 결과 페이지 분석용 베이스(시나리오 등) — 노출 시 course_impression에 합쳐 전송 */
+  logExtras?: AnalyticsContext;
   onOpenCourse: () => void;
   onNavigateFirst: () => void;
 };
@@ -25,9 +30,40 @@ export function CourseDeckCard({
   rank,
   thumbCard,
   badges,
+  logExtras,
   onOpenCourse,
   onNavigateFirst,
 }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const impressed = useRef(false);
+
+  useLayoutEffect(() => {
+    if (impressed.current || !cardRef.current) return;
+    const el = cardRef.current;
+    const base: AnalyticsContext = logExtras ?? { scenario: "generic" };
+    const obs = new IntersectionObserver(
+      ([e]) => {
+        if (e?.isIntersecting && !impressed.current) {
+          impressed.current = true;
+          logEvent(
+            "course_impression",
+            mergeLogPayload(base, {
+              course_id: plan.id,
+              card_rank: rank,
+              source: "results_deck",
+              template_id: plan.templateId ?? "beam",
+              scenario: plan.scenario,
+              step_categories: plan.template,
+              place_ids: plan.stops.map((s) => s.placeId),
+            })
+          );
+        }
+      },
+      { threshold: 0.35 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [plan.id, plan.scenario, plan.template, plan.templateId, plan.stops, rank, logExtras]);
   const fallbackCard: HomeCard = {
     id: plan.stops[0]?.placeId ?? "course",
     name: plan.stops[0]?.placeName ?? "코스",
@@ -46,6 +82,7 @@ export function CourseDeckCard({
 
   return (
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
       onClick={onOpenCourse}
@@ -72,6 +109,11 @@ export function CourseDeckCard({
         <div style={{ ...typo.cardTitle, fontSize: 16, color: colors.textPrimary, lineHeight: 1.25 }}>
           {plan.functionalTitle || plan.situationTitle}
         </div>
+        {plan.narrativeDescription && (
+          <div style={{ ...typo.caption, color: colors.textSecondary, marginTop: 4, lineHeight: 1.35 }}>
+            {plan.narrativeDescription}
+          </div>
+        )}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
           <Chip>코스 · {plan.stops.length}곳</Chip>
           {badges.slice(0, 3).map((b) => (

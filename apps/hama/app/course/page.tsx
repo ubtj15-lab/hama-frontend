@@ -1,9 +1,15 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useLayoutEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { CoursePlan } from "@/lib/scenarioEngine/types";
-import { readCoursePlanFromSession } from "@/lib/session/courseSession";
+import {
+  readCoursePlanWithFallback,
+  stashCoursePlan,
+  encodeCoursePlanSnapshot,
+} from "@/lib/session/courseSession";
+import { logCourseDebug } from "@/lib/course/courseDebugLog";
+import { logCourseStartClick } from "@/lib/analytics/courseEvents";
 import { colors, radius, space, typo } from "@/lib/designTokens";
 import { CourseTimeline } from "@/_components/detail/CourseTimeline";
 import { openDirections } from "@/lib/openDirections";
@@ -15,12 +21,45 @@ function CourseDetailInner() {
   const router = useRouter();
   const sp = useSearchParams();
   const id = sp.get("id") ?? "";
+  const courseSnapQ = sp.get("courseSnap")?.trim() ?? "";
   const [plan, setPlan] = useState<CoursePlan | null>(null);
+  const [restoreAttempted, setRestoreAttempted] = useState(false);
 
-  useEffect(() => {
-    if (!id) return;
-    setPlan(readCoursePlanFromSession(id));
-  }, [id]);
+  useLayoutEffect(() => {
+    if (!id) {
+      setRestoreAttempted(true);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const h = window.location.hash;
+    const hashSnap = h.startsWith("#hamaCourseSnap=")
+      ? decodeURIComponent(h.slice("#hamaCourseSnap=".length))
+      : undefined;
+    const search = new URLSearchParams(window.location.search);
+    const qSnap = search.get("courseSnap")?.trim() ?? undefined;
+    const { plan: p } = readCoursePlanWithFallback(id, { courseSnapB64: qSnap, hashSnapB64: hashSnap });
+    setPlan(p);
+    setRestoreAttempted(true);
+  }, [id, courseSnapQ]);
+
+  if (!id) {
+    return (
+      <main style={{ padding: space.pageX }}>
+        <p>코스 id가 없어.</p>
+        <button type="button" onClick={() => router.push("/")} style={{ marginTop: 12 }}>
+          홈으로
+        </button>
+      </main>
+    );
+  }
+
+  if (!restoreAttempted) {
+    return (
+      <main style={{ padding: space.pageX }}>
+        <p>코스 불러오는 중…</p>
+      </main>
+    );
+  }
 
   if (!plan) {
     return (
@@ -78,8 +117,27 @@ function CourseDetailInner() {
       <button
         type="button"
         onClick={() => {
+          logCourseDebug({
+            event: "course_click_start",
+            courseId: plan.id,
+            stepIds: plan.stops.map((s) => s.placeId),
+            extra: { ua: typeof navigator !== "undefined" ? navigator.userAgent : "" },
+          });
+          logCourseStartClick({
+            courseId: plan.id,
+            placeIds: plan.stops.map((s) => s.placeId),
+          });
           logEvent("course_cta_click", mergeLogPayload(base, { course_id: plan.id, page: "course_detail" }));
-          router.push("/");
+          stashCoursePlan(plan);
+          const snap = encodeCoursePlanSnapshot(plan);
+          const q = (plan.sourceQuery ?? plan.situationTitle ?? "").trim();
+          const cid = encodeURIComponent(plan.id);
+          const maxQuerySnap = 4500;
+          const useHashOnly = snap.length > maxQuerySnap;
+          const snapQuery = !useHashOnly ? `&courseSnap=${encodeURIComponent(snap)}` : "";
+          const hashPart = useHashOnly ? `#hamaCourseSnap=${encodeURIComponent(snap)}` : "";
+          const qPart = q ? `q=${encodeURIComponent(q)}&` : "";
+          router.push(`/results?${qPart}courseId=${cid}${snapQuery}${hashPart}`);
         }}
         style={{
           width: "100%",

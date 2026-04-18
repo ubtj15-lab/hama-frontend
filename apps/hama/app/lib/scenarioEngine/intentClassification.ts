@@ -6,6 +6,8 @@ import {
   inferFoodSubFromMenus,
 } from "./foodIntent";
 import { augmentScenarioWithComposite } from "./compositeIntent";
+import { inferDateTimeBandFromQuery } from "./dateCourseContext";
+import { inferChildAgeGroupFromQuery } from "./familyCourseContext";
 
 export { detectFoodSubCategory, detectMenuIntent } from "./foodIntent";
 import type { IntentCategory, ScenarioObject, ScenarioType, UserIntentType } from "./types";
@@ -151,12 +153,26 @@ export function detectMoodAndConstraints(rawQuery: string): Partial<ScenarioObje
     out.indoorPreferred = true;
     out.mood = [...(out.mood ?? []), "indoor"];
   }
-  if (/(비 오는 날|비오는 날|장마)/.test(q)) {
+  if (/(비 오는 날|비오는 날|장마|우산|소나기)/.test(q)) {
     out.weatherHint = "rain";
+    out.weatherCondition = "rainy";
     out.indoorPreferred = true;
   }
   if (/(눈 오는|첫눈)/.test(q)) {
     out.weatherHint = "snow";
+    out.weatherCondition = "cold";
+    out.indoorPreferred = true;
+  }
+  if (/(폭염|무더위|더운\s*날|너무\s*더|한여름\s*한낮)/.test(q)) {
+    out.weatherCondition = "hot";
+    out.indoorPreferred = true;
+  }
+  if (/(한파|추운\s*날|너무\s*추|영하)/.test(q)) {
+    out.weatherCondition = "cold";
+    out.indoorPreferred = true;
+  }
+  if (/(미세먼지|초미세|대기\s*질|공기\s*안\s*좋)/.test(q)) {
+    out.weatherCondition = "bad_air";
     out.indoorPreferred = true;
   }
   if (/(조용한|한적|잔잔)/.test(q)) {
@@ -329,6 +345,16 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
   }
 
   obj = resolveAmbiguousScenario(obj);
+
+  const famScenarios: ScenarioType[] = ["family", "family_kids", "parent_child_outing"];
+  if (famScenarios.includes(obj.scenario) && obj.childAgeGroup == null) {
+    obj.childAgeGroup = inferChildAgeGroupFromQuery(raw || q);
+  }
+
+  if (obj.scenario === "date" && obj.dateTimeBand == null) {
+    const band = inferDateTimeBandFromQuery(raw || q);
+    if (band) obj.dateTimeBand = band;
+  }
 
   return augmentScenarioWithComposite(obj);
 }

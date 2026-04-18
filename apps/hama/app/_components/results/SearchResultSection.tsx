@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { RecommendationCard } from "@/_components/results/RecommendationCard";
+import { useDeckRecommendationReasons } from "@/_hooks/useDeckRecommendationReasons";
 import { colors, space } from "@/lib/designTokens";
 import { logEvent } from "@/lib/logEvent";
 import { mergeLogPayload, type AnalyticsContext } from "@/lib/analytics/buildLogPayload";
@@ -61,6 +62,7 @@ export function SearchResultSection({ results: resultsProp, scenarioObject, logB
     [results]
   );
   const slice = cardsForUi.slice(0, RECOMMEND_DECK_SIZE);
+  const deckReasons = useDeckRecommendationReasons(cardsForUi, scenarioObject ?? null);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {
@@ -156,6 +158,7 @@ export function SearchResultSection({ results: resultsProp, scenarioObject, logB
             card={card}
             rank={i}
             scenarioObject={scenarioObject ?? null}
+            reason={deckReasons[i]}
             onCardClick={() => {
               logEvent(
                 "place_click",

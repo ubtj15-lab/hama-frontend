@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:reason": "npx tsx app/lib/recommend/runRecommendationReasonScenarios.ts",
+    "test:ranking": "npx tsx app/lib/recommend/runRankingScenarios.ts",
+    "test:course": "npx tsx app/lib/scenarioEngine/runCourseEngineTests.ts"
   },
   "dependencies": {
     "@hama/shared":"file:../../packages/shared","@supabase/supabase-js": "^2.90.1",

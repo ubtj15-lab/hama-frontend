@@ -38,8 +38,8 @@ function titlePoolForScenario(scenario: ScenarioType): readonly (readonly string
     case "family_kids":
     case "parent_child_outing":
       return [
-        ["아이랑 편한 실내 코스", "실내 위주 가족 나들이 코스", "아이 동선 부담 적은 코스"],
-        ["가족과 가볍게 돌아보는 코스", "아이랑 여유 있게 즐기는 코스", "부담 없는 가족 동선"],
+        ["아이랑 놀기까지 이어지는 코스예요", "식사 후 바로 활동하기 좋아요", "움직임이 있는 가족 코스예요"],
+        ["아이가 지루하지 않게 구성했어요", "부담 없이 즐길 수 있는 코스예요", "실내·실외 알맞게 섞인 나들이 코스"],
       ];
     case "parents":
       return [
@@ -57,7 +57,10 @@ function titlePoolForScenario(scenario: ScenarioType): readonly (readonly string
         ["모임에 어울리는 활기찬 코스", "시끌벅적 분위기의 모임 코스"],
       ];
     case "family":
-      return [["가족과 편하게 즐기는 코스", "온 가족 동선이 편한 코스", "가족 외출 기본 코스"]];
+      return [
+        ["아이랑 놀기까지 이어지는 코스예요", "움직임이 있는 가족 코스예요", "아이가 지루하지 않게 구성했어요"],
+        ["식사 후 바로 활동하기 좋아요", "부담 없이 즐길 수 있는 코스예요", "가족 외출에 맞춘 동선이에요"],
+      ];
     default:
       return [];
   }

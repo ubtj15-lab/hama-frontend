@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useHomeCards } from "@/_hooks/useHomeCards";
 import { useHomeMode } from "@/_hooks/useHomeMode";
@@ -26,6 +26,7 @@ import { applyRecommendationModeToScenario } from "@/lib/scenarioEngine/effectiv
 import type { RecommendationMode } from "@/lib/scenarioEngine/types";
 import type { IntentionType } from "@/lib/intention";
 import type { HomeCard } from "@/lib/storeTypes";
+import type { CoursePlan } from "@/lib/scenarioEngine/types";
 import { RECOMMEND_DECK_SIZE, RECENT_EXCLUDE_LIMIT } from "@/lib/recommend/recommendConstants";
 import { ResultsHeader } from "@/_components/results/ResultsHeader";
 import { ActiveConstraintChips } from "@/_components/results/ActiveConstraintChips";
@@ -40,7 +41,15 @@ import { HamaEvents } from "@/lib/analytics/events";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { openDirections } from "@/lib/openDirections";
 import { stashPlaceForSession } from "@/lib/session/placeSession";
-import { stashCoursePlan } from "@/lib/session/courseSession";
+import { readCoursePlanWithFallback, stashCoursePlan, encodeCoursePlanSnapshot } from "@/lib/session/courseSession";
+import { homeCardsFromCourseStops } from "@/lib/course/courseCardSnapshot";
+import { logCourseDebug } from "@/lib/course/courseDebugLog";
+import {
+  logCourseRandomFallbackBlocked,
+  logCourseRestoreFail,
+  logCourseRestoreSuccess,
+  logCourseRouteEnter,
+} from "@/lib/analytics/courseEvents";
 import { recordRecentIntent } from "@/lib/recentIntents";
 import FeedbackFab from "@/components/FeedbackFab";
 
@@ -50,7 +59,36 @@ const DEBUG_FORCE_SEARCH_SECTION = process.env.NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SE
 function ResultsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const courseIdFromSearch = searchParams.get("courseId")?.trim() ?? "";
+  const courseSnapFromSearch = searchParams.get("courseSnap")?.trim() ?? "";
   const qRaw = searchParams.get("q")?.trim() ?? "";
+  /** Chrome 등 첫 프레임에서 searchParams와 window.location 불일치 방지 */
+  const [courseIdSynced, setCourseIdSynced] = useState(courseIdFromSearch);
+  const [hashCourseSnap, setHashCourseSnap] = useState<string | null>(null);
+  const [fixedPlan, setFixedPlan] = useState<CoursePlan | null>(null);
+  const [restoreSource, setRestoreSource] = useState<import("@/lib/session/courseSession").CourseRestoreSource | null>(null);
+  const [restoreDone, setRestoreDone] = useState(false);
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const cid = p.get("courseId")?.trim() ?? "";
+      if (cid) setCourseIdSynced(cid);
+      const h = window.location.hash;
+      if (h.startsWith("#hamaCourseSnap=")) {
+        setHashCourseSnap(decodeURIComponent(h.slice("#hamaCourseSnap=".length)));
+      }
+    } catch {}
+  }, []);
+
+  const courseIdParam = courseIdSynced || courseIdFromSearch;
+
+  const queryForScenario = useMemo(
+    () => qRaw || fixedPlan?.sourceQuery?.trim() || fixedPlan?.situationTitle?.trim() || "",
+    [qRaw, fixedPlan?.sourceQuery, fixedPlan?.situationTitle]
+  );
+
   const [shuffleKey, setShuffleKey] = useState(0);
   const started = useRef<number>(0);
   const [modeOverride, setModeOverride] = useState<RecommendationMode | null>(null);
@@ -62,13 +100,15 @@ function ResultsContent() {
   }, [qRaw]);
 
   useEffect(() => {
-    if (!qRaw) {
+    const q = queryForScenario;
+    if (!q && !courseIdParam) {
       setConvCtx(null);
       return;
     }
+    if (!q) return;
     const prev = loadConversationContext();
-    setConvCtx(processConversationTurn(qRaw, prev));
-  }, [qRaw]);
+    setConvCtx(processConversationTurn(q, prev));
+  }, [queryForScenario, courseIdParam]);
 
   useEffect(() => {
     started.current = performance.now();
@@ -76,10 +116,70 @@ function ResultsContent() {
   }, [qRaw]);
 
   useEffect(() => {
-    if (!qRaw) router.replace("/");
-  }, [qRaw, router]);
+    if (!courseIdParam && !qRaw) router.replace("/");
+  }, [qRaw, courseIdParam, router]);
 
-  const scenarioObject = useMemo(() => mergeResultsScenario(qRaw, convCtx), [qRaw, convCtx]);
+  /** courseId만 있고 q 없으면 복원된 코스의 sourceQuery로 URL 보강(선택) */
+  useEffect(() => {
+    if (!courseIdParam || qRaw) return;
+    const sq = fixedPlan?.sourceQuery?.trim();
+    if (sq) {
+      router.replace(`/results?q=${encodeURIComponent(sq)}&courseId=${encodeURIComponent(courseIdParam)}`);
+    }
+  }, [courseIdParam, qRaw, router, fixedPlan?.sourceQuery]);
+
+  useEffect(() => {
+    if (!courseIdParam) {
+      setFixedPlan(null);
+      setRestoreSource(null);
+      setRestoreDone(true);
+      return;
+    }
+    setRestoreDone(false);
+    const snap = courseSnapFromSearch || undefined;
+    const hs = hashCourseSnap || undefined;
+    logCourseDebug({
+      event: "course_route_enter",
+      courseId: courseIdParam,
+      extra: { has_query_snap: Boolean(snap), has_hash_snap: Boolean(hs), ua: typeof navigator !== "undefined" ? navigator.userAgent : "" },
+    });
+    logCourseRouteEnter({
+      courseId: courseIdParam,
+      hasQuerySnap: Boolean(snap),
+      hasHashSnap: Boolean(hs),
+    });
+    const { plan, source } = readCoursePlanWithFallback(courseIdParam, {
+      courseSnapB64: snap,
+      hashSnapB64: hs,
+    });
+    setFixedPlan(plan);
+    setRestoreSource(source);
+    setRestoreDone(true);
+    if (plan) {
+      logCourseDebug({
+        event: "course_restore_success",
+        courseId: courseIdParam,
+        stepIds: plan.stops.map((s) => s.placeId),
+        source: source ?? "restored",
+      });
+      logCourseRestoreSuccess({
+        courseId: courseIdParam,
+        placeIds: plan.stops.map((s) => s.placeId),
+        restoreSource: source,
+      });
+    } else {
+      logCourseDebug({
+        event: "course_restore_fail",
+        courseId: courseIdParam,
+        source: null,
+      });
+      logCourseRestoreFail({ courseId: courseIdParam });
+    }
+  }, [courseIdParam, courseSnapFromSearch, hashCourseSnap]);
+
+  const fixedCourseFromSession = fixedPlan;
+
+  const scenarioObject = useMemo(() => mergeResultsScenario(queryForScenario, convCtx), [queryForScenario, convCtx]);
 
   const effectiveMode: RecommendationMode = useMemo(() => {
     const inferred = scenarioObject?.recommendationMode ?? "single";
@@ -137,6 +237,8 @@ function ResultsContent() {
       scenarioObject: effectiveScenario ?? undefined,
       /** 매장명 검색이 끝날 때까지 추천 페치·랭킹 지연 — 첫 프레임 레이스 방지 */
       deferRanking: !rankingBootstrapReady || deferRecForPlaceLookup,
+      /** 세션에 고정된 코스로 돌아온 경우 재랭킹·재페치 없음 */
+      skipFetch: Boolean(courseIdParam),
       /**
        * 매장명 매칭 후에도 추천 풀은 가져온다. 메인 리스트는 `!showNameSearch`일 때만 그려서
        * 검색 카드가 덮어쓰이지 않고, `secondaryRecommendCards`로 "이런 곳도 있어"만 채운다.
@@ -157,12 +259,53 @@ function ResultsContent() {
   );
 
   const coursePlans = useMemo(() => {
+    if (courseIdParam) return [];
     if (!effectiveScenario || effectiveScenario.recommendationMode !== "course") return [];
     const pool = courseCandidatePool.length ? courseCandidatePool : candidatePool;
     if (!pool.length) return [];
     const cfg = resolveScenarioConfig(effectiveScenario);
     return generateCourses(pool, effectiveScenario, cfg, 3, { homeTab: "all" });
-  }, [effectiveScenario, candidatePool, courseCandidatePool]);
+  }, [courseIdParam, effectiveScenario, candidatePool, courseCandidatePool]);
+
+  useEffect(() => {
+    if (courseIdParam || coursePlans.length === 0) return;
+    const p = coursePlans[0];
+    if (!p) return;
+    logCourseDebug({
+      event: "course_generate",
+      courseId: p.id,
+      stepIds: p.stops.map((s) => s.placeId),
+      extra: { ua: typeof navigator !== "undefined" ? navigator.userAgent : "" },
+    });
+  }, [coursePlans, courseIdParam]);
+
+  const courseFixedCards = useMemo(() => {
+    if (!fixedCourseFromSession?.stops?.length) return null;
+    return homeCardsFromCourseStops(fixedCourseFromSession.stops);
+  }, [fixedCourseFromSession]);
+
+  const courseRestoreFailed = Boolean(
+    courseIdParam && restoreDone && !fixedCourseFromSession?.stops?.length
+  );
+
+  useEffect(() => {
+    if (courseRestoreFailed && courseIdParam) {
+      logCourseDebug({
+        event: "course_random_fallback_blocked",
+        courseId: courseIdParam,
+        fallbackBlocked: true,
+        source: restoreSource,
+      });
+      logCourseRandomFallbackBlocked({ courseId: courseIdParam, restoreSource });
+    }
+  }, [courseRestoreFailed, courseIdParam, restoreSource]);
+
+  const isCourseFixedResults = Boolean(courseFixedCards?.length) && !courseRestoreFailed;
+  const primaryRecommendationCards: HomeCard[] = courseRestoreFailed
+    ? []
+    : isCourseFixedResults && courseFixedCards
+      ? courseFixedCards
+      : cards;
 
   useEffect(() => {
     if (!convCtx?.sessionId || bootstrapBusy) return;
@@ -170,6 +313,11 @@ function ResultsContent() {
 
     const hitIds = placeHits.slice(0, RECOMMEND_DECK_SIZE).map((c) => c.id);
 
+    if (courseIdParam && fixedCourseFromSession?.stops?.length) {
+      const ids = homeCardsFromCourseStops(fixedCourseFromSession.stops).map((c) => c.id);
+      patchLastRecommendations(convCtx.sessionId, [...hitIds, ...ids].slice(0, 20));
+      return;
+    }
     if (effectiveMode === "course" && coursePlans.length > 0) {
       const ids = [...new Set(coursePlans.flatMap((p) => p.stops.map((s) => s.placeId)))];
       patchLastRecommendations(convCtx.sessionId, [...hitIds, ...ids].slice(0, 20));
@@ -187,21 +335,32 @@ function ResultsContent() {
     coursePlans,
     cards,
     placeHits,
+    courseIdParam,
+    fixedCourseFromSession,
   ]);
 
   const logBase = useMemo(() => analyticsFromScenario(effectiveScenario), [effectiveScenario]);
 
   const isCourseMode = effectiveMode === "course";
-  const showCourseDeck = Boolean(!pageBusy && isCourseMode && coursePlans.length > 0 && !showNameSearch);
-  const courseFallbackActive = Boolean(!pageBusy && isCourseMode && coursePlans.length === 0);
-  const showRecommendationList = Boolean(!pageBusy && (!isCourseMode || courseFallbackActive));
+  const showCourseDeck = Boolean(
+    !pageBusy && isCourseMode && coursePlans.length > 0 && !showNameSearch && !courseIdParam
+  );
+  const courseFallbackActive = Boolean(
+    !pageBusy && isCourseMode && coursePlans.length === 0 && !courseIdParam
+  );
+  const showRecommendationList = Boolean(
+    !pageBusy &&
+      !courseRestoreFailed &&
+      (!isCourseMode || courseFallbackActive || isCourseFixedResults)
+  );
 
   useEffect(() => {
+    if (courseIdParam) return;
     if (pageBusy || effectiveMode !== "course" || isLoading) return;
     if (coursePlans.length > 0) return;
     setModeOverride("single");
     setShuffleKey((k) => k + 1);
-  }, [pageBusy, effectiveMode, isLoading, coursePlans.length]);
+  }, [courseIdParam, pageBusy, effectiveMode, isLoading, coursePlans.length]);
 
   const poolById = useMemo(() => new Map(candidatePool.map((c) => [c.id, c])), [candidatePool]);
 
@@ -296,10 +455,10 @@ function ResultsContent() {
 
   useEffect(() => {
     if (!qRaw || pageBusy || showNameSearch) return;
-    if (!showRecommendationList || cards.length === 0) return;
+    if (!showRecommendationList || primaryRecommendationCards.length === 0) return;
     if (recommendDeckLogged.current) return;
     recommendDeckLogged.current = true;
-    const slice = cards.slice(0, RECOMMEND_DECK_SIZE);
+    const slice = primaryRecommendationCards.slice(0, RECOMMEND_DECK_SIZE);
     logEvent(
       HamaEvents.recommend_deck_impression,
       mergeLogPayload(logBase, {
@@ -308,9 +467,18 @@ function ResultsContent() {
         recommendation_voices: slice.map((c) => c.recommendationVoice ?? null),
         count: slice.length,
         page: "results",
+        course_fixed: isCourseFixedResults,
       })
     );
-  }, [qRaw, pageBusy, showNameSearch, showRecommendationList, cards, logBase]);
+  }, [
+    qRaw,
+    pageBusy,
+    showNameSearch,
+    showRecommendationList,
+    primaryRecommendationCards,
+    isCourseFixedResults,
+    logBase,
+  ]);
 
   useEffect(() => {
     if (!showNameSearch) return;
@@ -344,19 +512,22 @@ function ResultsContent() {
     effectiveScenario?.intentType === "search_strict" &&
     !isCourseMode &&
     !showNameSearch &&
-    cards.length > 0 &&
-    cards.length < RECOMMEND_DECK_SIZE;
+    !isCourseFixedResults &&
+    primaryRecommendationCards.length > 0 &&
+    primaryRecommendationCards.length < RECOMMEND_DECK_SIZE;
 
   const headerLoading = bootstrapBusy || (placeLookupBusy && !showNameSearch);
 
   const headerCount =
     !pageBusy && isCourseMode && coursePlans.length > 0
       ? coursePlans.length
-      : !pageBusy && showNameSearch
-        ? Math.min(placeHits.length, RECOMMEND_DECK_SIZE)
-        : !pageBusy
-          ? cards.length
-          : undefined;
+      : !pageBusy && isCourseFixedResults
+        ? primaryRecommendationCards.length
+        : !pageBusy && showNameSearch
+          ? Math.min(placeHits.length, RECOMMEND_DECK_SIZE)
+          : !pageBusy
+            ? primaryRecommendationCards.length
+            : undefined;
 
   if (DEBUG_FORCE_SEARCH_SECTION) {
     const debugResults: HomeCard[] = [{ id: "debug-1", name: "두부마을", category: null }];
@@ -399,7 +570,56 @@ function ResultsContent() {
     );
   }
 
-  if (!qRaw) return null;
+  if (!courseIdParam && !queryForScenario) return null;
+
+  if (courseIdParam && !restoreDone) {
+    return (
+      <main style={{ minHeight: "100vh", padding: 24, background: colors.bgDefault }}>
+        <p style={{ color: colors.textSecondary }}>코스를 불러오는 중…</p>
+      </main>
+    );
+  }
+
+  if (courseRestoreFailed) {
+    return (
+      <main style={{ minHeight: "100vh", padding: 24, background: colors.bgDefault }}>
+        <button
+          type="button"
+          onClick={() => router.back()}
+          style={{
+            border: "none",
+            background: "transparent",
+            color: colors.accentPrimary,
+            fontWeight: 800,
+            fontSize: 14,
+            cursor: "pointer",
+            marginBottom: 16,
+            padding: 0,
+          }}
+        >
+          ← 이전 화면
+        </button>
+        <p style={{ fontSize: 16, lineHeight: 1.5, color: colors.textPrimary, marginBottom: 12 }}>
+          선택한 코스를 다시 불러오지 못했어요. 이전 화면으로 돌아가 다시 선택해 주세요.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          style={{
+            padding: "12px 20px",
+            borderRadius: 12,
+            border: "none",
+            background: colors.accentPrimary,
+            color: "#fff",
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          홈으로
+        </button>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -519,7 +739,7 @@ function ResultsContent() {
           !showNameSearch &&
           !pageBusy &&
           !showCourseDeck &&
-          cards.length > 0 && (
+          primaryRecommendationCards.length > 0 && (
             <p style={{ fontSize: 13, color: colors.textSecondary, margin: "0 0 12px", lineHeight: 1.45 }}>
               같은 이름의 매장은 못 찾았어. 대신 이런 곳은 어때?
             </p>
@@ -529,7 +749,7 @@ function ResultsContent() {
           !showNameSearch &&
           !pageBusy &&
           !showCourseDeck &&
-          cards.length === 0 &&
+          primaryRecommendationCards.length === 0 &&
           placeLookupDone && (
             <p style={{ color: colors.textSecondary }}>
               {placeSearchEnabled
@@ -538,7 +758,7 @@ function ResultsContent() {
             </p>
           )}
 
-        {courseFallbackActive && !showNameSearch && cards.length > 0 && (
+        {courseFallbackActive && !showNameSearch && primaryRecommendationCards.length > 0 && (
           <p
             style={{
               fontSize: 14,
@@ -552,9 +772,9 @@ function ResultsContent() {
           </p>
         )}
 
-        {!pageBusy && !showNameSearch && showRecommendationList && cards.length > 0 && (
+        {!pageBusy && !showNameSearch && showRecommendationList && primaryRecommendationCards.length > 0 && (
           <RecommendationList
-            cards={cards}
+            cards={primaryRecommendationCards}
             scenarioObject={effectiveScenario}
             onPlaceClick={(card, rank) => {
               logEvent("place_click", mergeLogPayload(logBase, { place_id: card.id, name: card.name, card_rank: rank }));
@@ -587,10 +807,28 @@ function ResultsContent() {
                   rank={i}
                   thumbCard={thumbCard}
                   badges={plan.badges}
+                  logExtras={logBase}
                   onOpenCourse={() => {
-                    stashCoursePlan(plan);
+                    const merged = { ...plan, sourceQuery: qRaw || plan.sourceQuery };
+                    stashCoursePlan(merged);
+                    const snap = encodeCoursePlanSnapshot(merged);
+                    const maxQuerySnap = 4500;
+                    const useHashOnly = snap.length > maxQuerySnap;
+                    const snapQuery = !useHashOnly ? `&courseSnap=${encodeURIComponent(snap)}` : "";
+                    const hashPart = useHashOnly ? `#hamaCourseSnap=${encodeURIComponent(snap)}` : "";
+                    logCourseDebug({
+                      event: "course_click_start",
+                      courseId: plan.id,
+                      stepIds: plan.stops.map((s) => s.placeId),
+                      extra: {
+                        from: "results_deck",
+                        ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
+                        snap_in_url: !useHashOnly,
+                        snap_in_hash: useHashOnly,
+                      },
+                    });
                     logEvent("home_course_pick", mergeLogPayload(logBase, { course_id: plan.id }));
-                    router.push(`/course?id=${encodeURIComponent(plan.id)}`);
+                    router.push(`/course?id=${encodeURIComponent(plan.id)}${snapQuery}${hashPart}`);
                   }}
                   onNavigateFirst={() => {
                     if (!first) return;

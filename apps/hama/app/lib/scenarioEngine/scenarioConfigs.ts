@@ -3,7 +3,15 @@ import type { ScenarioConfig, ScenarioType } from "./types";
 const T = {
   foodKid: { 아이동반: 28, 키즈존: 26, 주차: 20, 유아의자: 18, 실내: 15 },
   calmParent: { 조용: 26, 좌석: 18, 주차: 18, 예약: 16, 접근: 12 },
-  dateMood: { 분위기: 22, 로맨틱: 20, 사진: 16, 야경: 14, 대화: 14 },
+  dateMood: {
+    분위기: 22,
+    로맨틱: 20,
+    감성: 18,
+    조용: 16,
+    대화: 14,
+    사진: 16,
+    야경: 14,
+  },
 } as const;
 
 /** 시나리오별 설정 — 새 시나리오는 이 Record에 항목만 추가 */
@@ -18,9 +26,9 @@ export const SCENARIO_CONFIGS: Record<ScenarioType, ScenarioConfig> = {
     indoorBias: 0.2,
     activityBias: 0.4,
     preferredCourseTemplates: [
-      ["FOOD", "ACTIVITY", "CAFE"],
       ["FOOD", "CAFE", "WALK"],
-      ["CULTURE", "CAFE", "FOOD"],
+      ["FOOD", "ACTIVITY", "CAFE"],
+      ["CAFE", "ACTIVITY", "FOOD"],
     ],
   },
   family: {
@@ -30,7 +38,12 @@ export const SCENARIO_CONFIGS: Record<ScenarioType, ScenarioConfig> = {
     tagWeights: { 가족: 24, 주차: 20, 좌석: 18, 메뉴: 15, 웨이팅: 10 },
     defaultStartTime: "12:00",
     defaultDurationHours: 2,
-    preferredCourseTemplates: [["FOOD", "CAFE"], ["ACTIVITY", "FOOD", "CAFE"]],
+    activityBias: 0.45,
+    preferredCourseTemplates: [
+      ["FOOD", "ACTIVITY"],
+      ["FOOD", "ACTIVITY", "CAFE"],
+      ["ACTIVITY", "FOOD"],
+    ],
   },
   family_kids: {
     label: "아이랑",
@@ -39,10 +52,13 @@ export const SCENARIO_CONFIGS: Record<ScenarioType, ScenarioConfig> = {
     tagWeights: { ...T.foodKid, 놀이: 20, 체험: 18 },
     defaultStartTime: "11:00",
     defaultDurationHours: 3,
+    activityBias: 0.55,
     preferredCourseTemplates: [
-      ["ACTIVITY", "FOOD", "CAFE"],
-      ["CULTURE", "FOOD", "CAFE"],
-      ["ACTIVITY", "CAFE"],
+      ["FOOD", "ACTIVITY"],
+      ["FOOD", "ACTIVITY", "CAFE"],
+      ["FOOD", "WALK", "CAFE"],
+      ["ACTIVITY", "FOOD"],
+      ["FOOD", "CAFE"],
     ],
   },
   parent_child_outing: {
@@ -53,11 +69,13 @@ export const SCENARIO_CONFIGS: Record<ScenarioType, ScenarioConfig> = {
     defaultStartTime: "10:30",
     defaultDurationHours: 4,
     indoorBias: -0.1,
-    activityBias: 0.5,
+    activityBias: 0.55,
     preferredCourseTemplates: [
+      ["FOOD", "ACTIVITY"],
+      ["FOOD", "WALK", "CAFE"],
+      ["FOOD", "ACTIVITY", "CAFE"],
+      ["ACTIVITY", "FOOD"],
       ["WALK", "FOOD", "CAFE"],
-      ["ACTIVITY", "CAFE", "FOOD"],
-      ["CULTURE", "CAFE"],
     ],
   },
   parents: {
@@ -80,7 +98,11 @@ export const SCENARIO_CONFIGS: Record<ScenarioType, ScenarioConfig> = {
     preferredPlaceTypes: ["FOOD", "CAFE", "CULTURE"],
     tagWeights: { 혼밥: 28, 혼자: 22, 빠른: 18, "1인": 16, 가성비: 12 },
     defaultDurationHours: 1,
-    preferredCourseTemplates: [["FOOD", "CAFE"], ["CULTURE", "FOOD"]],
+    preferredCourseTemplates: [
+      ["FOOD", "CAFE"],
+      ["CAFE", "WALK"],
+      ["CAFE"],
+    ],
   },
   group: {
     label: "회식",
@@ -90,9 +112,9 @@ export const SCENARIO_CONFIGS: Record<ScenarioType, ScenarioConfig> = {
     defaultStartTime: "18:30",
     defaultDurationHours: 3,
     preferredCourseTemplates: [
-      ["FOOD", "ACTIVITY", "CAFE"],
-      ["FOOD", "ACTIVITY"],
       ["FOOD", "CAFE"],
+      ["FOOD", "ACTIVITY"],
+      ["ACTIVITY", "FOOD"],
     ],
   },
   friends: {

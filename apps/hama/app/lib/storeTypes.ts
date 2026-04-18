@@ -104,6 +104,9 @@ export type HomeCard = {
 
   /** 랭킹 시 선택된 시나리오 축 — 추천 카피 다양화용(optional) */
   recommendationVoice?: "date" | "family" | "solo" | "group";
+
+  /** meal | light | drink — 추천 문구(식사 vs 음료 전용) 보정용(optional) */
+  servingType?: "meal" | "light" | "drink";
 };
 
 // ✅ 기존 코드들이 Place 타입을 import하는 경우가 있어서 alias 제공

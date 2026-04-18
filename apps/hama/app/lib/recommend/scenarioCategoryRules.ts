@@ -14,7 +14,7 @@ const SCENARIO_ALLOWED: Record<RecommendScenarioKey, ReadonlySet<NormalizedCateg
   date: new Set(["restaurant", "cafe", "activity"]),
   family: new Set(["restaurant", "cafe", "activity"]),
   solo: new Set(["restaurant", "cafe"]),
-  group: new Set(["restaurant", "activity"]),
+  group: new Set(["restaurant", "cafe", "activity"]),
 };
 
 /** neutral(시나리오 불명): 식음·액티비티 중심, 미용은 글로벌 제외로 걸러짐 */
@@ -23,7 +23,8 @@ const NEUTRAL_ALLOWED = new Set<NormalizedCategory>(["restaurant", "cafe", "acti
 /** 시나리오 추천에서 항상 제외(의료·금융·편의 등). 미용은 별도 처리. */
 const HARD_NON_POI_PATTERNS: RegExp[] = [
   /병원|의원|치과|한의원|약국|클리닉|의료|건강검진|내과|외과|소아과/i,
-  /은행|금융|ATM|증권|보험|캐피탈|저축은행/i,
+  /은행|금융|ATM|증권|보험|캐피탈|저축은행|대출|대부/i,
+  /부동산|공인중개|중개업소|매물/i,
   /편의점|gs25|cu\b|세븐일레븐|이마트24|미니스톱|지에스25/i,
   /안마|마사지|정비소|수리|세탁소/i,
 ];

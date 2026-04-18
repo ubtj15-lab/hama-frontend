@@ -3,6 +3,7 @@
 import React from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
+import { useDeckRecommendationReasons } from "@/_hooks/useDeckRecommendationReasons";
 import { RecommendationCard } from "./RecommendationCard";
 import { space } from "@/lib/designTokens";
 
@@ -22,6 +23,7 @@ export function RecommendationList({
   onCall,
 }: Props) {
   const slice = cards.slice(0, 3);
+  const deckReasons = useDeckRecommendationReasons(cards, scenarioObject);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: space.card }}>
       {slice.map((card, i) => (
@@ -30,6 +32,7 @@ export function RecommendationList({
           card={card}
           rank={i}
           scenarioObject={scenarioObject}
+          reason={deckReasons[i]}
           onCardClick={() => onPlaceClick(card, i)}
           onNavigate={() => onNavigate(card, i)}
           onCall={() => onCall(card, i)}
