@@ -23,7 +23,7 @@ export function impliesMealServingContext(args: {
   if (so.intentCategory === "FOOD" && so.intentType === "search_strict") return true;
   if (
     (so.scenario === "family" || so.scenario === "family_kids" || so.scenario === "parent_child_outing") &&
-    (so.timeOfDay === "lunch" || so.timeOfDay === "dinner" || /식사|외식|맛집|식당|한끼/.test(q))
+    /식사|외식|맛집|식당|한끼/.test(q)
   ) {
     return true;
   }

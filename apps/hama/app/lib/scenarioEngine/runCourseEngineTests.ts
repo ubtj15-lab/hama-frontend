@@ -5,8 +5,12 @@ import {
   runAdvancedCourseEngineChecks,
   runCourseEngineScenarioChecks,
   runDateCourseTimeWeatherChecks,
+  runDateEveningClearPipelineChecks,
   runFamilyCourseTemplateChecks,
   runFamilyCourseWeatherAgeChecks,
+  runFamilyKidsToddlerRainyPipelineChecks,
+  runLowImpressionsLearnedBoostNearZeroChecks,
+  runSoloLunchNoDrinkOnlyMealChecks,
 } from "./courseEngine.scenarios";
 
 function main() {
@@ -16,6 +20,10 @@ function main() {
     ...runDateCourseTimeWeatherChecks(),
     ...runFamilyCourseWeatherAgeChecks(),
     ...runAdvancedCourseEngineChecks(),
+    ...runDateEveningClearPipelineChecks(),
+    ...runFamilyKidsToddlerRainyPipelineChecks(),
+    ...runSoloLunchNoDrinkOnlyMealChecks(),
+    ...runLowImpressionsLearnedBoostNearZeroChecks(),
   ];
   if (failures.length) {
     // eslint-disable-next-line no-console

@@ -84,6 +84,9 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior-y: none;
+  /* PWA standalone / 노치: 고정 하단 UI는 .hama-pb-safe 등으로 보강 */
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
 }
 
 /* 글래스 서피스 */
@@ -111,4 +114,9 @@ body {
   justify-content: center;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.65);
+}
+
+/* PWA: 하단 제스처 영역(홈 인디케이터) */
+.hama-pb-safe {
+  padding-bottom: max(var(--hama-space-3, 12px), env(safe-area-inset-bottom, 0));
 }

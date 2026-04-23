@@ -59,6 +59,8 @@ export function computeLearnedBoosts(
     totalTravelMin: number;
     def: CourseTemplateShape & { id: string; steps: PlaceType[] };
     cards: HomeCard[];
+    /** Supabase `recommendation_pattern_stats` (impressions>=20) */
+    recommendationPatternTableBoost?: number;
   }
 ): LearnedBoostParts {
   if (!store) {
@@ -114,6 +116,12 @@ export function computeLearnedBoosts(
     total = LEARNED_BOOST_MAX_TOTAL;
   }
 
+  const recTable = input.recommendationPatternTableBoost ?? 0;
+  const recAdd = Math.min(4, recTable);
+  if (recAdd > 0) {
+    total = Math.min(LEARNED_BOOST_MAX_TOTAL, total + recAdd);
+  }
+
   let narrativeHint: LearnedBoostParts["narrativeHint"];
   const imp = Math.max(exact?.impressions ?? 0, agg?.impressions ?? 0);
   const famSc =
@@ -134,6 +142,7 @@ export function computeLearnedBoosts(
     placeBoost,
     featureBoost,
     total,
+    recommendationPatternTableBoost: recAdd > 0 ? recAdd : undefined,
     narrativeHint,
   };
 }

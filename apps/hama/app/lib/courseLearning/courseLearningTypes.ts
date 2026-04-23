@@ -105,6 +105,8 @@ export type LearnedBoostParts = {
   placeBoost: number;
   featureBoost: number;
   total: number;
+  /** `recommendation_pattern_stats.learned_boost` 에서 merge (0~4 가산, 상한은 total 내) */
+  recommendationPatternTableBoost?: number;
   /** 내러티브 보조 (점수 임계 넘을 때만) */
   narrativeHint?: CourseLearningNarrativeHint;
 };

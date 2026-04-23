@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useLayoutEffect, useRef } from "react";
+import { logRecommendationPlace } from "@/lib/analytics/recommendationPlaceLog";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { scenarioRankKeyForRecommendationCopy } from "@/lib/scenarioEngine/scenarioRankBridge";
@@ -54,6 +55,27 @@ export function RecommendationCard({
   onNavigate,
   onCall,
 }: Props) {
+  const cardEl = useRef<HTMLDivElement>(null);
+  const impressOnce = useRef(false);
+  useLayoutEffect(() => {
+    if (impressOnce.current || !cardEl.current) return;
+    const el = cardEl.current;
+    const obs = new IntersectionObserver(
+      ([e]) => {
+        if (e?.isIntersecting && !impressOnce.current) {
+          impressOnce.current = true;
+          logRecommendationPlace("place_impression", card, scenarioObject, {
+            rank_position: rank,
+            source_page: "results",
+          });
+        }
+      },
+      { threshold: 0.3 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [card.id, rank, scenarioObject]);
+
   const requestedScenario = scenarioRankKeyForRecommendationCopy(scenarioObject);
   const reason =
     reasonOverride ??
@@ -76,12 +98,23 @@ export function RecommendationCard({
 
   return (
     <div
+      ref={cardEl}
       role="button"
       tabIndex={0}
-      onClick={onCardClick}
+      onClick={() => {
+        logRecommendationPlace("place_click", card, scenarioObject, {
+          rank_position: rank,
+          source_page: "results",
+        });
+        onCardClick();
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
+          logRecommendationPlace("place_click", card, scenarioObject, {
+            rank_position: rank,
+            source_page: "results",
+          });
           onCardClick();
         }
       }}

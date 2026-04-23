@@ -18,6 +18,22 @@ import {
 } from "./familyCourseContext";
 import { resolveDateTimeBand } from "./dateCourseContext";
 
+/**
+ * 단계 점수 가중치 (합 1.0) — rule-based, 학습은 별도 가산.
+ * drink-only는 servingTimeFit에서 0에 가깝게 처리.
+ */
+export const STEP_SCORE_WEIGHTS = {
+  categoryFit: 0.22,
+  scenarioTagFit: 0.16,
+  weatherFit: 0.06,
+  distanceFit: 0.16,
+  servingAndTimeFit: 0.12,
+  moodTagFit: 0.07,
+  qualityFit: 0.16,
+  openStatusFit: 0.05,
+  /** date/solo/family 등 시나리오 전용 보정은 가산(별도 블록) */
+} as const;
+
 /** 코스 추천에서 제외: 미용/금융/의료/부동산 등 */
 export function isExcludedFromCoursePool(card: HomeCard): boolean {
   const c = String(card.category ?? "").toLowerCase();
@@ -76,6 +92,37 @@ function scenarioTagFit(card: HomeCard, config: ScenarioConfig): number {
   return Math.min(100, best * 2.5);
 }
 
+/** 날씨·단계 유형 적합도 0~100 */
+export function weatherFitScore(placeType: PlaceType, obj: ScenarioObject): number {
+  const wx = resolveWeatherCondition(obj);
+  if (wx === "clear") {
+    if (placeType === "WALK") return 95;
+    return 82;
+  }
+  if (wx === "rainy" || wx === "bad_air") {
+    if (placeType === "WALK") return 22;
+    if (placeType === "ACTIVITY") return 68;
+    if (placeType === "FOOD" || placeType === "CAFE") return 78;
+    return 72;
+  }
+  if (wx === "hot" || wx === "cold") {
+    if (placeType === "WALK") return 45;
+    return 70;
+  }
+  return 75;
+}
+
+/** 혼밥·가성비·부담 없음 등 솔로 적합도 0~100 */
+export function soloFriendlyScore(card: HomeCard, stepType: PlaceType): number {
+  const hay = `${card.name ?? ""} ${(card.tags ?? []).join(" ")} ${(card.mood ?? []).join(" ")}`.toLowerCase();
+  let s = 58;
+  if (stepType === "FOOD" || stepType === "CAFE") {
+    if (/(가성비|합리|빠른|간단|1인|혼밥|부담|가벼운|캐주얼)/.test(hay)) s += 28;
+    if (/(단체|룸|회식|예식)/.test(hay)) s -= 32;
+  }
+  return Math.min(100, Math.max(0, s));
+}
+
 function timeOfDayFit(placeType: PlaceType, obj: ScenarioObject): number {
   const tod = obj.timeOfDay;
   if (!tod) return 70;
@@ -117,14 +164,18 @@ export type StepScoreContext = {
 };
 
 /**
- * 단계 후보 점수 0~100
- * 가중: category 0.25, scenario 0.25, distance 0.2, serving/time 0.15, quality 0.1, mood 0.05
+ * 단계 후보 점수 0~100 — `STEP_SCORE_WEIGHTS` 기반 rule + 시나리오 보정.
  */
 export function computeStepScore(card: HomeCard, ctx: StepScoreContext): number {
   const mapped = mapPlaceToPlaceType(card);
   const categoryFit = mapped === ctx.stepType ? 100 : mapped === "FOOD" && ctx.stepType === "CAFE" ? 45 : 35;
 
-  const scenarioFit = scenarioTagFit(card, ctx.config);
+  let scenarioTag = scenarioTagFit(card, ctx.config);
+  if (ctx.obj.scenario === "solo" && (ctx.stepType === "FOOD" || ctx.stepType === "CAFE")) {
+    scenarioTag = Math.min(100, (scenarioTag * 0.55 + soloFriendlyScore(card, ctx.stepType) * 0.45));
+  }
+
+  const wxFit = weatherFitScore(ctx.stepType, ctx.obj);
 
   let distanceFit = 85;
   if (ctx.prev) {
@@ -133,24 +184,30 @@ export function computeStepScore(card: HomeCard, ctx: StepScoreContext): number 
       distanceFit = distanceScoreFromKm(km);
       if (ctx.nearOnly && km > 3) distanceFit *= 0.35;
       else if (km > 6) distanceFit *= 0.5;
+      if (km > 8) distanceFit *= 0.72;
     }
   }
 
   const stFit = servingTimeFit(card, ctx.stepType, ctx.obj);
+  const todFit = timeOfDayFit(ctx.stepType, ctx.obj);
+  const servingAndTime = (stFit + todFit) / 2;
+
   const q = qualityScoreFromCard(card) / 100;
   const biz = businessScoreFromState(businessStateFromCard(card)) / 100;
 
   const moodHay = [...(card.mood ?? []), ...(card.tags ?? [])].join(" ");
   const moodFit = moodHay.length > 0 ? 72 : 55;
 
+  const w = STEP_SCORE_WEIGHTS;
   const raw =
-    categoryFit * 0.25 +
-    scenarioFit * 0.25 +
-    distanceFit * 0.2 +
-    stFit * 0.15 +
-    (q * 100) * 0.08 +
-    biz * 100 * 0.02 +
-    moodFit * 0.05;
+    categoryFit * w.categoryFit +
+    scenarioTag * w.scenarioTagFit +
+    wxFit * w.weatherFit +
+    distanceFit * w.distanceFit +
+    servingAndTime * w.servingAndTimeFit +
+    moodFit * w.moodTagFit +
+    (q * 100) * w.qualityFit +
+    biz * 100 * w.openStatusFit;
 
   let out = Math.max(0, Math.min(100, Math.round(raw)));
   const sk = ctx.obj.scenario;
@@ -295,6 +352,7 @@ export function computeCourseScore(
     const age = obj.childAgeGroup ?? "unknown";
     if (badWx && template.includes("WALK")) base -= 12;
     if (age === "toddler" && totalTravelMin > 48) base -= 10;
+    if (age === "toddler" && totalMinutes > 220) base -= 8;
     if (age === "child" && template.includes("CAFE") && !courseHasEnergyOrPlayStep(template)) {
       base -= 8;
     }
@@ -317,6 +375,18 @@ export function computeCourseScore(
   }
   const travelFit = Math.max(0, 100 - travelPenalty);
   let combined = base * 0.85 + travelFit * 0.15;
+
+  /** 1단계 예약 가능 시 약한 가산(실행 일정 연결) */
+  const first = cards[0];
+  if (first && (first as { reservation_required?: boolean | null }).reservation_required === true) {
+    combined = Math.min(100, combined + 2);
+  }
+
+  if (sk === "solo" && totalMinutes > 200) combined = Math.max(0, combined - 6);
+  if (sk === "date" && (obj.dateTimeBand ?? resolveDateTimeBand(obj)) === "night" && totalMinutes > 300) {
+    combined = Math.max(0, combined - 8);
+  }
+
   if (learnedBoost != null && learnedBoost !== 0) {
     combined = Math.max(0, Math.min(100, combined + learnedBoost));
   }

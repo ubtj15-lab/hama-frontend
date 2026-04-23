@@ -1,7 +1,9 @@
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
+import { computeLearnedBoosts } from "@/lib/courseLearning/courseLearningBoost";
 import { generateCourses } from "./courseEngine";
 import { resolveScenarioConfig } from "./resolveScenarioConfig";
 import { resolveDateTimeBand } from "./dateCourseContext";
+import { isDrinkOnlyForMealStep } from "./courseServingType";
 import {
   buildNarrativeDescription,
   COURSE_TEMPLATE_CATALOG,
@@ -288,6 +290,186 @@ export function runDateEveningRestaurantCafeChecks(): string[] {
     scoreTemplateSelection(eveCafe, dateEve, cfg) <= scoreTemplateSelection(dayBrunch, dateEve, cfg)
   ) {
     failures.push("date evening: date-eve-food-cafe should beat daytime brunch template score");
+  }
+  return failures;
+}
+
+/**
+ * 테스트 1 — date + evening + clear: 식당→카페 흐름·현실적 총 소요.
+ */
+export function runDateEveningClearPipelineChecks(): string[] {
+  const failures: string[] = [];
+  const cfg = SCENARIO_CONFIGS.date;
+  const obj: ScenarioObject = {
+    intentType: "course_generation",
+    scenario: "date",
+    rawQuery: "맑은 저녁 데이트",
+    timeOfDay: "dinner",
+    weatherCondition: "clear",
+    confidence: 0.9,
+  };
+  if (resolveDateTimeBand(obj) !== "evening") {
+    failures.push("date evening clear: expected dateTimeBand evening");
+  }
+  const pool: HomeCard[] = [
+    {
+      id: "r1",
+      name: "분위기 한식",
+      category: "restaurant",
+      lat: 37.5,
+      lng: 127.0,
+      tags: ["분위기", "데이트"],
+      mood: ["감성"],
+    },
+    { id: "c1", name: "루프탑 카페", category: "cafe", lat: 37.5001, lng: 127.0001, tags: ["야경"] },
+    { id: "r2", name: "파스타", category: "restaurant", lat: 37.5, lng: 127.0 },
+    { id: "c2", name: "디저트", category: "cafe", lat: 37.5002, lng: 127.0002 },
+    { id: "a1", name: "전시", category: "activity", lat: 37.5003, lng: 127.0003 },
+  ];
+  const plans = generateCourses(pool, obj, cfg, 3);
+  if (plans.length === 0) {
+    failures.push("date evening clear: expected at least one course plan");
+    return failures;
+  }
+  const first = plans[0]!;
+  if (first.totalMinutes < 90 || first.totalMinutes > 480) {
+    failures.push(`date evening clear: totalMinutes ${first.totalMinutes} should be roughly 90–480`);
+  }
+  const foodIdx = first.template.indexOf("FOOD");
+  const cafeIdx = first.template.indexOf("CAFE");
+  if (foodIdx < 0 || cafeIdx < 0 || foodIdx >= cafeIdx) {
+    failures.push(
+      `date evening clear: expected FOOD before CAFE in template, got ${first.template.join("→")}`
+    );
+  }
+  return failures;
+}
+
+/**
+ * 테스트 2 — family_kids + toddler + rainy: 실내·액티비티 우선, 산책형에 밀리지 않음.
+ */
+export function runFamilyKidsToddlerRainyPipelineChecks(): string[] {
+  const failures: string[] = [];
+  const famCfg = SCENARIO_CONFIGS.family_kids;
+  const rainyToddler: ScenarioObject = {
+    intentType: "course_generation",
+    scenario: "family_kids",
+    rawQuery: "유모차 아기랑 비 오는 날",
+    childAgeGroup: "toddler",
+    weatherCondition: "rainy",
+    confidence: 0.9,
+  };
+  const rankedRainy = rankTemplatesForScenario(rainyToddler, famCfg);
+  const topRainy = rankedRainy[0];
+  if (topRainy?.steps.includes("WALK")) {
+    failures.push("family_kids toddler+rainy: top template must not be WALK-centric");
+  }
+  const tAct = COURSE_TEMPLATE_CATALOG.find((t) => t.id === "toddler-food-activity");
+  const tWalk = COURSE_TEMPLATE_CATALOG.find((t) => t.id === "toddler-food-walk");
+  if (
+    tAct &&
+    tWalk &&
+    scoreTemplateSelection(tWalk, rainyToddler, famCfg) >= scoreTemplateSelection(tAct, rainyToddler, famCfg)
+  ) {
+    failures.push("family_kids toddler+rainy: food→activity should beat food→walk");
+  }
+  const pool: HomeCard[] = [
+    { id: "fr1", name: "키즈 메뉴 식당", category: "restaurant", lat: 37.4, lng: 126.9, tags: ["아이동반"] },
+    { id: "fa1", name: "실내 키즈카페", category: "activity", lat: 37.4001, lng: 126.9001, tags: ["실내"] },
+    { id: "fc1", name: "디저트", category: "cafe", lat: 37.4002, lng: 126.9002 },
+  ];
+  const plans = generateCourses(pool, rainyToddler, famCfg, 3);
+  for (const p of plans) {
+    if (p.totalMinutes > 360) {
+      failures.push(`family_kids toddler+rainy: course too long (${p.totalMinutes}m)`);
+    }
+    const travel = p.stops.reduce((s, x) => s + (x.travelMinutesToNext ?? 0), 0);
+    if (travel > 120) {
+      failures.push(`family_kids toddler+rainy: travel sum too high (${travel}m)`);
+    }
+  }
+  return failures;
+}
+
+/**
+ * 테스트 3 — solo + lunch + mealRequired: 식사 단계에 drink-only 불가.
+ */
+export function runSoloLunchNoDrinkOnlyMealChecks(): string[] {
+  const failures: string[] = [];
+  const soloCfg = SCENARIO_CONFIGS.solo;
+  const soloLunch: ScenarioObject = {
+    intentType: "course_generation",
+    scenario: "solo",
+    rawQuery: "점심 혼밥",
+    timeOfDay: "lunch",
+    mealRequired: true,
+    confidence: 0.9,
+  };
+  const pool: HomeCard[] = [
+    { id: "drinkOnly", name: "베이커리 카페", category: "restaurant", tags: ["베이커리", "커피"] },
+    { id: "mealOk", name: "한식 점심", category: "restaurant", tags: ["한식", "점심"] },
+    { id: "cafe1", name: "에스프레소", category: "cafe", tags: ["혼밥"] },
+  ];
+  const plans = generateCourses(pool, soloLunch, soloCfg, 3);
+  for (const p of plans) {
+    for (const st of p.stops) {
+      if (st.placeType !== "FOOD") continue;
+      const card = pool.find((c) => c.id === st.placeId);
+      if (card && isDrinkOnlyForMealStep(card, "FOOD")) {
+        failures.push(`solo lunch: FOOD step must not be drink-only (${st.placeName})`);
+      }
+    }
+    if (p.totalMinutes > 300) {
+      failures.push(`solo lunch: prefer shorter course, got ${p.totalMinutes}m`);
+    }
+  }
+  return failures;
+}
+
+/**
+ * 테스트 5 — 노출 수 적음: learned boost 거의 0 (rule 유지).
+ */
+export function runLowImpressionsLearnedBoostNearZeroChecks(): string[] {
+  const failures: string[] = [];
+  const store = new CourseLearningStore();
+  const payload = {
+    courseId: "c1",
+    templateId: "date-eve-food-cafe",
+    scenario: "date" as const,
+    stepCategories: ["FOOD", "CAFE"] as const,
+    placeIds: ["p1", "p2"],
+  };
+  for (let i = 0; i < 2; i++) {
+    store.recordEvent("course_impression", payload as any);
+  }
+  const obj: ScenarioObject = {
+    intentType: "course_generation",
+    scenario: "date",
+    rawQuery: "저녁 데이트",
+    timeOfDay: "dinner",
+    confidence: 0.9,
+  };
+  const cards: HomeCard[] = [
+    { id: "p1", name: "식당", category: "restaurant" },
+    { id: "p2", name: "카페", category: "cafe" },
+  ];
+  const boost = computeLearnedBoosts(store, {
+    obj,
+    templateId: "date-eve-food-cafe",
+    steps: ["FOOD", "CAFE"],
+    placeIds: ["p1", "p2"],
+    totalTravelMin: 12,
+    def: {
+      id: "date-eve-food-cafe",
+      steps: ["FOOD", "CAFE"],
+      indoorPreference: "mixed",
+      movementLevel: "medium",
+      vibeTags: ["데이트"],
+    },
+    cards,
+  });
+  if (boost.total > 0.5) {
+    failures.push(`low impressions: learned boost should be ~0, got ${boost.total}`);
   }
   return failures;
 }

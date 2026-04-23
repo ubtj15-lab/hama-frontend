@@ -9,6 +9,8 @@ import type { ScenarioConfig, ScenarioObject, PlaceType, CoursePlan, CourseStop,
 import { buildCourseBadges, buildFunctionalCourseTitle, buildSituationCourseTitle } from "./coursePresentation";
 import { snapshotHomeCardForCourse } from "@/lib/course/courseCardSnapshot";
 import { computeLearnedBoosts } from "@/lib/courseLearning/courseLearningBoost";
+import { buildPatternKey, contextFromScenarioObject, stepPatternFromSteps } from "@/lib/courseLearning/courseLearningKeys";
+import { getPatternBoostFromMap } from "@/lib/recommend/getPatternBoost";
 import type { LearnedBoostParts } from "@/lib/courseLearning/courseLearningTypes";
 import type { CourseLearningStore } from "@/lib/courseLearning/courseLearningStore";
 import { resolveDateTimeBand, defaultStartTimeForDateBand } from "./dateCourseContext";
@@ -259,7 +261,8 @@ function scorePath(
   cards: HomeCard[],
   obj: ScenarioObject,
   config: ScenarioConfig,
-  learningStore?: CourseLearningStore
+  learningStore: CourseLearningStore | undefined,
+  recommendationPatternBoostMap: ReadonlyMap<string, number> | undefined
 ): ScoredPath | null {
   if (cards.length !== def.steps.length) return null;
   const nearOnly = obj.distanceTolerance === "near_only";
@@ -281,6 +284,13 @@ function scorePath(
 
   const tlConfig = configWithDateStart(obj, config);
   const { totalMinutes } = buildTimelineInner(cards, def.steps, tlConfig, def.id);
+  const ctxK = contextFromScenarioObject(obj);
+  const pKey = buildPatternKey({
+    ...ctxK,
+    templateId: def.id,
+    stepPattern: stepPatternFromSteps(def.steps),
+  });
+  const recTable = getPatternBoostFromMap(pKey, recommendationPatternBoostMap);
   const learned = computeLearnedBoosts(learningStore, {
     obj,
     templateId: def.id,
@@ -289,6 +299,7 @@ function scorePath(
     totalTravelMin: totalTravel,
     def,
     cards,
+    recommendationPatternTableBoost: recTable,
   });
   const courseScore = computeCourseScore(
     cards,
@@ -397,25 +408,33 @@ function pickThreeDiverse(paths: ScoredPath[], obj: ScenarioObject): ScoredPath[
   }
 
   const out: ScoredPath[] = [];
+  const usedIds = new Set<string>();
+  for (const level of ["low", "medium", "high"] as const) {
+    const hit = sorted.find((p) => p.def.movementLevel === level && !usedIds.has(p.def.id));
+    if (hit) {
+      out.push(hit);
+      usedIds.add(hit.def.id);
+    }
+  }
   for (const p of sorted) {
     if (out.length >= 3) break;
-    if (out.some((o) => o.def.id === p.def.id)) continue;
+    if (usedIds.has(p.def.id)) continue;
     const tooSimilar = out.some((o) => {
       if (p.cards[0]?.id === o.cards[0]?.id && p.def.steps.length === o.def.steps.length) {
         return jaccardTemplateSimilarity(p.def.steps, o.def.steps) > 0.85;
       }
-      return jaccardTemplateSimilarity(p.def.steps, o.def.steps) > 0.92;
+      return jaccardTemplateSimilarity(p.def.steps, o.def.steps) > 0.88;
     });
     if (tooSimilar) continue;
     out.push(p);
+    usedIds.add(p.def.id);
   }
   if (out.length < 3) {
-    const seenIds = new Set(out.map((o) => o.def.id));
     for (const p of sorted) {
       if (out.length >= 3) break;
-      if (seenIds.has(p.def.id)) continue;
+      if (usedIds.has(p.def.id)) continue;
       out.push(p);
-      seenIds.add(p.def.id);
+      usedIds.add(p.def.id);
     }
   }
   return out.slice(0, 3);
@@ -506,7 +525,13 @@ export function generateCourses(
   obj: ScenarioObject,
   config: ScenarioConfig,
   maxCourses = 3,
-  opts: { homeTab?: HomeTabKey; now?: Date; learningStore?: CourseLearningStore } = {}
+  opts: {
+    homeTab?: HomeTabKey;
+    now?: Date;
+    learningStore?: CourseLearningStore;
+    /** `fetchRecommendationPatternBoostMap` 결과 — `recommendation_pattern_stats` */
+    recommendationPatternBoostMap?: ReadonlyMap<string, number>;
+  } = {}
 ): CoursePlan[] {
   const homeTab = opts.homeTab ?? "all";
   const courseObj: ScenarioObject =
@@ -529,7 +554,14 @@ export function generateCourses(
   for (const def of defs) {
     const filled = beamFillTemplate(def.steps, byType, courseObj, config);
     if (!filled) continue;
-    const sp = scorePath(def, filled, courseObj, config, opts.learningStore);
+    const sp = scorePath(
+      def,
+      filled,
+      courseObj,
+      config,
+      opts.learningStore,
+      opts.recommendationPatternBoostMap
+    );
     if (sp) scoredPaths.push(sp);
   }
 

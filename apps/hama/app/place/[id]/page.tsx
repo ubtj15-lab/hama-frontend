@@ -20,6 +20,9 @@ import {
   getClientTimeOfDay,
 } from "@/lib/recommend/buildRecommendationReason";
 import { useSaved } from "@/_hooks/useSaved";
+import { ReservationSummaryCard } from "@/_components/reservation/ReservationSummaryCard";
+import { getReservationPreviewForStore } from "@/lib/reservation/bookingDummy";
+import { buildReserveQueryFromPlace } from "@/lib/reservation/buildReserveSearchParams";
 
 function bizKr(card: HomeCard): string {
   const s = businessStateFromCard(card);
@@ -94,12 +97,10 @@ export default function PlaceDetailPage() {
   );
   const suggests = getNextSuggestions(scenarioGuess).slice(0, 3);
 
+  const reservationPreview = getReservationPreviewForStore(card.id, card.category);
+
   const goReserve = () => {
-    const q = new URLSearchParams({
-      storeId: card.id,
-      name: card.name,
-    });
-    router.push(`/reserve?${q.toString()}`);
+    router.push(`/reserve?${buildReserveQueryFromPlace({ storeId: card.id, name: card.name, card }).toString()}`);
   };
 
   return (
@@ -193,7 +194,36 @@ export default function PlaceDetailPage() {
           </p>
         )}
 
-        <div style={{ display: "flex", gap: space.buttonGap, marginTop: 18 }}>
+        <ReservationSummaryCard preview={reservationPreview} />
+
+        <p style={{ ...typo.caption, color: colors.textMuted, margin: "14px 0 0", lineHeight: 1.45 }}>
+          하마가 시간·예약금을 먼저 보여 주고, 바로 잡을 수 있게 이어줄게요.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            logEvent(HamaEvents.home_trust_reserve, { place_id: card.id, page: "place_detail", cta: "reserve_primary" });
+            goReserve();
+          }}
+          style={{
+            width: "100%",
+            height: 54,
+            marginTop: 14,
+            borderRadius: radius.button,
+            border: "none",
+            background: colors.accentPrimary,
+            color: colors.accentOnPrimary,
+            fontWeight: 900,
+            fontSize: 16,
+            cursor: "pointer",
+            boxShadow: shadow.cta,
+          }}
+        >
+          지금 예약하기
+        </button>
+
+        <div style={{ display: "flex", gap: space.buttonGap, marginTop: 10 }}>
           <button
             type="button"
             onClick={() => {
@@ -207,15 +237,14 @@ export default function PlaceDetailPage() {
             }}
             style={{
               flex: 1,
-              height: 50,
+              height: 48,
               borderRadius: radius.button,
-              border: "none",
-              background: colors.accentPrimary,
-              color: colors.accentOnPrimary,
+              border: `1px solid ${colors.borderStrong}`,
+              background: colors.bgSurface,
+              color: colors.textPrimary,
               fontWeight: 800,
               fontSize: 15,
               cursor: "pointer",
-              boxShadow: shadow.cta,
             }}
           >
             길찾기
@@ -232,9 +261,9 @@ export default function PlaceDetailPage() {
             }}
             style={{
               flex: 1,
-              height: 50,
+              height: 48,
               borderRadius: radius.button,
-              border: `1px solid ${colors.borderSubtle}`,
+              border: `1px solid ${colors.borderStrong}`,
               background: colors.bgSurface,
               fontWeight: 800,
               fontSize: 15,
@@ -259,41 +288,18 @@ export default function PlaceDetailPage() {
             }}
             style={{
               flex: 1,
-              height: 46,
+              height: 44,
               borderRadius: radius.button,
-              border: `1px solid ${colors.accentPrimary}`,
-              background: isSaved(card.id) ? colors.accentSoft : colors.bgSurface,
-              color: colors.accentStrong,
-              fontWeight: 800,
-              fontSize: 14,
+              border: `1px solid ${colors.borderSubtle}`,
+              background: colors.bgMuted,
+              color: colors.textPrimary,
+              fontWeight: 700,
+              fontSize: 13,
               cursor: "pointer",
             }}
           >
             {isSaved(card.id) ? "저장됨" : "저장해두기"}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              logEvent(HamaEvents.home_trust_reserve, { place_id: card.id, page: "place_detail" });
-              goReserve();
-            }}
-            style={{
-              flex: 1,
-              height: 46,
-              borderRadius: radius.button,
-              border: `1px solid ${colors.borderSubtle}`,
-              background: colors.bgMuted,
-              color: colors.textPrimary,
-              fontWeight: 800,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            예약하기
-          </button>
-        </div>
-
-        <div style={{ display: "flex", gap: space.buttonGap, marginTop: 10 }}>
           <button
             type="button"
             onClick={() => {

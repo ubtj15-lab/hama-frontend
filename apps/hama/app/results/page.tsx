@@ -22,8 +22,9 @@ import {
 import { scenarioObjectToIntention } from "@/lib/scenarioEngine/scenarioRankBridge";
 import { resolveScenarioConfig } from "@/lib/scenarioEngine/resolveScenarioConfig";
 import { generateCourses } from "@/lib/scenarioEngine/courseEngine";
+import { fetchRecommendationPatternBoostMap } from "@/lib/recommend/getPatternBoost";
 import { applyRecommendationModeToScenario } from "@/lib/scenarioEngine/effectiveScenario";
-import type { RecommendationMode } from "@/lib/scenarioEngine/types";
+import type { RecommendationMode, ScenarioObject } from "@/lib/scenarioEngine/types";
 import type { IntentionType } from "@/lib/intention";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { CoursePlan } from "@/lib/scenarioEngine/types";
@@ -51,6 +52,7 @@ import {
   logCourseRouteEnter,
 } from "@/lib/analytics/courseEvents";
 import { recordRecentIntent } from "@/lib/recentIntents";
+import { recordPwaEngagement } from "@/lib/pwa/pwaEngagement";
 import FeedbackFab from "@/components/FeedbackFab";
 
 /** 결과 페이지만: 고정 더미로 SearchResultSection/분기 검증 — `.env.local` 에 `NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION=1` */
@@ -80,6 +82,10 @@ function ResultsContent() {
         setHashCourseSnap(decodeURIComponent(h.slice("#hamaCourseSnap=".length)));
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    recordPwaEngagement();
   }, []);
 
   const courseIdParam = courseIdSynced || courseIdFromSearch;
@@ -156,6 +162,12 @@ function ResultsContent() {
     setRestoreSource(source);
     setRestoreDone(true);
     if (plan) {
+      const pseudoForLog: ScenarioObject = {
+        intentType: "course_generation",
+        scenario: plan.scenario,
+        rawQuery: plan.situationTitle ?? plan.functionalTitle ?? "",
+        confidence: 0.8,
+      };
       logCourseDebug({
         event: "course_restore_success",
         courseId: courseIdParam,
@@ -166,6 +178,7 @@ function ResultsContent() {
         courseId: courseIdParam,
         placeIds: plan.stops.map((s) => s.placeId),
         restoreSource: source,
+        scenarioObject: pseudoForLog,
       });
     } else {
       logCourseDebug({
@@ -258,14 +271,36 @@ function ResultsContent() {
     [cards, placeHitIds]
   );
 
+  const [recommendationPatternBoostMap, setRecommendationPatternBoostMap] = useState(
+    () => new Map<string, number>()
+  );
+
+  useEffect(() => {
+    if (!effectiveScenario || effectiveScenario.recommendationMode !== "course") {
+      setRecommendationPatternBoostMap(new Map());
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const m = await fetchRecommendationPatternBoostMap(effectiveScenario.scenario);
+      if (!cancelled) setRecommendationPatternBoostMap(m);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveScenario?.scenario, effectiveScenario?.recommendationMode]);
+
   const coursePlans = useMemo(() => {
     if (courseIdParam) return [];
     if (!effectiveScenario || effectiveScenario.recommendationMode !== "course") return [];
     const pool = courseCandidatePool.length ? courseCandidatePool : candidatePool;
     if (!pool.length) return [];
     const cfg = resolveScenarioConfig(effectiveScenario);
-    return generateCourses(pool, effectiveScenario, cfg, 3, { homeTab: "all" });
-  }, [courseIdParam, effectiveScenario, candidatePool, courseCandidatePool]);
+    return generateCourses(pool, effectiveScenario, cfg, 3, {
+      homeTab: "all",
+      recommendationPatternBoostMap,
+    });
+  }, [courseIdParam, effectiveScenario, candidatePool, courseCandidatePool, recommendationPatternBoostMap]);
 
   useEffect(() => {
     if (courseIdParam || coursePlans.length === 0) return;
@@ -808,7 +843,8 @@ function ResultsContent() {
                   thumbCard={thumbCard}
                   badges={plan.badges}
                   logExtras={logBase}
-                  onOpenCourse={() => {
+                  scenarioObject={effectiveScenario}
+                  onReserveAndStart={() => {
                     const merged = { ...plan, sourceQuery: qRaw || plan.sourceQuery };
                     stashCoursePlan(merged);
                     const snap = encodeCoursePlanSnapshot(merged);
@@ -822,12 +858,36 @@ function ResultsContent() {
                       stepIds: plan.stops.map((s) => s.placeId),
                       extra: {
                         from: "results_deck",
+                        intent: "reserve",
                         ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
                         snap_in_url: !useHashOnly,
                         snap_in_hash: useHashOnly,
                       },
                     });
-                    logEvent("home_course_pick", mergeLogPayload(logBase, { course_id: plan.id }));
+                    logEvent("home_course_pick", mergeLogPayload(logBase, { course_id: plan.id, cta: "reserve_start" }));
+                    router.push(`/course?id=${encodeURIComponent(plan.id)}&intent=reserve${snapQuery}${hashPart}`);
+                  }}
+                  onViewCourseOnly={() => {
+                    const merged = { ...plan, sourceQuery: qRaw || plan.sourceQuery };
+                    stashCoursePlan(merged);
+                    const snap = encodeCoursePlanSnapshot(merged);
+                    const maxQuerySnap = 4500;
+                    const useHashOnly = snap.length > maxQuerySnap;
+                    const snapQuery = !useHashOnly ? `&courseSnap=${encodeURIComponent(snap)}` : "";
+                    const hashPart = useHashOnly ? `#hamaCourseSnap=${encodeURIComponent(snap)}` : "";
+                    logCourseDebug({
+                      event: "course_click_start",
+                      courseId: plan.id,
+                      stepIds: plan.stops.map((s) => s.placeId),
+                      extra: {
+                        from: "results_deck",
+                        intent: "view_only",
+                        ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
+                        snap_in_url: !useHashOnly,
+                        snap_in_hash: useHashOnly,
+                      },
+                    });
+                    logEvent("home_course_pick", mergeLogPayload(logBase, { course_id: plan.id, cta: "view_only" }));
                     router.push(`/course?id=${encodeURIComponent(plan.id)}${snapQuery}${hashPart}`);
                   }}
                   onNavigateFirst={() => {

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
-import type { CoursePlan, CourseStop } from "@/lib/scenarioEngine/types";
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CoursePlan, CourseStop, ScenarioObject, ScenarioType } from "@/lib/scenarioEngine/types";
 import { logEvent } from "@/lib/logEvent";
+import { logRecommendationCourse } from "@/lib/analytics/recommendationCourseLog";
 import { getCourseCardExperimentGroup, type CourseCardExperimentGroup } from "@/lib/experiments/courseCardExperiment";
 import { openDirections } from "@/lib/openDirections";
 
@@ -25,6 +26,15 @@ function courseLabel(rank: number): string {
 }
 
 export default function HomeCoursePreview({ plans, scenario, onPick }: Props) {
+  const scenarioObj = useMemo(
+    (): ScenarioObject => ({
+      intentType: "course_generation",
+      scenario: scenario as ScenarioType,
+      rawQuery: "home_course_preview",
+      confidence: 0.8,
+    }),
+    [scenario]
+  );
   const [experimentGroup, setExperimentGroup] = useState<CourseCardExperimentGroup>("B");
   const experimentGroupRef = useRef<CourseCardExperimentGroup>("B");
   const impressed = useRef(new Set<string>());
@@ -60,7 +70,10 @@ export default function HomeCoursePreview({ plans, scenario, onPick }: Props) {
           if (!id || rankStr == null) continue;
           if (impressed.current.has(id)) continue;
           impressed.current.add(id);
-          logEvent("course_impression", logBase(id, parseInt(rankStr, 10)));
+          const r = parseInt(rankStr, 10);
+          logEvent("course_impression", logBase(id, r));
+          const p = plans.find((pl) => pl.id === id);
+          if (p) logRecommendationCourse("course_impression", p, scenarioObj, { rank_position: r, source_page: "home" });
         }
       },
       { threshold: 0.35, rootMargin: "0px" }
@@ -68,7 +81,7 @@ export default function HomeCoursePreview({ plans, scenario, onPick }: Props) {
     const cards = root.querySelectorAll("[data-course-card]");
     cards.forEach((el) => obs.observe(el));
     return () => obs.disconnect();
-  }, [plans, logBase]);
+  }, [plans, logBase, scenarioObj]);
 
   if (!plans.length) return null;
 
@@ -124,11 +137,19 @@ export default function HomeCoursePreview({ plans, scenario, onPick }: Props) {
               tabIndex={0}
               onClick={() => {
                 logEvent("course_click", logBase(plan.id, rank));
+                logRecommendationCourse("course_click", plan, scenarioObj, {
+                  rank_position: rank,
+                  source_page: "home",
+                });
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   logEvent("course_click", logBase(plan.id, rank));
+                  logRecommendationCourse("course_click", plan, scenarioObj, {
+                    rank_position: rank,
+                    source_page: "home",
+                  });
                 }
               }}
               style={{

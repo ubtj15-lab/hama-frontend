@@ -71,3 +71,13 @@ export function dwellMinutesForPlace(place: HomeCard, stepType: PlaceType, seed:
   const t = (h % 1000) / 1000;
   return Math.round(range.min + t * (range.max - range.min));
 }
+
+/** 총 소요 분 → "총 약 4시간 30분" */
+export function formatHumanDuration(totalMinutes: number): string {
+  const m = Math.max(0, Math.round(totalMinutes));
+  if (m < 60) return `총 약 ${m}분`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (r === 0) return `총 약 ${h}시간`;
+  return `총 약 ${h}시간 ${r}분`;
+}

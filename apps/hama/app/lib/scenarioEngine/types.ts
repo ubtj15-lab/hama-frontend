@@ -88,7 +88,7 @@ export type ScenarioObject = {
   weatherCondition?: WeatherCondition;
   /** family / family_kids / parent_child_outing 코스 톤 */
   childAgeGroup?: ChildAgeGroup;
-  timeOfDay?: "morning" | "lunch" | "afternoon" | "dinner" | "night";
+  timeOfDay?: "morning" | "brunch" | "lunch" | "afternoon" | "dinner" | "night";
   /** 데이트 코스: 낮/저녁/밤 — 없으면 쿼리·timeOfDay·현재 시각으로 `resolveDateTimeBand` */
   dateTimeBand?: DateTimeBand;
   /** 대화 누적: 가까운 곳만 선호 */
