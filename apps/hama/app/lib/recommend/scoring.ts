@@ -7,21 +7,19 @@ import { configTagBoostRaw, placeTypePreferenceRaw } from "@/lib/scenarioEngine/
 import { scenarioObjectToIntention, scenarioTypeToRankKey } from "@/lib/scenarioEngine/scenarioRankBridge";
 import { logScenarioEngineDebug } from "@/lib/scenarioEngine/scenarioDebug";
 import {
-  WEIGHT_BONUS,
-  WEIGHT_BUSINESS,
-  WEIGHT_DISTANCE,
   WEIGHT_FOOD_INTENT,
   WEIGHT_COMPOSITE,
-  WEIGHT_CHILD_FRIENDLY,
-  WEIGHT_KEYWORD,
-  WEIGHT_QUALITY,
-  WEIGHT_SCENARIO,
   RECOMMEND_DECK_SIZE,
   DIVERSITY_PENALTY_SAME_BRAND,
   DIVERSITY_PENALTY_SAME_MAIN_CATEGORY,
   DIVERSITY_PENALTY_SAME_SUB_CATEGORY,
   DIVERSITY_PENALTY_SAME_SCENARIO_VOICE,
 } from "./recommendConstants";
+import { computeScenarioForcedRawDelta, convenienceScoreFromParts } from "./scenarioForcedRules";
+import { behaviorBoostVisibilityFactor, normalizeBehaviorRawToScore } from "./learnedBoostModel";
+import { getGlobalImpressionCount, getPersonalizationHints, getPlaceBehaviorRaw } from "./behaviorSignalStore";
+import { personalizationFitScore } from "./personalizationFromSignals";
+import { computeHybridRecommendationFinal } from "./finalRecommendationScore";
 import { enrichBlobForScenarioScoring, hasExplicitFamilySignalsInBlob } from "./enrichScenarioBlob";
 import {
   cardMatchesStrictFoodIntent,
@@ -79,6 +77,12 @@ export type RecommendScoreBreakdown = {
   foodIntentScore: number;
   compositeScore: number;
   scenarioRaw: number;
+  /** 룰 기반 시나리오 가산·감산 반영 후 블렌드 점수 */
+  scenarioRichScore: number;
+  convenienceScore: number;
+  behaviorBoostPillar: number;
+  behaviorVisibility: number;
+  personalizationScore: number;
   finalScore: number;
   businessState: BusinessState;
   activeScenario: RecommendScenarioKey;
@@ -439,6 +443,7 @@ export function buildTopRecommendations(
       if (km > 3.5) distS *= 0.55;
     }
     const scenarioCfg = ctx.scenarioObject ? resolveScenarioConfig(ctx.scenarioObject) : null;
+    const forcedRaw = computeScenarioForcedRawDelta(ctx.scenarioObject?.scenario, blob);
 
     let activeScenario: RecommendScenarioKey;
     let scenarioS: number;
@@ -448,14 +453,17 @@ export function buildTopRecommendations(
       activeScenario = rankKeyFromObjEarly;
       const boost = configTagBoostRaw(blob, scenarioCfg);
       const typeFit = placeTypePreferenceRaw(card, scenarioCfg);
-      rawScenario = scenarioRawForKey(blob, rankKeyFromObjEarly, card) + boost + typeFit;
+      rawScenario = scenarioRawForKey(blob, rankKeyFromObjEarly, card) + boost + typeFit + forcedRaw;
       const cap = (SCENARIO_RAW_CAP[rankKeyFromObjEarly] || 1) + 55;
       scenarioS = Math.min(100, (rawScenario / cap) * 100);
     } else {
       const picked = pickActiveScenario(card, ctx.intent, blob);
       activeScenario = picked.key;
-      scenarioS = picked.norm;
-      rawScenario = scenarioRawForKey(blob, activeScenario, card);
+      rawScenario = scenarioRawForKey(blob, activeScenario, card) + forcedRaw;
+      scenarioS = scenarioNormFromRaw(
+        Math.max(0, rawScenario),
+        activeScenario
+      );
     }
 
     const userScenarioKey = intentionToScenarioKey(ctx.intent);
@@ -493,22 +501,42 @@ export function buildTopRecommendations(
 
     const compS = useComposite ? compositeIntentRawScore(card, so) : 0;
 
-    let finalScore =
-      distS * WEIGHT_DISTANCE +
-      scenarioS * WEIGHT_SCENARIO +
-      bizS * WEIGHT_BUSINESS +
-      qualS * WEIGHT_QUALITY +
-      kwS * WEIGHT_KEYWORD +
-      bonS * WEIGHT_BONUS +
-      foodS * (useFoodRanking ? WEIGHT_FOOD_INTENT : 0) +
-      compS * (useComposite ? WEIGHT_COMPOSITE : 0);
-
+    let scenarioRich = scenarioS;
+    if (useFoodRanking) {
+      scenarioRich = Math.min(100, scenarioRich * 0.82 + foodS * 0.18);
+    }
+    if (useComposite) {
+      scenarioRich = Math.min(100, scenarioRich * 0.88 + compS * 0.12);
+    }
     const familyRank =
       rankKeyFromObjEarly === "family" ||
       (!ctx.scenarioObject && intentionToScenarioKey(ctx.intent) === "family");
     if (familyRank) {
-      finalScore += childFriendlyScore(card) * 100 * WEIGHT_CHILD_FRIENDLY;
+      scenarioRich = Math.min(100, scenarioRich + childFriendlyScore(card) * 16);
     }
+
+    const convS = convenienceScoreFromParts(bizS, bonS, kwS);
+
+    const globalImp = typeof window !== "undefined" ? getGlobalImpressionCount() : 0;
+    const vis = behaviorBoostVisibilityFactor(globalImp);
+    const rawBeh = typeof window !== "undefined" ? getPlaceBehaviorRaw(card.id) : 0;
+    const behaviorPillar = normalizeBehaviorRawToScore(rawBeh);
+
+    const hints =
+      typeof window !== "undefined"
+        ? getPersonalizationHints()
+        : { preferredTags: [] as string[], avoidTags: [] as string[], preferredScenarios: [] as string[] };
+    const personalizationS = personalizationFitScore(blobBase, ctx.scenarioObject ?? null, hints);
+
+    const finalScore = computeHybridRecommendationFinal({
+      distanceScore: distS,
+      ratingScore: qualS,
+      scenarioRichScore: scenarioRich,
+      convenienceScore: convS,
+      behaviorPillar,
+      behaviorVisibility: vis,
+      personalizationScore: personalizationS,
+    });
 
     const breakdown: RecommendScoreBreakdown = {
       distanceScore: distS,
@@ -520,6 +548,11 @@ export function buildTopRecommendations(
       foodIntentScore: foodS,
       compositeScore: compS,
       scenarioRaw: rawScenario,
+      scenarioRichScore: scenarioRich,
+      convenienceScore: convS,
+      behaviorBoostPillar: behaviorPillar,
+      behaviorVisibility: vis,
+      personalizationScore: personalizationS,
       finalScore,
       businessState,
       activeScenario,

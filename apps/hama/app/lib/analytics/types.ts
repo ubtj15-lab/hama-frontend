@@ -11,6 +11,9 @@ export const RECOMMENDATION_EVENT_NAMES = [
   "reservation_create",
   "reservation_complete",
   "place_feedback",
+  "positive_feedback",
+  "negative_feedback",
+  "quick_exit",
   "course_restore_success",
   "course_restore_fail",
 ] as const;

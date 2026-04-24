@@ -4,6 +4,7 @@
  */
 import type { LogRecommendationEventInput } from "./types";
 import { getDbUserId, getOrCreateSessionId } from "./session";
+import { recordBehaviorFromRecommendationEvent } from "@/lib/recommend/behaviorSignalStore";
 
 export type LogRecommendationOptions = {
   /** false 이면 legacy `logEvent` 호출 생략 (기본 true: 중복 수집 허용) */
@@ -52,6 +53,15 @@ export function logRecommendationEvent(
       body: JSON.stringify(body),
     }).catch((e) => {
       console.error("logRecommendationEvent fetch failed:", e);
+    });
+
+    recordBehaviorFromRecommendationEvent({
+      event_name: input.event_name,
+      entity_type: input.entity_type ?? null,
+      entity_id: input.entity_id ?? null,
+      place_ids: input.place_ids ?? [],
+      scenario: input.scenario ?? null,
+      metadata: { ...(input.metadata ?? {}), place_snapshot: input.place_snapshot ?? undefined },
     });
   } catch (e) {
     console.error("logRecommendationEvent failed:", e);

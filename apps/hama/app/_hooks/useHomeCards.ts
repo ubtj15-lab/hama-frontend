@@ -38,6 +38,8 @@ type Result = {
   /** intentType course_generation 시 — 탭과 무관한 역할별 혼합 풀(식사/카페/액티비티) */
   courseCandidatePool: HomeCard[];
   isLoading: boolean;
+  /** RECOMMEND_DECK_SIZE 미만이면 완화 랭킹·후보 부족 등 */
+  deckIncomplete: boolean;
 };
 
 export type UseHomeCardsOptions = {
@@ -59,6 +61,8 @@ export type UseHomeCardsOptions = {
    * Results: 매장명 검색이 이미 성공한 경우 뒤쪽 추천 로직이 화면/상태를 덮어쓰지 않게 할 때 사용.
    */
   skipFetch?: boolean;
+  /** 메인 추천 거절 등 — 해당 매장 id 는 재랭킹에서 제외 */
+  rejectedMainPickIds?: string[];
 };
 
 /**
@@ -75,11 +79,14 @@ export function useHomeCards(
   const [pool, setPool] = useState<HomeCard[]>([]);
   const [coursePool, setCoursePool] = useState<HomeCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [deckIncomplete, setDeckIncomplete] = useState(false);
   const excludeMerged = [
     ...new Set(
-      [...(options.excludeStoreIds ?? []), ...(options.scenarioObject?.conversationExcludePlaceIds ?? [])].filter(
-        Boolean
-      )
+      [
+        ...(options.excludeStoreIds ?? []),
+        ...(options.rejectedMainPickIds ?? []),
+        ...(options.scenarioObject?.conversationExcludePlaceIds ?? []),
+      ].filter(Boolean)
     ),
   ];
   const excludeKey = excludeMerged.join("|");
@@ -96,6 +103,7 @@ export function useHomeCards(
       setPool([]);
       setCoursePool([]);
       setIsLoading(false);
+      setDeckIncomplete(false);
       return;
     }
 
@@ -167,12 +175,14 @@ export function useHomeCards(
           setPool(fetched);
           setCoursePool(wantCourse ? courseFetched : []);
           setCards(picked.map((p) => p.card));
+          setDeckIncomplete(!wantCourse && picked.length > 0 && picked.length < RECOMMEND_DECK_SIZE);
         }
       } catch (e) {
         console.error("[useHomeCards]", e);
         if (!cancelled) {
           setCards([]);
           setCoursePool([]);
+          setDeckIncomplete(false);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -196,5 +206,5 @@ export function useHomeCards(
     skipFetch,
   ]);
 
-  return { cards, candidatePool: pool, courseCandidatePool: coursePool, isLoading };
+  return { cards, candidatePool: pool, courseCandidatePool: coursePool, isLoading, deckIncomplete };
 }

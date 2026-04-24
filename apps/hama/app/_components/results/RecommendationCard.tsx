@@ -44,6 +44,7 @@ type Props = {
   scenarioObject: ScenarioObject | null;
   /** 목록에서 미리 계산한 이유(덱 variation) — 없으면 카드 내부에서 생성 */
   reason?: RecommendationReasonBlock;
+  showSoftFallbackCopy?: boolean;
   onCardClick: () => void;
   onNavigate: () => void;
   onCall: () => void;
@@ -54,6 +55,7 @@ export function RecommendationCard({
   rank,
   scenarioObject,
   reason: reasonOverride,
+  showSoftFallbackCopy = false,
   onCardClick,
   onNavigate,
   onCall,
@@ -121,6 +123,7 @@ export function RecommendationCard({
           logRecommendationPlace("place_click", card, scenarioObject, {
             rank_position: rank,
             source_page: "results",
+            metadata: { selected_rank: rank },
           });
           onCardClick();
         }}
@@ -130,6 +133,7 @@ export function RecommendationCard({
             logRecommendationPlace("place_click", card, scenarioObject, {
               rank_position: rank,
               source_page: "results",
+              metadata: { selected_rank: rank },
             });
             onCardClick();
           }
@@ -240,7 +244,20 @@ export function RecommendationCard({
           <div style={{ ...typo.caption, color: colors.textMuted, marginTop: 2 }}>{metaLine}</div>
         )}
 
-        <div style={{ display: "flex", gap: 10, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
+        {featured && (
+          <div style={{ marginTop: 10 }}>
+            <p style={{ ...typo.caption, color: colors.textSecondary, margin: 0, lineHeight: 1.45, fontWeight: 700 }}>
+              지금 시간·거리·상황 기준으로 가장 자연스러운 선택이에요
+            </p>
+            {showSoftFallbackCopy && (
+              <p style={{ ...typo.caption, color: colors.textMuted, margin: "6px 0 0", lineHeight: 1.45, fontWeight: 600 }}>
+                완벽하진 않지만 지금 조건에서 가장 무난한 선택이에요
+              </p>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
           <Touchable style={{ flex: 1 }}>
             <button
               type="button"
@@ -252,42 +269,63 @@ export function RecommendationCard({
                 width: "100%",
                 height: 46,
                 borderRadius: radius.md,
-                border: "none",
-                background: colors.textPrimary,
-                color: "#fff",
-                boxShadow: shadow.cta,
+                border: `1px solid ${colors.borderSubtle}`,
+                background: "#fff",
+                color: colors.textPrimary,
                 fontWeight: 800,
                 fontSize: 14,
                 cursor: "pointer",
               }}
             >
-              지금 출발하기
+              길찾기
             </button>
           </Touchable>
-          <Touchable style={{ flex: 1 }}>
+          <Touchable style={{ flex: 1.35 }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCardClick();
+              }}
+              style={{
+                width: "100%",
+                height: 46,
+                borderRadius: radius.md,
+                border: "none",
+                background: colors.textPrimary,
+                color: "#fff",
+                boxShadow: shadow.cta,
+                fontWeight: 900,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              여기로 결정
+            </button>
+          </Touchable>
+        </div>
+        {phone ? (
+          <div style={{ marginTop: 8, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onCall();
               }}
-              disabled={!phone}
               style={{
-                width: "100%",
-                height: 46,
-                borderRadius: radius.md,
-                border: `1px solid ${colors.borderSubtle}`,
-                background: "#fff",
-                color: phone ? colors.textPrimary : colors.textSecondary,
+                border: "none",
+                background: "transparent",
+                color: colors.accentPrimary,
                 fontWeight: 800,
-                fontSize: 14,
-                cursor: phone ? "pointer" : "not-allowed",
+                fontSize: 13,
+                cursor: "pointer",
+                padding: "4px 0",
               }}
             >
-              바로 전화
+              전화하기
             </button>
-          </Touchable>
-        </div>
+          </div>
+        ) : null}
       </div>
       </div>
     </Touchable>

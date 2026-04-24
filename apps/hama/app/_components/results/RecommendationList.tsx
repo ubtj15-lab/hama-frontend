@@ -13,6 +13,8 @@ type Props = {
   onPlaceClick: (card: HomeCard, rank: number) => void;
   onNavigate: (card: HomeCard, rank: number) => void;
   onCall: (card: HomeCard, rank: number) => void;
+  /** 메인 카드 아래 — 후보 부족·재추천 등 */
+  showSoftFallbackCopy?: boolean;
 };
 
 export function RecommendationList({
@@ -21,6 +23,7 @@ export function RecommendationList({
   onPlaceClick,
   onNavigate,
   onCall,
+  showSoftFallbackCopy = false,
 }: Props) {
   const slice = cards.slice(0, 3);
   const deckReasons = useDeckRecommendationReasons(cards, scenarioObject);
@@ -33,6 +36,7 @@ export function RecommendationList({
           rank={i}
           scenarioObject={scenarioObject}
           reason={deckReasons[i]}
+          showSoftFallbackCopy={showSoftFallbackCopy}
           onCardClick={() => onPlaceClick(card, i)}
           onNavigate={() => onNavigate(card, i)}
           onCall={() => onCall(card, i)}

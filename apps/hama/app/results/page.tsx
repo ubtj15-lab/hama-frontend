@@ -96,6 +96,7 @@ function ResultsContent() {
   );
 
   const [shuffleKey, setShuffleKey] = useState(0);
+  const [rejectedMainPickIds, setRejectedMainPickIds] = useState<string[]>([]);
   const [courseFilter, setCourseFilter] = useState<"all" | "food" | "indoor" | "under3h">("all");
   const started = useRef<number>(0);
   const [modeOverride, setModeOverride] = useState<RecommendationMode | null>(null);
@@ -104,6 +105,10 @@ function ResultsContent() {
 
   useEffect(() => {
     setModeOverride(null);
+  }, [qRaw]);
+
+  useEffect(() => {
+    setRejectedMainPickIds([]);
   }, [qRaw]);
 
   useEffect(() => {
@@ -239,7 +244,7 @@ function ResultsContent() {
   const placeSearchDominant = placeSearchEnabled && placeLookupDoneEarly && placeHits.length > 0;
   const resultsFlowMode = placeSearchDominant ? "place_search" : "recommendation";
 
-  const { cards, candidatePool, courseCandidatePool, isLoading } = useHomeCards(
+  const { cards, candidatePool, courseCandidatePool, isLoading, deckIncomplete } = useHomeCards(
     "all",
     shuffleKey,
     intent,
@@ -247,6 +252,7 @@ function ResultsContent() {
       userLat: userLoc?.lat ?? null,
       userLng: userLoc?.lng ?? null,
       excludeStoreIds: recentExcludeIds,
+      rejectedMainPickIds,
       searchQuery: (convCtx?.cumulativeText ?? qRaw) || null,
       scenarioObject: effectiveScenario ?? undefined,
       /** 매장명 검색이 끝날 때까지 추천 페치·랭킹 지연 — 첫 프레임 레이스 방지 */
@@ -565,6 +571,17 @@ function ResultsContent() {
     primaryRecommendationCards.length > 0 &&
     primaryRecommendationCards.length < RECOMMEND_DECK_SIZE;
 
+  const showSoftFallbackCopy = Boolean(
+    strictHint || deckIncomplete || rejectedMainPickIds.length > 0
+  );
+
+  const rejectMainAndRefresh = () => {
+    const id = primaryRecommendationCards[0]?.id;
+    if (!id) return;
+    setRejectedMainPickIds((prev) => [...new Set([...prev, id])]);
+    setShuffleKey((k) => k + 1);
+  };
+
   const headerLoading = bootstrapBusy || (placeLookupBusy && !showNameSearch);
 
   const headerCount =
@@ -759,6 +776,7 @@ function ResultsContent() {
               <RecommendationList
                 cards={secondaryRecommendCards}
                 scenarioObject={effectiveScenario}
+                showSoftFallbackCopy={false}
                 onPlaceClick={(card, rank) => {
                   logEvent(
                     "place_click",
@@ -825,6 +843,7 @@ function ResultsContent() {
           <RecommendationList
             cards={primaryRecommendationCards}
             scenarioObject={effectiveScenario}
+            showSoftFallbackCopy={showSoftFallbackCopy}
             onPlaceClick={(card, rank) => {
               logEvent("place_click", mergeLogPayload(logBase, { place_id: card.id, name: card.name, card_rank: rank }));
               stashPlaceForSession(card);
@@ -843,6 +862,31 @@ function ResultsContent() {
             }}
           />
         )}
+
+        {!pageBusy &&
+          !showNameSearch &&
+          showRecommendationList &&
+          primaryRecommendationCards.length > 0 &&
+          !isCourseFixedResults && (
+            <button
+              type="button"
+              onClick={() => rejectMainAndRefresh()}
+              style={{
+                width: "100%",
+                height: 46,
+                marginTop: 12,
+                borderRadius: radius.button,
+                border: `1.5px dashed ${colors.accentPrimary}`,
+                background: colors.primaryLight,
+                color: colors.textPrimary,
+                fontSize: 14,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              마음에 안 들어? 첫 추천 빼고 다시 골라줄게
+            </button>
+          )}
 
         {!pageBusy && showCourseDeck && (
           <section style={{ marginBottom: space.section }}>

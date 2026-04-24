@@ -266,6 +266,9 @@ export default function RecommendPage() {
               <span style={{ fontSize: 12, color: colors.neutral[700], background: colors.neutral[100], borderRadius: 999, padding: "6px 10px" }}>빠른 결정</span>
             </div>
 
+            <p style={{ margin: "10px 0 0", fontSize: 13, fontWeight: 700, color: colors.neutral[700], lineHeight: 1.45 }}>
+              지금 시간·거리·상황 기준으로 가장 자연스러운 선택이에요
+            </p>
             <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
               <button
                 type="button"
@@ -300,7 +303,7 @@ export default function RecommendPage() {
                   cursor: "pointer",
                 }}
               >
-                여기 갈게!
+                여기로 결정
               </button>
             </div>
             <div style={{ height: 2 }} />

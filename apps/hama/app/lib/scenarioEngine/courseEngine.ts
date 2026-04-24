@@ -29,6 +29,7 @@ import {
 } from "./courseScoring";
 import { inferServingTypeForPlace, servingOkForStep } from "./courseServingType";
 import { isHardExcludedForKidsScenario } from "@/lib/recommend/childFriendlyScore";
+import { scenarioCourseFlowBias } from "@/lib/recommend/scenarioForcedRules";
 
 const TAB_CATEGORY_BOOST = 25;
 const BEAM_WIDTH = 10;
@@ -310,7 +311,8 @@ function scorePath(
     totalTravel,
     learned.total
   );
-  const finalScore = stepAvg * 0.42 + courseScore * 0.58;
+  const flowBias = scenarioCourseFlowBias(def.steps, obj.scenario);
+  const finalScore = stepAvg * 0.42 + courseScore * 0.58 + flowBias * 0.12;
   return { def, cards, finalScore, stepAvg, learned };
 }
 
