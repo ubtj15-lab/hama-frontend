@@ -15,13 +15,16 @@ type Body = {
   event_name: string;
   entity_type?: string | null;
   entity_id?: string | null;
+  recommendation_rank?: number | null;
   scenario?: string | null;
   child_age_group?: string | null;
   weather_condition?: string | null;
   time_of_day?: string | null;
   date_time_band?: string | null;
-  rank_position?: number | null;
   source_page?: string | null;
+  place_snapshot?: Record<string, unknown> | null;
+  course_snapshot?: Record<string, unknown> | null;
+  created_at?: string | null;
   template_id?: string | null;
   step_pattern?: string | null;
   place_ids?: string[];
@@ -39,13 +42,16 @@ export async function POST(req: NextRequest) {
         event_name: body.event_name,
         entity_type: body.entity_type ?? null,
         entity_id: body.entity_id ?? null,
+        recommendation_rank: body.recommendation_rank ?? null,
         scenario: body.scenario ?? null,
         child_age_group: body.child_age_group ?? null,
         weather_condition: body.weather_condition ?? null,
         time_of_day: body.time_of_day ?? null,
         date_time_band: body.date_time_band ?? null,
-        rank_position: body.rank_position ?? null,
         source_page: body.source_page ?? null,
+        place_snapshot: body.place_snapshot ?? null,
+        course_snapshot: body.course_snapshot ?? null,
+        created_at: body.created_at ?? new Date().toISOString(),
         template_id: body.template_id ?? null,
         step_pattern: body.step_pattern ?? null,
         place_ids: body.place_ids ?? [],

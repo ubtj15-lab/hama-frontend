@@ -7,15 +7,17 @@ export const RECOMMENDATION_EVENT_NAMES = [
   "course_impression",
   "course_click",
   "course_start",
+  "decision_complete",
   "reservation_create",
   "reservation_complete",
+  "place_feedback",
   "course_restore_success",
   "course_restore_fail",
 ] as const;
 
 export type RecommendationEventName = (typeof RECOMMENDATION_EVENT_NAMES)[number];
 
-export type RecommendationEntityType = "place" | "course" | "reservation" | "session" | null;
+export type RecommendationEntityType = "place" | "course" | "reservation" | null;
 
 /**
  * /api/recommendation/log body — `recommendation_events` 행과 1:1
@@ -25,13 +27,19 @@ export type LogRecommendationEventInput = {
   /** 코스 id / place id / reservation id */
   entity_type?: RecommendationEntityType;
   entity_id?: string | null;
+  /** 1순위/2순위/3순위 비교 분석용 */
+  recommendation_rank?: number | null;
   scenario?: string | null;
   child_age_group?: string | null;
   weather_condition?: string | null;
   time_of_day?: string | null;
   date_time_band?: string | null;
+  /** @deprecated recommendation_rank 사용 권장 (하위호환) */
   rank_position?: number | null;
   source_page?: string | null;
+  place_snapshot?: Record<string, unknown> | null;
+  course_snapshot?: Record<string, unknown> | null;
+  created_at?: string | null;
   template_id?: string | null;
   step_pattern?: string | null;
   place_ids?: string[];

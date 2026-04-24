@@ -36,7 +36,7 @@ import { SearchResultSection } from "@/_components/results/SearchResultSection";
 import { CourseDeckCard } from "@/_components/results/CourseDeckCard";
 import { RecommendationModeToggle } from "@/_components/results/RecommendationModeToggle";
 import { NextSuggestions } from "@/_components/results/NextSuggestions";
-import { colors, space } from "@/lib/designTokens";
+import { colors, radius, space } from "@/lib/designTokens";
 import { logEvent } from "@/lib/logEvent";
 import { HamaEvents } from "@/lib/analytics/events";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
@@ -96,6 +96,7 @@ function ResultsContent() {
   );
 
   const [shuffleKey, setShuffleKey] = useState(0);
+  const [courseFilter, setCourseFilter] = useState<"all" | "food" | "indoor" | "under3h">("all");
   const started = useRef<number>(0);
   const [modeOverride, setModeOverride] = useState<RecommendationMode | null>(null);
 
@@ -389,6 +390,19 @@ function ResultsContent() {
       (!isCourseMode || courseFallbackActive || isCourseFixedResults)
   );
 
+  const filteredCoursePlans = useMemo(() => {
+    if (courseFilter === "all") return coursePlans;
+    if (courseFilter === "food") {
+      return coursePlans.filter((p) => p.stops.every((s) => s.placeType === "FOOD"));
+    }
+    if (courseFilter === "indoor") {
+      return coursePlans.filter((p) => p.stops.every((s) => s.placeType !== "WALK"));
+    }
+    return coursePlans.filter((p) => p.totalMinutes <= 180);
+  }, [coursePlans, courseFilter]);
+
+  const scenarioBadge = /데이트|커플|연인/.test(qRaw) ? "💗 데이트" : "🎯 추천 코스";
+
   useEffect(() => {
     if (courseIdParam) return;
     if (pageBusy || effectiveMode !== "course" || isLoading) return;
@@ -574,7 +588,7 @@ function ResultsContent() {
         style={{
           minHeight: "100vh",
           paddingBottom: 100,
-          background: `linear-gradient(180deg, ${colors.bgDefault} 0%, #EEF2FF 100%)`,
+          background: `linear-gradient(180deg, ${colors.bgDefault} 0%, ${colors.bgMuted} 100%)`,
         }}
       >
         <div style={{ maxWidth: 430, margin: "0 auto", padding: `16px ${space.pageX}px 0` }}>
@@ -661,7 +675,7 @@ function ResultsContent() {
       style={{
         minHeight: "100vh",
         paddingBottom: 100,
-        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, #EEF2FF 100%)`,
+        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, ${colors.bgMuted} 100%)`,
       }}
     >
       <div style={{ maxWidth: 430, margin: "0 auto", padding: `16px ${space.pageX}px 0` }}>
@@ -831,8 +845,56 @@ function ResultsContent() {
         )}
 
         {!pageBusy && showCourseDeck && (
-          <div style={{ display: "flex", flexDirection: "column", gap: space.card }}>
-            {coursePlans.slice(0, 3).map((plan, i) => {
+          <section style={{ marginBottom: space.section }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: colors.textSecondary,
+                  background: "#FFF4E6",
+                  border: `1px solid ${colors.borderSubtle}`,
+                  borderRadius: 999,
+                  padding: "6px 10px",
+                }}
+              >
+                {scenarioBadge}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: colors.textSecondary }}>3가지 코스</span>
+            </div>
+            <h2 style={{ margin: "0 0 10px", fontSize: 28, lineHeight: 1.18, letterSpacing: "-0.03em", color: colors.textPrimary }}>
+              오늘 둘이서, <span style={{ background: "linear-gradient(transparent 62%, #FFE4CC 62%)" }}>이런 코스 어때?</span>
+            </h2>
+
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              {[
+                { id: "all", label: "전체" },
+                { id: "food", label: "식당만" },
+                { id: "indoor", label: "실내 위주" },
+                { id: "under3h", label: "3시간 이내" },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setCourseFilter(f.id as typeof courseFilter)}
+                  style={{
+                    border: `1px solid ${courseFilter === f.id ? colors.accentPrimary : colors.borderSubtle}`,
+                    background: courseFilter === f.id ? "#FFF4E6" : "#fff",
+                    color: courseFilter === f.id ? colors.accentPrimary : colors.textSecondary,
+                    borderRadius: 999,
+                    padding: "7px 11px",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: space.card }}>
+              {(filteredCoursePlans.length ? filteredCoursePlans : coursePlans).slice(0, 3).map((plan, i) => {
               const first = plan.stops[0];
               const thumbCard = first ? poolById.get(first.placeId) ?? null : null;
               return (
@@ -844,29 +906,7 @@ function ResultsContent() {
                   badges={plan.badges}
                   logExtras={logBase}
                   scenarioObject={effectiveScenario}
-                  onReserveAndStart={() => {
-                    const merged = { ...plan, sourceQuery: qRaw || plan.sourceQuery };
-                    stashCoursePlan(merged);
-                    const snap = encodeCoursePlanSnapshot(merged);
-                    const maxQuerySnap = 4500;
-                    const useHashOnly = snap.length > maxQuerySnap;
-                    const snapQuery = !useHashOnly ? `&courseSnap=${encodeURIComponent(snap)}` : "";
-                    const hashPart = useHashOnly ? `#hamaCourseSnap=${encodeURIComponent(snap)}` : "";
-                    logCourseDebug({
-                      event: "course_click_start",
-                      courseId: plan.id,
-                      stepIds: plan.stops.map((s) => s.placeId),
-                      extra: {
-                        from: "results_deck",
-                        intent: "reserve",
-                        ua: typeof navigator !== "undefined" ? navigator.userAgent : "",
-                        snap_in_url: !useHashOnly,
-                        snap_in_hash: useHashOnly,
-                      },
-                    });
-                    logEvent("home_course_pick", mergeLogPayload(logBase, { course_id: plan.id, cta: "reserve_start" }));
-                    router.push(`/course?id=${encodeURIComponent(plan.id)}&intent=reserve${snapQuery}${hashPart}`);
-                  }}
+                  onReserveAndStart={undefined}
                   onViewCourseOnly={() => {
                     const merged = { ...plan, sourceQuery: qRaw || plan.sourceQuery };
                     stashCoursePlan(merged);
@@ -898,7 +938,36 @@ function ResultsContent() {
                 />
               );
             })}
-          </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <h3 style={{ margin: "0 0 10px", fontSize: 16, fontWeight: 900, color: colors.textPrimary }}>이렇게 이어가도 좋아</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {["조용한 흐름으로 다시", "특별한 분위기로 골라줘"].map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => applyNewQuery(label, "course_list_followup")}
+                    style={{
+                      width: "100%",
+                      height: 42,
+                      borderRadius: radius.button,
+                      border: `1px solid ${colors.borderSubtle}`,
+                      background: "#fff",
+                      color: colors.textPrimary,
+                      textAlign: "left",
+                      padding: "0 12px",
+                      fontSize: 14,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
         )}
 
         {!bootstrapBusy && !placeLookupBusy && !placeSearchDominant && (

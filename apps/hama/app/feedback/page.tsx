@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
 
 export default function FeedbackPage() {
   const router = useRouter();
@@ -24,6 +25,15 @@ export default function FeedbackPage() {
       text,
       contact,
       createdAt: new Date().toISOString(),
+    });
+    logRecommendationEvent({
+      event_name: "place_feedback",
+      entity_type: "place",
+      entity_id: "unknown",
+      source_page: "feedback",
+      recommendation_rank: null,
+      place_snapshot: { feedback_type: type },
+      metadata: { type, text, contact },
     });
 
     alert(

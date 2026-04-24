@@ -77,6 +77,8 @@ export function logCourseStartClick(payload: {
   scenarioObject?: ScenarioObject | null;
   templateId?: string | null;
   stepPattern?: string | null;
+  recommendationRank?: number | null;
+  courseSnapshot?: Record<string, unknown> | null;
 }): void {
   logEvent("course_start_click", {
     course_id: payload.courseId,
@@ -87,10 +89,12 @@ export function logCourseStartClick(payload: {
     event_name: "course_start",
     entity_type: "course",
     entity_id: payload.courseId,
+    recommendation_rank: payload.recommendationRank ?? 1,
     ...ctx,
     template_id: payload.templateId ?? null,
     step_pattern: payload.stepPattern ?? null,
     place_ids: payload.placeIds,
     source_page: "course",
+    course_snapshot: payload.courseSnapshot ?? null,
   });
 }

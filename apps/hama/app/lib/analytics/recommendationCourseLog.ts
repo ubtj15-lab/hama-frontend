@@ -8,7 +8,7 @@ export function logRecommendationCourse(
   event_name: CourseLogName,
   plan: CoursePlan,
   obj: ScenarioObject | null,
-  extra: { rank_position?: number; source_page?: string; metadata?: Record<string, unknown> } = {}
+  extra: { recommendation_rank?: number; rank_position?: number; source_page?: string; metadata?: Record<string, unknown> } = {}
 ): void {
   if (!obj) return;
   const ctx = courseScenarioFieldsFromObject(obj);
@@ -20,8 +20,14 @@ export function logRecommendationCourse(
     template_id: plan.templateId ?? null,
     step_pattern: plan.template.join(">"),
     place_ids: plan.stops.map((s) => s.placeId),
-    rank_position: extra.rank_position ?? null,
+    recommendation_rank: extra.recommendation_rank ?? extra.rank_position ?? null,
     source_page: extra.source_page ?? "results",
+    course_snapshot: {
+      id: plan.id,
+      title: plan.situationTitle,
+      totalMinutes: plan.totalMinutes,
+      stops: plan.stops.map((s) => ({ placeId: s.placeId, placeName: s.placeName, startTime: s.startTime })),
+    },
     metadata: extra.metadata ?? {},
   });
 }

@@ -92,9 +92,21 @@ export function RecommendationCard({
   const biz = bizLabel(bs);
   const metaLine = [dist, biz].filter(Boolean).join(" · ");
   const phone = String(card.phone ?? "").trim();
-  const imgH = featured ? 200 : 168;
+  const imgH = featured ? 228 : 132;
   const closed = bs === "CLOSED";
   const reasonLead = closed ? reason.headline : reason.headline.startsWith("🔥") ? reason.headline : `🔥 ${reason.headline}`;
+  const reasonItems = [reason.badges[0], reason.badges[1], reason.badges[2]].filter(
+    (v): v is string => Boolean(v && String(v).trim())
+  );
+  if (reasonItems.length < 3) {
+    reasonItems.push(reason.subline);
+  }
+  if (reasonItems.length < 3) {
+    reasonItems.push(metaLine || "지금 바로 이동 가능");
+  }
+  if (reasonItems.length < 3) {
+    reasonItems.push("근처에서 빠르게 결정하기 좋음");
+  }
 
   return (
     <div
@@ -124,8 +136,8 @@ export function RecommendationCard({
         flexDirection: "column",
         borderRadius: radius.largeCard,
         background: colors.bgCard,
-        border: featured ? `2px solid ${colors.accentSoft}` : `1px solid ${colors.borderSubtle}`,
-        boxShadow: featured ? shadow.elevated : shadow.card,
+        border: featured ? `2px solid ${colors.accentPrimary}` : `1px solid ${colors.borderSubtle}`,
+        boxShadow: featured ? shadow.elevated : "0 2px 10px rgba(17,24,39,0.05)",
         cursor: "pointer",
         overflow: "hidden",
         position: "relative",
@@ -154,7 +166,7 @@ export function RecommendationCard({
             pointerEvents: "none",
           }}
         />
-        {featured && (
+        {featured ? (
           <span
             style={{
               position: "absolute",
@@ -164,56 +176,36 @@ export function RecommendationCard({
               fontWeight: 900,
               letterSpacing: "0.02em",
               color: colors.accentOnPrimary,
-              background: "linear-gradient(135deg, #ea580c 0%, #c2410c 100%)",
+              background: colors.accentPrimary,
               padding: "6px 12px",
               borderRadius: radius.pill,
-              boxShadow: "0 2px 12px rgba(194,65,12,0.35)",
+              boxShadow: "0 4px 14px rgba(255,107,0,0.28)",
             }}
           >
-            오늘의 1순위
+            추천 1순위
+          </span>
+        ) : (
+          <span
+            style={{
+              position: "absolute",
+              top: 10,
+              left: 10,
+              fontSize: 11,
+              fontWeight: 800,
+              color: colors.textPrimary,
+              background: "rgba(255,255,255,0.9)",
+              padding: "4px 10px",
+              borderRadius: radius.pill,
+            }}
+          >
+            보조 추천
           </span>
         )}
-        <span
-          style={{
-            position: "absolute",
-            bottom: 10,
-            right: 12,
-            fontSize: 12,
-            fontWeight: 800,
-            color: "rgba(255,255,255,0.92)",
-            textShadow: "0 1px 4px rgba(0,0,0,0.4)",
-          }}
-        >
-          {rank + 1}/3
-        </span>
+        <span style={{ position: "absolute", bottom: 10, right: 12, fontSize: 12, fontWeight: 800, color: "rgba(255,255,255,0.92)", textShadow: "0 1px 4px rgba(0,0,0,0.4)" }}>{rank + 1}/3</span>
       </div>
 
       <div style={{ padding: featured ? 18 : space.cardPadding, display: "flex", flexDirection: "column", gap: 8 }}>
-        <p
-          style={{
-            ...typo.cardReason,
-            fontSize: 15,
-            color: closed ? colors.textSecondary : colors.reasonHot,
-            margin: 0,
-            lineHeight: 1.35,
-            fontWeight: 900,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {reasonLead}
-        </p>
-        <p
-          style={{
-            ...typo.caption,
-            fontSize: 14,
-            color: colors.textSecondary,
-            margin: 0,
-            lineHeight: 1.5,
-            fontWeight: 500,
-          }}
-        >
-          {reason.subline}
-        </p>
+        <p style={{ ...typo.cardReason, fontSize: 15, color: closed ? colors.textSecondary : colors.reasonHot, margin: 0, lineHeight: 1.35, fontWeight: 900, letterSpacing: "-0.02em" }}>{reasonLead}</p>
 
         <div
           style={{
@@ -228,21 +220,11 @@ export function RecommendationCard({
           {card.name}
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {reason.badges.slice(0, 3).map((t) => (
-            <span
-              key={t}
-              style={{
-                ...typo.chip,
-                color: colors.tagDeepText,
-                background: colors.tagDeepBg,
-                padding: "5px 11px",
-                borderRadius: radius.pill,
-                border: `1px solid ${colors.tagDeepBorder}`,
-              }}
-            >
-              {t}
-            </span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          {reasonItems.slice(0, 3).map((t) => (
+            <div key={t} style={{ ...typo.caption, color: colors.textSecondary, lineHeight: 1.35, fontWeight: 700 }}>
+              • {t}
+            </div>
           ))}
         </div>
 
@@ -262,15 +244,15 @@ export function RecommendationCard({
               height: 46,
               borderRadius: radius.button,
               border: "none",
-              background: `linear-gradient(135deg, ${colors.accentPrimary} 0%, ${colors.accentStrong} 100%)`,
-              color: colors.accentOnPrimary,
+              background: colors.textPrimary,
+              color: "#fff",
               boxShadow: shadow.cta,
               fontWeight: 800,
               fontSize: 14,
               cursor: "pointer",
             }}
           >
-            길찾기
+            지금 출발하기
           </button>
           <button
             type="button"
@@ -284,14 +266,14 @@ export function RecommendationCard({
               height: 46,
               borderRadius: radius.button,
               border: `1px solid ${colors.borderSubtle}`,
-              background: colors.bgMuted,
+              background: "#fff",
               color: phone ? colors.textPrimary : colors.textSecondary,
               fontWeight: 800,
               fontSize: 14,
               cursor: phone ? "pointer" : "not-allowed",
             }}
           >
-            전화하기
+            바로 전화
           </button>
         </div>
       </div>

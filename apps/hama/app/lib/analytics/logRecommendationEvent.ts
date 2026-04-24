@@ -29,13 +29,16 @@ export function logRecommendationEvent(
       event_name: input.event_name,
       entity_type: input.entity_type ?? null,
       entity_id: input.entity_id ?? null,
+      recommendation_rank: input.recommendation_rank ?? input.rank_position ?? null,
       scenario: input.scenario ?? null,
       child_age_group: input.child_age_group ?? null,
       weather_condition: input.weather_condition ?? null,
       time_of_day: input.time_of_day ?? null,
       date_time_band: input.date_time_band ?? null,
-      rank_position: input.rank_position ?? null,
       source_page: input.source_page ?? null,
+      place_snapshot: input.place_snapshot ?? null,
+      course_snapshot: input.course_snapshot ?? null,
+      created_at: input.created_at ?? new Date().toISOString(),
       template_id: input.template_id ?? null,
       step_pattern: input.step_pattern ?? null,
       place_ids: input.place_ids ?? [],
@@ -46,8 +49,10 @@ export function logRecommendationEvent(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }).catch(() => {});
-  } catch {
-    // ignore
+    }).catch((e) => {
+      console.error("logRecommendationEvent fetch failed:", e);
+    });
+  } catch (e) {
+    console.error("logRecommendationEvent failed:", e);
   }
 }

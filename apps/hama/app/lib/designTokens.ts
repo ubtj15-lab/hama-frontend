@@ -1,46 +1,40 @@
 /** 결정형 UX — 색·간격·타이포·그림자 토큰 (인라인 스타일용). globals.css --hama-* 토큰과 맞춤. */
 
 export const colors = {
-  /** 따뜻한 캔버스(라이프스타일 추천 톤) */
-  bgDefault: "#faf8f5",
+  bgDefault: "#FAFAF7",
   bgSurface: "#ffffff",
   bgCard: "#ffffff",
-  bgMuted: "#f4f0ea",
-  bgInput: "#faf8f5",
-  textPrimary: "#0f172a",
-  textSecondary: "#57534e",
-  textMuted: "#94a3b8",
-  borderSubtle: "#e7e5e4",
-  borderStrong: "#d6d3d1",
-  /** 브랜드 프라이머리 — 신뢰 블루 유지 */
-  accentPrimary: "#2563eb",
-  accentSoft: "#eff6ff",
-  accentStrong: "#1d4ed8",
+  bgMuted: "#FFF9F2",
+  bgInput: "#FFF9F2",
+  textPrimary: "#111827",
+  textSecondary: "#6B7280",
+  textMuted: "#9CA3AF",
+  borderSubtle: "#EEEEE8",
+  borderStrong: "#EEEEE8",
+  accentPrimary: "#FF6B00",
+  accentSoft: "#FFE4CC",
+  accentStrong: "#FF6B00",
   accentOnPrimary: "#ffffff",
-  /** 추천 이유 강조(🔥 라인) */
-  reasonHot: "#c2410c",
-  /** 태그·칩 — 소프트 블루 */
-  tagMutedBg: "#eff6ff",
-  tagMutedText: "#1d4ed8",
-  /** 상황 배지 — 스톤 톤(프로토 pill 느낌 완화) */
-  tagDeepBg: "#fff7ed",
-  tagDeepText: "#9a3412",
-  tagDeepBorder: "rgba(234, 88, 12, 0.22)",
-  statusOpen: "#16a34a",
+  reasonHot: "#FF6B00",
+  tagMutedBg: "#FFF4E6",
+  tagMutedText: "#111827",
+  tagDeepBg: "#FFF4E6",
+  tagDeepText: "#111827",
+  tagDeepBorder: "rgba(255, 107, 0, 0.22)",
+  statusOpen: "#22C55E",
   statusWarning: "#ca8a04",
-  statusClosed: "#94a3b8",
+  statusClosed: "#9CA3AF",
   successSoft: "#dcfce7",
   warningSoft: "#fef9c3",
-  heroTint: "#FFF7ED",
+  heroTint: "#FFF9F2",
 } as const;
 
 export const radius = {
-  /** 카드 메인 — 목업 24~28px */
-  largeCard: 26,
-  card: 20,
+  largeCard: 24,
+  card: 24,
   input: 999,
   searchBar: 999,
-  button: 14,
+  button: 16,
   chip: 10,
   pill: 999,
   fab: 999,
@@ -60,11 +54,18 @@ export const space = {
 } as const;
 
 export const shadow = {
-  soft: "0 4px 18px rgba(15, 23, 42, 0.06)",
-  card: "0 8px 24px rgba(15, 23, 42, 0.07)",
-  elevated: "0 12px 32px rgba(15, 23, 42, 0.09)",
-  cta: "0 6px 20px rgba(59, 130, 246, 0.22)",
-  headerBtn: "0 4px 14px rgba(15, 23, 42, 0.08)",
+  soft: "0 4px 16px rgba(17, 24, 39, 0.06)",
+  card: "0 4px 20px rgba(255, 107, 0, 0.08)",
+  elevated: "0 4px 20px rgba(255, 107, 0, 0.08)",
+  cta: "0 8px 20px rgba(17, 24, 39, 0.2)",
+  headerBtn: "0 4px 14px rgba(17, 24, 39, 0.08)",
+} as const;
+
+export const categoryTokens = {
+  FOOD: { bg: "#FFF4E6", ring: "#FF6B00" },
+  ACTIVITY: { bg: "#FFE4F1", ring: "#E91E63" },
+  CAFE: { bg: "#F0EBFF", ring: "#8B5CF6" },
+  PARK: { bg: "#E3F2E3", ring: "#7AC77A" },
 } as const;
 
 export const typo = {

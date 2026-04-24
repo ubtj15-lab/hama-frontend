@@ -13,15 +13,11 @@
 import React, { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { logEvent } from "@/lib/logEvent";
-import FeedbackFab from "@/components/FeedbackFab";
 import HomeTopBar from "./_components/HomeTopBar";
 import { HomeHero } from "./_components/home/HomeHero";
-import { SearchInput } from "./_components/home/SearchInput";
 import { QuickScenarioGrid } from "./_components/home/QuickScenarioGrid";
-import { HomeTrustPickSection } from "./_components/home/HomeTrustPickSection";
-import { HomeRecentStrip } from "./_components/home/HomeRecentStrip";
+import { HomeBottomNav } from "./_components/home/HomeBottomNav";
 import { useRecent } from "./_hooks/useRecent";
-import { useSaved } from "./_hooks/useSaved";
 import { HamaEvents } from "@/lib/analytics/events";
 import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { recordRecentIntent } from "@/lib/recentIntents";
@@ -43,7 +39,6 @@ interface PointLog {
 
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
-const LOGIN_FLAG_KEY = "hamaLoggedIn";
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -99,18 +94,15 @@ function isNearbyIntent(q: string) {
 function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [query, setQuery] = useState("");
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [todayAskCount, setTodayAskCount] = useState<number | null>(null);
   const { recentCards, recordView } = useRecent();
-  const { savedCards } = useSaved();
 
   const openId = searchParams.get("open");
 
   useEffect(() => {
     const sync = () => {
       setUser(loadUserFromStorage());
-      setIsLoggedIn(window.localStorage.getItem(LOGIN_FLAG_KEY) === "1");
     };
     logEvent("session_start", { page: "home" });
     logEvent("page_view", { page: "home" });
@@ -123,6 +115,22 @@ function HomePageContent() {
       window.removeEventListener("focus", sync);
       window.removeEventListener("storage", sync);
       window.removeEventListener("pageshow", sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/stats", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        const n = Number(json?.today?.card_views ?? 0);
+        if (alive && Number.isFinite(n)) setTodayAskCount(n);
+      } catch {}
+    })();
+    return () => {
+      alive = false;
     };
   }, []);
 
@@ -163,33 +171,21 @@ function HomePageContent() {
     router.push(`/results?q=${encodeURIComponent(t)}`);
   };
 
-  /* 복구 예시: <RecentIntentChips onPick={(q) => goResults(q, "recent_chip")} /> */
-
-  const handleKakaoButtonClick = () => {
-    if (isLoggedIn) {
-      logEvent("logout", { page: "home" });
-      window.localStorage.removeItem(USER_KEY);
-      window.localStorage.removeItem(LOG_KEY);
-      window.localStorage.removeItem(LOGIN_FLAG_KEY);
-      setUser({ nickname: "게스트", points: 0 });
-      setIsLoggedIn(false);
-      window.location.href = "/api/auth/kakao/logout";
-      return;
-    }
-    logEvent("login_start", { page: "home" });
-    window.location.href = "/api/auth/kakao/login";
-  };
-
   return (
     <main
       style={{
         minHeight: "100vh",
-        /** 하단 FAB·iOS 홈 인디케이터 위로 마지막 카드·버튼이 잘리지 않게 */
-        paddingBottom: "calc(120px + env(safe-area-inset-bottom, 0px))",
+        paddingBottom: "calc(110px + env(safe-area-inset-bottom, 0px))",
         overflowX: "visible",
-        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, #eef2ff 100%)`,
+        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, ${colors.bgMuted} 100%)`,
       }}
     >
+      <style>{`
+        @keyframes hamaFadeUp {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
       <div
         style={{
           maxWidth: 430,
@@ -199,55 +195,39 @@ function HomePageContent() {
           overflowX: "visible",
         }}
       >
-        <HomeTopBar
-          isLoggedIn={isLoggedIn}
-          nickname={user.nickname}
-          points={user.points}
-          onLoginClick={handleKakaoButtonClick}
-          onGoPoints={() => router.push("/mypage/points")}
-          onGoMy={() => router.push("/my")}
-          onGoBeta={() => router.push("/beta-info")}
-        />
-        <HomeHero />
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          onSubmit={(e) => {
-            e.preventDefault();
-            goResults(query, "search_input");
-          }}
-          onMicClick={() => {
-            logEvent("voice_mic_click", { page: "home" });
-          }}
-        />
-        <QuickScenarioGrid
-          onPick={(q) => {
-            logEvent(HamaEvents.home_quick_scenario, { query: q, page: "home" });
-            goResults(q, "quick_grid");
-          }}
-        />
-
-        <HomeTrustPickSection
-          onPlaceOpen={(card) => {
-            stashPlaceForSession(card);
-            recordView(card.id);
-            router.push(`/place/${encodeURIComponent(card.id)}`);
-          }}
-          onScenarioGo={(q) => goResults(q, "home_trust_pick")}
-        />
-
-        <HomeRecentStrip
-          recentCards={recentCards}
-          savedCards={savedCards}
-          onOpenPlace={(card) => {
-            stashPlaceForSession(card);
-            recordView(card.id);
-            router.push(`/place/${encodeURIComponent(card.id)}`);
-          }}
-        />
-
-        <FeedbackFab />
+        <div style={{ animation: "hamaFadeUp 360ms ease both" }}>
+          <HomeTopBar
+            onAlertClick={() => {
+              logEvent("home_alert_click", { page: "home" });
+            }}
+          />
+        </div>
+        <div style={{ animation: "hamaFadeUp 360ms ease 120ms both" }}>
+          <HomeHero />
+        </div>
+        <div style={{ animation: "hamaFadeUp 360ms ease 240ms both" }}>
+          <QuickScenarioGrid
+            onPick={(q) => {
+              logEvent(HamaEvents.home_quick_scenario, { query: q, page: "home" });
+              goResults(q, "quick_grid");
+            }}
+          />
+        </div>
+        {todayAskCount != null && todayAskCount >= 10 && (
+          <p
+            style={{
+              margin: "2px 0 0",
+              color: colors.textSecondary,
+              fontSize: 13,
+              fontWeight: 700,
+              textAlign: "center",
+            }}
+          >
+            오늘 {todayAskCount.toLocaleString()}명이 하마한테 물어봤어
+          </p>
+        )}
       </div>
+      <HomeBottomNav active="home" />
     </main>
   );
 }

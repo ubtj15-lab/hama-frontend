@@ -5,7 +5,7 @@ import { colors, space, typo } from "@/lib/designTokens";
 
 export function HomeHero() {
   return (
-    <header style={{ marginBottom: space.heroBottom, paddingTop: 4 }}>
+    <header style={{ marginBottom: space.sectionTight, paddingTop: 4 }}>
       <h1
         style={{
           ...typo.heroTitle,
@@ -14,7 +14,15 @@ export function HomeHero() {
           lineHeight: 1.22,
         }}
       >
-        오늘 어디 갈지 고민 중이야?
+        오늘 뭐할지{" "}
+        <span
+          style={{
+            background: "linear-gradient(transparent 64%, #FFE4CC 64%)",
+            padding: "0 2px",
+          }}
+        >
+          고민돼?
+        </span>
       </h1>
       <p
         style={{
@@ -22,10 +30,10 @@ export function HomeHero() {
           color: colors.textSecondary,
           margin: "10px 0 0",
           lineHeight: 1.5,
-          fontWeight: 500,
+          fontWeight: 600,
         }}
       >
-        상황만 말해주면 바로 골라줄게
+        상황을 선택하면 하마가 딱 골라줄게요
       </p>
     </header>
   );
