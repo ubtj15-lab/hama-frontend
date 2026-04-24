@@ -12,6 +12,8 @@ import { colors, radius, shadow, space } from "@/lib/designTokens";
 import { openDirections } from "@/lib/openDirections";
 import { logEvent } from "@/lib/logEvent";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
+import { ChickIcon, SparkleIcon } from "@icons";
+import { Skeleton } from "@ui/Skeleton";
 
 function CourseProgressInner() {
   const router = useRouter();
@@ -81,7 +83,8 @@ function CourseProgressInner() {
   if (!ready) {
     return (
       <main style={{ padding: space.pageX }}>
-        <p>불러오는 중…</p>
+        <Skeleton height={16} width="55%" />
+        <Skeleton height={100} style={{ marginTop: 12 }} />
       </main>
     );
   }
@@ -108,7 +111,9 @@ function CourseProgressInner() {
       </header>
 
       <section style={{ textAlign: "center", marginTop: 26 }}>
-        <div style={{ fontSize: 20, marginBottom: 8 }}>🎉 ✨ 🎊</div>
+        <div style={{ fontSize: 20, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          🎉 <SparkleIcon size={18} color={colors.primaryDark} /> 🎊
+        </div>
         <div
           style={{
             width: 82,
@@ -237,7 +242,10 @@ function CourseProgressInner() {
           padding: 14,
         }}
       >
-        <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 5 }}>🐥 갔다 와서 한 번만 알려줘</div>
+        <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 5, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <ChickIcon size={16} color={colors.primaryDark} />
+          갔다 와서 한 번만 알려줘
+        </div>
         <p style={{ margin: 0, fontSize: 13, color: colors.textSecondary, fontWeight: 700, lineHeight: 1.45 }}>
           어땠는지 피드백 남겨주면 하마가 더 똑똑해져
         </p>
@@ -267,7 +275,14 @@ function CourseProgressInner() {
 
 export default function CourseProgressPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>로딩…</div>}>
+    <Suspense
+      fallback={
+        <div style={{ padding: 24 }}>
+          <Skeleton height={16} width="42%" />
+          <Skeleton height={100} style={{ marginTop: 12 }} />
+        </div>
+      }
+    >
       <CourseProgressInner />
     </Suspense>
   );

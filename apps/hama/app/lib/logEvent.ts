@@ -1,6 +1,6 @@
 // app/lib/logEvent.ts
 
-import { getUserId, getOrCreateSessionId } from "@hama/shared";
+import { getDbUserId, getOrCreateSessionId } from "@hama/shared";
 
 type LogPayload = Record<string, unknown>;
 
@@ -17,21 +17,21 @@ export function logEvent(event: string, payload: LogPayload = {}) {
     });
 
     // Supabase events 테이블로 전송 (fire-and-forget)
-    const userId = getUserId();
     const sessionId = getOrCreateSessionId();
-    const isLoggedIn = userId.startsWith("user_");
+    const userId = getDbUserId();
     // TODO(Supabase): user_actions 테이블(또는 analytics.events)로 정식 적재 시 payload 스키마 맞추기
     fetch("/api/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        user_id: isLoggedIn ? userId : null,
+        user_id: userId,
         session_id: sessionId || "unknown",
         type: event,
         data: payload,
       }),
-    }).catch(() => {});
-  } catch {
+    }).catch((e) => console.error("logEvent fetch failed:", e));
+  } catch (e) {
+    console.error("logEvent failed:", e);
     // logging 실패해도 앱은 죽으면 안 됨
   }
 }

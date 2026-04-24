@@ -37,5 +37,6 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.redirect(kakaoLogoutUrl);
   res.cookies.set("hama_user_id", "", { maxAge: 0, path: "/" });
   res.cookies.set("hama_user_nickname", "", { maxAge: 0, path: "/" });
+  res.cookies.set("hama_kakao_id", "", { maxAge: 0, path: "/" });
   return res;
 }

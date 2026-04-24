@@ -16,6 +16,7 @@ import { HamaEvents } from "@/lib/analytics/events";
 import { openDirections } from "@/lib/openDirections";
 import { buildRecommendationReason, getClientTimeOfDay } from "@/lib/recommend/buildRecommendationReason";
 import { businessStateFromCard } from "@/lib/recommend/scoreParts";
+import { FlameIcon, SparkleIcon } from "@icons";
 
 type TrustRow =
   | { kind: "place"; card: HomeCard }
@@ -55,10 +56,10 @@ function splitFeatured(rows: TrustRow[]): { firstPlace: TrustRow | null; tail: T
   return { firstPlace: first, tail };
 }
 
-/** 목업: 거리·편의 → 📍, 그 외 추천 이유 → 🔥 */
+/** 목업: 거리·편의 → 📍, 그 외 추천 이유 → flame icon */
 function reasonLeadingEmoji(headline: string): string {
   if (/편해|가깝|근처|거리|이동|지금/.test(headline)) return "📍";
-  return "🔥";
+  return "";
 }
 
 const SCENARIO_ROW_ICONS = ["🍱", "🥐", "🍽️"] as const;
@@ -138,7 +139,7 @@ function ScenarioEmptyFallback({ onScenarioGo }: { onScenarioGo: (query: string)
               }}
               aria-hidden
             >
-              {SCENARIO_ROW_ICONS[idx] ?? "✨"}
+              {SCENARIO_ROW_ICONS[idx] ?? <SparkleIcon size={18} color={colors.primaryDark} />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: colors.textPrimary, lineHeight: 1.25 }}>
@@ -332,7 +333,15 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
               fontWeight: 800,
             }}
           >
-            {reasonIsClosed ? reason.headline : `${reasonLeadingEmoji(reason.headline)} ${reason.headline}`}
+            {reasonIsClosed ? (
+              reason.headline
+            ) : (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {!reasonLeadingEmoji(reason.headline) && <FlameIcon size={14} color={colors.reasonHot} />}
+                {reasonLeadingEmoji(reason.headline) ? `${reasonLeadingEmoji(reason.headline)} ` : ""}
+                {reason.headline}
+              </span>
+            )}
           </p>
           <p
             style={{
@@ -452,7 +461,7 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
           }}
           aria-hidden
         >
-          ✨
+          <SparkleIcon size={28} color={colors.primaryDark} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
@@ -552,7 +561,10 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
                 letterSpacing: "-0.02em",
               }}
             >
-              🔥 오늘 가장 잘 맞는 곳
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <FlameIcon size={16} color={colors.reasonHot} />
+                오늘 가장 잘 맞는 곳
+              </span>
             </h3>
             {firstPlace.kind === "place" ? renderPlaceCard(firstPlace, 0, true) : renderScenarioRow(firstPlace, 0)}
           </div>

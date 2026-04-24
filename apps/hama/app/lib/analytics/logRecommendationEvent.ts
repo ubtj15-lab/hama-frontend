@@ -3,7 +3,7 @@
  * 실패해도 UI는 죽지 않음 (fire-and-forget).
  */
 import type { LogRecommendationEventInput } from "./types";
-import { getOrCreateSessionId, getUserId } from "./session";
+import { getDbUserId, getOrCreateSessionId } from "./session";
 
 export type LogRecommendationOptions = {
   /** false 이면 legacy `logEvent` 호출 생략 (기본 true: 중복 수집 허용) */
@@ -21,11 +21,10 @@ export function logRecommendationEvent(
 
   try {
     const session_id = getOrCreateSessionId();
-    const userId = getUserId();
-    const isLoggedIn = userId.startsWith("user_");
+    const userId = getDbUserId();
     const body = {
       session_id,
-      user_id: isLoggedIn ? userId : null,
+      user_id: userId,
       event_name: input.event_name,
       entity_type: input.entity_type ?? null,
       entity_id: input.entity_id ?? null,
@@ -36,16 +35,18 @@ export function logRecommendationEvent(
       time_of_day: input.time_of_day ?? null,
       date_time_band: input.date_time_band ?? null,
       source_page: input.source_page ?? null,
-      place_snapshot: input.place_snapshot ?? null,
-      course_snapshot: input.course_snapshot ?? null,
       created_at: input.created_at ?? new Date().toISOString(),
       template_id: input.template_id ?? null,
       step_pattern: input.step_pattern ?? null,
       place_ids: input.place_ids ?? [],
-      metadata: input.metadata ?? {},
+      metadata: {
+        ...(input.metadata ?? {}),
+        place_snapshot: input.place_snapshot ?? null,
+        course_snapshot: input.course_snapshot ?? null,
+      },
     };
 
-    void fetch("/api/recommendation/log", {
+    fetch("/api/recommendation/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

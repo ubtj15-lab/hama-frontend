@@ -17,6 +17,8 @@ import { logEvent } from "@/lib/logEvent";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
+import { CoffeeIcon, RiceBowlIcon, SparkleIcon } from "@icons";
+import { Skeleton } from "@ui/Skeleton";
 
 function CourseDetailInner() {
   const router = useRouter();
@@ -105,7 +107,8 @@ function CourseDetailInner() {
   if (!restoreAttempted) {
     return (
       <main style={{ padding: space.pageX }}>
-        <p>코스 불러오는 중…</p>
+        <Skeleton height={16} width="65%" />
+        <Skeleton height={120} style={{ marginTop: 12 }} />
       </main>
     );
   }
@@ -142,9 +145,9 @@ function CourseDetailInner() {
     return "이 흐름에서 자연스럽게 이어지는 장소";
   };
   const stopEmoji = (placeType: string) => {
-    if (placeType === "FOOD") return "🍚";
+    if (placeType === "FOOD") return <RiceBowlIcon size={14} color={colors.primaryDark} />;
     if (placeType === "ACTIVITY") return "🎯";
-    if (placeType === "CAFE") return "☕";
+    if (placeType === "CAFE") return <CoffeeIcon size={14} color={colors.primaryDark} />;
     if (placeType === "WALK") return "🌿";
     return "📍";
   };
@@ -204,14 +207,17 @@ function CourseDetailInner() {
         style={{
           fontSize: 12,
           fontWeight: 900,
-          color: "#FF6B00",
-          background: "#FFF4E6",
+          color: colors.primaryDark,
+          background: colors.primaryLight,
           borderRadius: 999,
           padding: "6px 11px",
           display: "inline-block",
         }}
       >
-        ✨ 추천 1순위 코스
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <SparkleIcon size={12} color={colors.primaryDark} />
+          추천 1순위 코스
+        </span>
       </span>
       <h1 style={{ margin: "10px 0 0", fontSize: 28, letterSpacing: "-0.03em", lineHeight: 1.2 }}>{plan.situationTitle}</h1>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
@@ -274,11 +280,13 @@ function CourseDetailInner() {
           const next = plan.stops[i + 1];
           return (
             <div key={`${s.placeId}-${i}`} style={{ position: "relative", marginBottom: next ? 18 : 0 }}>
-              <div style={{ position: "absolute", left: -14, top: 6, width: 14, height: 14, borderRadius: "50%", background: "#FF6B00" }} />
+              <div style={{ position: "absolute", left: -14, top: 6, width: 14, height: 14, borderRadius: "50%", background: colors.primary }} />
               <div style={{ background: "#fff", border: `1px solid ${colors.borderSubtle}`, borderRadius: 14, padding: "10px 11px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
                   <div style={{ fontSize: 12, color: colors.textSecondary, fontWeight: 800 }}>
-                    {stopEmoji(String(s.placeType))} {String(s.placeType)} / 체류 {s.dwellMinutes}분
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {stopEmoji(String(s.placeType))} {String(s.placeType)} / 체류 {s.dwellMinutes}분
+                    </span>
                   </div>
                   <div style={{ fontSize: 12, color: colors.textSecondary, fontWeight: 800 }}>{s.startTime}</div>
                 </div>
@@ -324,7 +332,10 @@ function CourseDetailInner() {
             boxShadow: shadow.cta,
           }}
         >
-          ✨ 이 코스로 출발
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <SparkleIcon size={14} color="#fff" />
+            이 코스로 출발
+          </span>
         </button>
         {first && (
           <button
@@ -376,7 +387,14 @@ function CourseDetailInner() {
 
 export default function CourseDetailPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>로딩…</div>}>
+    <Suspense
+      fallback={
+        <div style={{ padding: 24 }}>
+          <Skeleton height={16} width="45%" />
+          <Skeleton height={120} style={{ marginTop: 12 }} />
+        </div>
+      }
+    >
       <CourseDetailInner />
     </Suspense>
   );

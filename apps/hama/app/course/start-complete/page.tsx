@@ -7,6 +7,8 @@ import { encodeCoursePlanSnapshot, readCoursePlanWithFallback, stashCoursePlan }
 import { colors, radius, shadow, space } from "@/lib/designTokens";
 import { openDirections } from "@/lib/openDirections";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
+import { ChickIcon } from "@icons";
+import { Skeleton } from "@ui/Skeleton";
 
 function CourseStartCompleteInner() {
   const router = useRouter();
@@ -59,7 +61,8 @@ function CourseStartCompleteInner() {
   if (!ready) {
     return (
       <main style={{ padding: space.pageX }}>
-        <p>불러오는 중…</p>
+        <Skeleton height={16} width="55%" />
+        <Skeleton height={100} style={{ marginTop: 12 }} />
       </main>
     );
   }
@@ -144,7 +147,10 @@ function CourseStartCompleteInner() {
       </section>
 
       <section style={{ marginTop: 14, borderRadius: radius.card, border: `1px solid ${colors.borderSubtle}`, background: "#FFF9F2", padding: 14 }}>
-        <div style={{ fontSize: 15, fontWeight: 900 }}>🐥 갔다 와서 한 번만 알려줘</div>
+                  <div style={{ fontSize: 15, fontWeight: 900, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <ChickIcon size={16} color={colors.primaryDark} />
+                    갔다 와서 한 번만 알려줘
+                  </div>
       </section>
 
       <button
@@ -171,7 +177,14 @@ function CourseStartCompleteInner() {
 
 export default function CourseStartCompletePage() {
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>로딩…</div>}>
+    <Suspense
+      fallback={
+        <div style={{ padding: 24 }}>
+          <Skeleton height={16} width="42%" />
+          <Skeleton height={100} style={{ marginTop: 12 }} />
+        </div>
+      }
+    >
       <CourseStartCompleteInner />
     </Suspense>
   );

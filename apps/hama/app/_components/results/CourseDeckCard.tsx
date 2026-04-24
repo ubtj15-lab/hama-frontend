@@ -10,6 +10,8 @@ import { logRecommendationCourse } from "@/lib/analytics/recommendationCourseLog
 import { Chip } from "@/_components/common/Chip";
 import { categoryTokens, colors, radius, shadow, space, typo } from "@/lib/designTokens";
 import type { HomeCard } from "@/lib/storeTypes";
+import { CoffeeIcon, RiceBowlIcon, SparkleIcon } from "@icons";
+import { Touchable } from "@ui/Touchable";
 
 type Props = {
   plan: CoursePlan;
@@ -80,33 +82,40 @@ export function CourseDeckCard({
   const totalHour = `${Math.floor(plan.totalMinutes / 60)}시간${plan.totalMinutes % 60 ? ` ${plan.totalMinutes % 60}분` : ""}`;
   const typeLabel = (t: string) =>
     t === "FOOD" ? "식당" : t === "ACTIVITY" ? "활동" : t === "CAFE" ? "카페" : t === "WALK" ? "산책" : "코스";
-  const typeEmoji = (t: string) =>
-    t === "FOOD" ? "🍚" : t === "ACTIVITY" ? "🎯" : t === "CAFE" ? "☕" : t === "WALK" ? "🌿" : "📍";
+  const typeEmoji = (t: string) => (t === "FOOD" ? <RiceBowlIcon size={14} color={colors.primaryDark} /> : t === "CAFE" ? <CoffeeIcon size={14} color={colors.primaryDark} /> : t === "ACTIVITY" ? "🎯" : t === "WALK" ? "🌿" : "📍");
 
   return (
-    <div
-      ref={cardRef}
-      style={{
-        padding: 14,
-        minHeight: 132,
-        borderRadius: radius.card,
-        background: colors.bgCard,
-        border: rankOne ? "2px solid #FF6B00" : `1px solid ${colors.borderSubtle}`,
-        boxShadow: rankOne ? "0 4px 20px rgba(255,107,0,0.08)" : "0 2px 10px rgba(17,24,39,0.05)",
-      }}
-    >
+    <Touchable>
+      <div
+        ref={cardRef}
+        style={{
+          padding: 14,
+          minHeight: 132,
+          borderRadius: radius.card,
+          background: colors.bgCard,
+          border: rankOne ? `2px solid ${colors.primary}` : `1px solid ${colors.borderSubtle}`,
+          boxShadow: rankOne ? "0 4px 20px rgba(255,107,53,0.08)" : "0 2px 10px rgba(17,24,39,0.05)",
+        }}
+      >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
         <span
           style={{
             fontSize: 12,
             fontWeight: 900,
-            color: rankOne ? "#FF6B00" : colors.textSecondary,
-            background: rankOne ? "#FFF4E6" : "#F9FAFB",
+            color: rankOne ? colors.primaryDark : colors.textSecondary,
+            background: rankOne ? colors.primaryLight : "#F9FAFB",
             borderRadius: radius.pill,
             padding: "5px 10px",
           }}
         >
-          {rankOne ? "✨ 추천 1순위" : `#${rank + 1}`}
+          {rankOne ? (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <SparkleIcon size={12} color={colors.primaryDark} />
+              추천 1순위
+            </span>
+          ) : (
+            `#${rank + 1}`
+          )}
         </span>
         <span style={{ fontSize: 12, color: colors.textSecondary, fontWeight: 800 }}>총 {totalHour}</span>
       </div>
@@ -219,6 +228,7 @@ export function CourseDeckCard({
           길찾기
         </button>
       </div>
-    </div>
+      </div>
+    </Touchable>
   );
 }

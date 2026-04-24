@@ -4,6 +4,8 @@ export const dynamic = "force-dynamic";
 
 import React, { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { colors } from "@/lib/designTokens";
+import { ChickIcon, FamilyIcon, FerrisWheelIcon, HeartIcon, RiceBowlIcon, SparkleIcon } from "@icons";
 
 type Place = {
   id: number;
@@ -81,10 +83,10 @@ export default function RecommendPage() {
   }, [q]);
 
   const contextChip = {
-    family: "👨‍👩‍👧 아이랑 · 🚗 차로 10분 거리",
-    date: "💕 데이트 · 🚗 차로 10분 거리",
-    solo: "🍚 혼밥 · 🚗 차로 10분 거리",
-    course: "🎡 코스 · 🚗 차로 10분 거리",
+    family: { icon: <FamilyIcon size={16} color={colors.primaryDark} />, label: "아이랑" },
+    date: { icon: <HeartIcon size={16} color={colors.primaryDark} />, label: "데이트" },
+    solo: { icon: <RiceBowlIcon size={16} color={colors.primaryDark} />, label: "혼밥" },
+    course: { icon: <FerrisWheelIcon size={16} color={colors.primaryDark} />, label: "코스" },
   }[contextType];
 
   const headlineWord = contextType === "date" || contextType === "solo" ? "딱 좋아" : "끝";
@@ -102,7 +104,7 @@ export default function RecommendPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#FAFAF7",
+        background: colors.bgCream,
         display: "flex",
         justifyContent: "center",
       }}
@@ -114,14 +116,14 @@ export default function RecommendPage() {
           padding: "16px 16px 32px",
           boxSizing: "border-box",
           fontFamily: "Noto Sans KR, system-ui, sans-serif",
-          color: "#111827",
+          color: colors.neutral[900],
         }}
       >
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <button
             type="button"
             onClick={() => router.back()}
-            style={{ border: "none", background: "transparent", fontSize: 20, cursor: "pointer", color: "#111827" }}
+            style={{ border: "none", background: "transparent", fontSize: 20, cursor: "pointer", color: colors.neutral[900] }}
           >
             ←
           </button>
@@ -137,7 +139,7 @@ export default function RecommendPage() {
                 });
               }
             }}
-            style={{ border: "none", background: "transparent", fontSize: 18, cursor: "pointer", color: "#111827" }}
+            style={{ border: "none", background: "transparent", fontSize: 18, cursor: "pointer", color: colors.neutral[900] }}
           >
             ⤴
           </button>
@@ -150,27 +152,31 @@ export default function RecommendPage() {
             gap: 8,
             borderRadius: 999,
             padding: "8px 12px",
-            background: "#FFF9F2",
-            border: "1px solid #EEEEE8",
-            color: "#6B7280",
+            background: colors.primaryLight,
+            border: `1px solid ${colors.borderSubtle}`,
+            color: colors.neutral[700],
             fontSize: 13,
             fontWeight: 700,
             marginBottom: 14,
           }}
         >
-          {contextChip}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            {contextChip.icon}
+            {contextChip.label}
+          </span>
+          · 🚗 차로 10분 거리
         </div>
 
         <h1 style={{ margin: "0 0 16px", fontSize: 30, lineHeight: 1.2, letterSpacing: "-0.03em" }}>
-          오늘은 여기 가면 <span style={{ color: "#FF6B00", fontWeight: 900 }}>{headlineWord}</span>
+          오늘은 여기 가면 <span style={{ color: colors.primary, fontWeight: 900 }}>{headlineWord}</span>
         </h1>
 
         <section
           style={{
             borderRadius: 24,
             background: "#fff",
-            border: "1px solid #EEEEE8",
-            boxShadow: "0 4px 20px rgba(255,107,0,0.08)",
+            border: `1px solid ${colors.borderSubtle}`,
+            boxShadow: "0 4px 20px rgba(255,107,53,0.08)",
             overflow: "hidden",
             paddingBottom: 14,
           }}
@@ -182,7 +188,7 @@ export default function RecommendPage() {
                 position: "absolute",
                 left: 12,
                 top: 12,
-                background: "#FF6B00",
+                background: colors.primary,
                 color: "#fff",
                 fontSize: 12,
                 fontWeight: 900,
@@ -190,7 +196,10 @@ export default function RecommendPage() {
                 padding: "6px 11px",
               }}
             >
-              ✨ 추천 1순위
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <SparkleIcon size={12} color="#fff" />
+                추천 1순위
+              </span>
             </span>
             <span
               style={{
@@ -211,7 +220,7 @@ export default function RecommendPage() {
 
           <div style={{ padding: "14px 14px 0", display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.03em" }}>{selected.name}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#6B7280" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: colors.neutral[700] }}>
               ⭐ {selected.rating.toFixed(1)} ({selected.reviewCount}) · {selected.category} · {selected.area}
             </div>
 
@@ -219,8 +228,8 @@ export default function RecommendPage() {
               style={{
                 marginTop: 2,
                 borderRadius: 16,
-                border: "1px solid #F3E6D5",
-                background: "#FFFAF3",
+                border: `1px solid ${colors.borderSubtle}`,
+                background: colors.primaryLight,
                 padding: "11px 12px",
               }}
             >
@@ -234,7 +243,7 @@ export default function RecommendPage() {
                         height: 18,
                         minWidth: 18,
                         borderRadius: 999,
-                        background: "#FF6B00",
+                        background: colors.primary,
                         color: "#fff",
                         fontSize: 12,
                         fontWeight: 900,
@@ -245,16 +254,16 @@ export default function RecommendPage() {
                     >
                       ✓
                     </span>
-                    <span style={{ fontSize: 13, color: "#6B7280", fontWeight: 700 }}>{reason}</span>
+                    <span style={{ fontSize: 13, color: colors.neutral[700], fontWeight: 700 }}>{reason}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-              <span style={{ fontSize: 12, color: "#6B7280", background: "#F7F7F4", borderRadius: 999, padding: "6px 10px" }}>가까운 거리</span>
-              <span style={{ fontSize: 12, color: "#6B7280", background: "#FFF4E6", borderRadius: 999, padding: "6px 10px" }}>지금 이동 편함</span>
-              <span style={{ fontSize: 12, color: "#6B7280", background: "#F7F7F4", borderRadius: 999, padding: "6px 10px" }}>빠른 결정</span>
+              <span style={{ fontSize: 12, color: colors.neutral[700], background: colors.neutral[100], borderRadius: 999, padding: "6px 10px" }}>가까운 거리</span>
+              <span style={{ fontSize: 12, color: colors.primaryDark, background: colors.primaryLight, borderRadius: 999, padding: "6px 10px" }}>지금 이동 편함</span>
+              <span style={{ fontSize: 12, color: colors.neutral[700], background: colors.neutral[100], borderRadius: 999, padding: "6px 10px" }}>빠른 결정</span>
             </div>
 
             <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
@@ -265,9 +274,9 @@ export default function RecommendPage() {
                   flex: 1,
                   height: 46,
                   borderRadius: 16,
-                  border: "1px solid #111827",
+                  border: `1px solid ${colors.neutral[900]}`,
                   background: "#fff",
-                  color: "#111827",
+                  color: colors.neutral[900],
                   fontSize: 14,
                   fontWeight: 800,
                   cursor: "pointer",
@@ -283,7 +292,7 @@ export default function RecommendPage() {
                   height: 46,
                   borderRadius: 16,
                   border: "none",
-                  background: "#111827",
+                  background: colors.neutral[900],
                   boxShadow: "0 8px 20px rgba(17,24,39,0.2)",
                   color: "#fff",
                   fontSize: 14,
@@ -300,7 +309,7 @@ export default function RecommendPage() {
 
         <section style={{ marginTop: 18 }}>
           <h2 style={{ margin: 0, fontSize: 24, fontWeight: 900, letterSpacing: "-0.03em" }}>이런 곳도 괜찮아</h2>
-          <p style={{ margin: "6px 0 12px", color: "#6B7280", fontSize: 14, fontWeight: 700 }}>다른 선택지 2곳</p>
+          <p style={{ margin: "6px 0 12px", color: colors.neutral[700], fontSize: 14, fontWeight: 700 }}>다른 선택지 2곳</p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {secondaryPlaces.map((place) => (
@@ -308,7 +317,7 @@ export default function RecommendPage() {
                 key={place.id}
                 style={{
                   borderRadius: 20,
-                  border: "1px solid #EEEEE8",
+                  border: `1px solid ${colors.borderSubtle}`,
                   background: "#fff",
                   padding: 10,
                   display: "flex",
@@ -326,8 +335,8 @@ export default function RecommendPage() {
                       style={{
                         fontSize: 11,
                         fontWeight: 800,
-                        color: "#6B7280",
-                        background: "#FFF4E6",
+                        color: colors.primaryDark,
+                        background: colors.primaryLight,
                         borderRadius: 999,
                         padding: "4px 8px",
                       }}
@@ -338,8 +347,8 @@ export default function RecommendPage() {
                       style={{
                         fontSize: 11,
                         fontWeight: 800,
-                        color: "#6B7280",
-                        background: "#F7F7F4",
+                        color: colors.neutral[700],
+                        background: colors.neutral[100],
                         borderRadius: 999,
                         padding: "4px 8px",
                       }}
@@ -348,11 +357,11 @@ export default function RecommendPage() {
                     </span>
                   </div>
                   <div style={{ fontSize: 16, fontWeight: 900, letterSpacing: "-0.02em", marginBottom: 2 }}>{place.name}</div>
-                  <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, marginBottom: 4 }}>
+                  <div style={{ fontSize: 12, color: colors.neutral[700], fontWeight: 700, marginBottom: 4 }}>
                     ⭐ {place.rating.toFixed(1)} ({place.reviewCount})
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", lineHeight: 1.35 }}>{place.headlineReason}</div>
-                  <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 700, lineHeight: 1.35, marginTop: 2 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: colors.neutral[900], lineHeight: 1.35 }}>{place.headlineReason}</div>
+                  <div style={{ fontSize: 12, color: colors.neutral[700], fontWeight: 700, lineHeight: 1.35, marginTop: 2 }}>
                     {place.sublineReason}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
@@ -361,8 +370,8 @@ export default function RecommendPage() {
                         key={`${place.id}-${tag}`}
                         style={{
                           fontSize: 11,
-                          color: "#6B7280",
-                          background: "#F7F7F4",
+                          color: colors.neutral[700],
+                          background: colors.neutral[100],
                           borderRadius: 999,
                           padding: "4px 8px",
                           fontWeight: 700,
@@ -380,9 +389,9 @@ export default function RecommendPage() {
                         flex: 1,
                         height: 36,
                         borderRadius: 12,
-                        border: "1px solid #111827",
+                        border: `1px solid ${colors.neutral[900]}`,
                         background: "#fff",
-                        color: "#111827",
+                        color: colors.neutral[900],
                         fontSize: 12,
                         fontWeight: 800,
                         cursor: "pointer",
@@ -402,7 +411,7 @@ export default function RecommendPage() {
                           height: 36,
                           borderRadius: 12,
                           border: "none",
-                          background: "#111827",
+                          background: colors.neutral[900],
                           color: "#fff",
                           fontSize: 12,
                           fontWeight: 800,
@@ -426,15 +435,18 @@ export default function RecommendPage() {
               height: 46,
               marginTop: 12,
               borderRadius: 16,
-              border: "1.5px dashed #FF6B00",
-              background: "#FFF9F2",
-              color: "#6B7280",
+              border: `1.5px dashed ${colors.primary}`,
+              background: colors.primaryLight,
+              color: colors.primaryDark,
               fontSize: 14,
               fontWeight: 800,
               cursor: "pointer",
             }}
           >
-            마음에 안 들어? 다시 골라줄게 🐥
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              마음에 안 들어? 다시 골라줄게
+              <ChickIcon size={14} color={colors.primaryDark} />
+            </span>
           </button>
         </section>
       </div>

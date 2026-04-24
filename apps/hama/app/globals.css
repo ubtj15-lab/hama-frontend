@@ -16,28 +16,28 @@ body {
 
 :root {
   color-scheme: light;
-  --hama-bg-top: #fafaf7;
-  --hama-bg-bottom: #fff9f2;
+  --hama-bg-top: #faf6ef;
+  --hama-bg-bottom: #f5f2ec;
   --hama-surface: #ffffff;
   --hama-surface-2: rgba(255, 255, 255, 0.9);
-  --hama-muted: #fff9f2;
+  --hama-muted: #f5f2ec;
 
-  --hama-text: #111827;
-  --hama-text-secondary: #6b7280;
-  --hama-text-muted: #9ca3af;
+  --hama-text: #1a1a1a;
+  --hama-text-secondary: #5f5e5a;
+  --hama-text-muted: #888780;
 
-  --hama-border: #eeeee8;
-  --hama-border-strong: #eeeee8;
+  --hama-border: #d4d0c6;
+  --hama-border-strong: #d4d0c6;
 
-  --hama-primary: #ff6b00;
-  --hama-primary-soft: #ffe4cc;
-  --hama-primary-strong: #ff6b00;
+  --hama-primary: #ff6b35;
+  --hama-primary-soft: rgba(255, 107, 53, 0.1);
+  --hama-primary-strong: #b84e0b;
   --hama-on-primary: #ffffff;
 
-  --hama-reason: #ff6b00;
-  --hama-tag-bg: #fff4e6;
-  --hama-tag-text: #111827;
-  --hama-tag-border: rgba(255, 107, 0, 0.22);
+  --hama-reason: #b84e0b;
+  --hama-tag-bg: rgba(255, 107, 53, 0.1);
+  --hama-tag-text: #b84e0b;
+  --hama-tag-border: rgba(255, 107, 53, 0.25);
 
   --hama-open: #22c55e;
   --hama-warning: #ca8a04;
@@ -59,7 +59,7 @@ body {
 
   /* Shadow */
   --hama-shadow-sm: 0 4px 16px rgba(17, 24, 39, 0.06);
-  --hama-shadow-md: 0 4px 20px rgba(255, 107, 0, 0.08);
+  --hama-shadow-md: 0 4px 20px rgba(255, 107, 53, 0.08);
   --hama-shadow-lg: 0 8px 20px rgba(17, 24, 39, 0.2);
 
   /* Typography scale (rem) */

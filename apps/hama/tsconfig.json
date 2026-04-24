@@ -27,6 +27,15 @@
       ],
       "@lib/*": [
         "./app/lib/*"
+      ],
+      "@icons": [
+        "./src/components/icons/index.ts"
+      ],
+      "@icons/*": [
+        "./src/components/icons/*"
+      ],
+      "@ui/*": [
+        "./src/components/ui/*"
       ]
     },
     "plugins": [

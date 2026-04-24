@@ -852,7 +852,7 @@ function ResultsContent() {
                   fontSize: 13,
                   fontWeight: 800,
                   color: colors.textSecondary,
-                  background: "#FFF4E6",
+                  background: colors.primaryLight,
                   border: `1px solid ${colors.borderSubtle}`,
                   borderRadius: 999,
                   padding: "6px 10px",
@@ -863,7 +863,7 @@ function ResultsContent() {
               <span style={{ fontSize: 13, fontWeight: 800, color: colors.textSecondary }}>3가지 코스</span>
             </div>
             <h2 style={{ margin: "0 0 10px", fontSize: 28, lineHeight: 1.18, letterSpacing: "-0.03em", color: colors.textPrimary }}>
-              오늘 둘이서, <span style={{ background: "linear-gradient(transparent 62%, #FFE4CC 62%)" }}>이런 코스 어때?</span>
+              오늘 둘이서, <span style={{ background: `linear-gradient(transparent 62%, ${colors.primaryLight} 62%)` }}>이런 코스 어때?</span>
             </h2>
 
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
@@ -879,7 +879,7 @@ function ResultsContent() {
                   onClick={() => setCourseFilter(f.id as typeof courseFilter)}
                   style={{
                     border: `1px solid ${courseFilter === f.id ? colors.accentPrimary : colors.borderSubtle}`,
-                    background: courseFilter === f.id ? "#FFF4E6" : "#fff",
+                    background: courseFilter === f.id ? colors.primaryLight : "#fff",
                     color: courseFilter === f.id ? colors.accentPrimary : colors.textSecondary,
                     borderRadius: 999,
                     padding: "7px 11px",

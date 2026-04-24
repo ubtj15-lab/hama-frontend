@@ -3,7 +3,7 @@
  */
 import { getOrCreateSessionId as sharedSessionId } from "@hama/shared";
 
-export { getUserId, getOrCreateSessionId } from "@hama/shared";
+export { getUserId, getDbUserId, getOrCreateSessionId } from "@hama/shared";
 
 export function getSessionId(): string {
   return sharedSessionId();

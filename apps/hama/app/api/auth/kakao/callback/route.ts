@@ -122,6 +122,13 @@ export async function GET(req: NextRequest) {
       sameSite: "lax",
     });
   }
+  if (kakaoId) {
+    res.cookies.set("hama_kakao_id", kakaoId, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+      sameSite: "lax",
+    });
+  }
 
   return res;
 }

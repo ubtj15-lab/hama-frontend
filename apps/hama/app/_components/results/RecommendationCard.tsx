@@ -13,6 +13,9 @@ import {
   type RecommendationReasonBlock,
 } from "@/lib/recommend/buildRecommendationReason";
 import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
+import { FlameIcon, SparkleIcon } from "@icons";
+import { Chip } from "@ui/Chip";
+import { Touchable } from "@ui/Touchable";
 
 function bizLabel(s: BusinessState): string {
   switch (s) {
@@ -94,7 +97,7 @@ export function RecommendationCard({
   const phone = String(card.phone ?? "").trim();
   const imgH = featured ? 228 : 132;
   const closed = bs === "CLOSED";
-  const reasonLead = closed ? reason.headline : reason.headline.startsWith("🔥") ? reason.headline : `🔥 ${reason.headline}`;
+  const reasonLead = reason.headline.replace(/^🔥\s*/, "");
   const reasonItems = [reason.badges[0], reason.badges[1], reason.badges[2]].filter(
     (v): v is string => Boolean(v && String(v).trim())
   );
@@ -109,40 +112,41 @@ export function RecommendationCard({
   }
 
   return (
-    <div
-      ref={cardEl}
-      role="button"
-      tabIndex={0}
-      onClick={() => {
-        logRecommendationPlace("place_click", card, scenarioObject, {
-          rank_position: rank,
-          source_page: "results",
-        });
-        onCardClick();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
+    <Touchable>
+      <div
+        ref={cardEl}
+        role="button"
+        tabIndex={0}
+        onClick={() => {
           logRecommendationPlace("place_click", card, scenarioObject, {
             rank_position: rank,
             source_page: "results",
           });
           onCardClick();
-        }
-      }}
-      className="hama-press"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        borderRadius: radius.largeCard,
-        background: colors.bgCard,
-        border: featured ? `2px solid ${colors.accentPrimary}` : `1px solid ${colors.borderSubtle}`,
-        boxShadow: featured ? shadow.elevated : "0 2px 10px rgba(17,24,39,0.05)",
-        cursor: "pointer",
-        overflow: "hidden",
-        position: "relative",
-      }}
-    >
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            logRecommendationPlace("place_click", card, scenarioObject, {
+              rank_position: rank,
+              source_page: "results",
+            });
+            onCardClick();
+          }
+        }}
+        className="hama-press"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: radius.xl,
+          background: colors.bgCard,
+          border: featured ? `2px solid ${colors.accentPrimary}` : `1px solid ${colors.borderSubtle}`,
+          boxShadow: featured ? shadow.elevated : "0 2px 10px rgba(17,24,39,0.05)",
+          cursor: "pointer",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
       <div
         style={{
           position: "relative",
@@ -162,7 +166,7 @@ export function RecommendationCard({
           style={{
             position: "absolute",
             inset: 0,
-            background: "linear-gradient(180deg, rgba(15,23,42,0.12) 0%, rgba(15,23,42,0.45) 100%)",
+            background: "linear-gradient(180deg, rgba(255,107,53,0.08) 0%, rgba(0,0,0,0.15) 100%)",
             pointerEvents: "none",
           }}
         />
@@ -175,14 +179,17 @@ export function RecommendationCard({
               fontSize: 11,
               fontWeight: 900,
               letterSpacing: "0.02em",
-              color: colors.accentOnPrimary,
-              background: colors.accentPrimary,
+              color: colors.primary,
+              background: "rgba(255,255,255,0.95)",
               padding: "6px 12px",
               borderRadius: radius.pill,
-              boxShadow: "0 4px 14px rgba(255,107,0,0.28)",
+              boxShadow: "0 4px 14px rgba(17,24,39,0.12)",
             }}
           >
-            추천 1순위
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <SparkleIcon size={12} color={colors.primary} />
+              추천 1순위
+            </span>
           </span>
         ) : (
           <span
@@ -205,7 +212,10 @@ export function RecommendationCard({
       </div>
 
       <div style={{ padding: featured ? 18 : space.cardPadding, display: "flex", flexDirection: "column", gap: 8 }}>
-        <p style={{ ...typo.cardReason, fontSize: 15, color: closed ? colors.textSecondary : colors.reasonHot, margin: 0, lineHeight: 1.35, fontWeight: 900, letterSpacing: "-0.02em" }}>{reasonLead}</p>
+        <p style={{ ...typo.cardReason, fontSize: 15, color: closed ? colors.textSecondary : colors.reasonHot, margin: 0, lineHeight: 1.35, fontWeight: 900, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 6 }}>
+          {!closed && <FlameIcon size={14} color={colors.reasonHot} />}
+          <span>{reasonLead}</span>
+        </p>
 
         <div
           style={{
@@ -220,11 +230,9 @@ export function RecommendationCard({
           {card.name}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
           {reasonItems.slice(0, 3).map((t) => (
-            <div key={t} style={{ ...typo.caption, color: colors.textSecondary, lineHeight: 1.35, fontWeight: 700 }}>
-              • {t}
-            </div>
+            <Chip key={t}>{t}</Chip>
           ))}
         </div>
 
@@ -233,50 +241,55 @@ export function RecommendationCard({
         )}
 
         <div style={{ display: "flex", gap: 10, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNavigate();
-            }}
-            style={{
-              flex: 1,
-              height: 46,
-              borderRadius: radius.button,
-              border: "none",
-              background: colors.textPrimary,
-              color: "#fff",
-              boxShadow: shadow.cta,
-              fontWeight: 800,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            지금 출발하기
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onCall();
-            }}
-            disabled={!phone}
-            style={{
-              flex: 1,
-              height: 46,
-              borderRadius: radius.button,
-              border: `1px solid ${colors.borderSubtle}`,
-              background: "#fff",
-              color: phone ? colors.textPrimary : colors.textSecondary,
-              fontWeight: 800,
-              fontSize: 14,
-              cursor: phone ? "pointer" : "not-allowed",
-            }}
-          >
-            바로 전화
-          </button>
+          <Touchable style={{ flex: 1 }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate();
+              }}
+              style={{
+                width: "100%",
+                height: 46,
+                borderRadius: radius.md,
+                border: "none",
+                background: colors.textPrimary,
+                color: "#fff",
+                boxShadow: shadow.cta,
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              지금 출발하기
+            </button>
+          </Touchable>
+          <Touchable style={{ flex: 1 }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCall();
+              }}
+              disabled={!phone}
+              style={{
+                width: "100%",
+                height: 46,
+                borderRadius: radius.md,
+                border: `1px solid ${colors.borderSubtle}`,
+                background: "#fff",
+                color: phone ? colors.textPrimary : colors.textSecondary,
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: phone ? "pointer" : "not-allowed",
+              }}
+            >
+              바로 전화
+            </button>
+          </Touchable>
         </div>
       </div>
-    </div>
+      </div>
+    </Touchable>
   );
 }

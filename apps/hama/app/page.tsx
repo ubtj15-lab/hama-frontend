@@ -39,6 +39,7 @@ interface PointLog {
 
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
+const LOGIN_FLAG_KEY = "hamaLoggedIn";
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -95,6 +96,7 @@ function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [todayAskCount, setTodayAskCount] = useState<number | null>(null);
   const { recentCards, recordView } = useRecent();
 
@@ -103,6 +105,11 @@ function HomePageContent() {
   useEffect(() => {
     const sync = () => {
       setUser(loadUserFromStorage());
+      try {
+        setIsLoggedIn(window.localStorage.getItem(LOGIN_FLAG_KEY) === "1");
+      } catch {
+        setIsLoggedIn(false);
+      }
     };
     logEvent("session_start", { page: "home" });
     logEvent("page_view", { page: "home" });
@@ -171,6 +178,21 @@ function HomePageContent() {
     router.push(`/results?q=${encodeURIComponent(t)}`);
   };
 
+  const handleLoginClick = () => {
+    logEvent("login_start", { page: "home", source: "home_header" });
+    window.location.href = "/api/auth/kakao/login?return_to=%2F";
+  };
+
+  const handleLogoutClick = () => {
+    logEvent("logout", { page: "home", source: "home_header" });
+    try {
+      window.localStorage.removeItem(USER_KEY);
+      window.localStorage.removeItem(LOG_KEY);
+      window.localStorage.removeItem(LOGIN_FLAG_KEY);
+    } catch {}
+    window.location.href = "/api/auth/kakao/logout";
+  };
+
   return (
     <main
       style={{
@@ -195,17 +217,22 @@ function HomePageContent() {
           overflowX: "visible",
         }}
       >
-        <div style={{ animation: "hamaFadeUp 360ms ease both" }}>
+        <div style={{ animation: "hamaFadeUp 360ms ease both", position: "relative", zIndex: 40 }}>
           <HomeTopBar
+            isLoggedIn={isLoggedIn}
+            nickname={user.nickname}
+            onLoginClick={handleLoginClick}
+            onLogoutClick={handleLogoutClick}
+            onGoMy={() => router.push("/my")}
             onAlertClick={() => {
               logEvent("home_alert_click", { page: "home" });
             }}
           />
         </div>
-        <div style={{ animation: "hamaFadeUp 360ms ease 120ms both" }}>
+        <div style={{ animation: "hamaFadeUp 360ms ease 120ms both", position: "relative", zIndex: 10 }}>
           <HomeHero />
         </div>
-        <div style={{ animation: "hamaFadeUp 360ms ease 240ms both" }}>
+        <div style={{ animation: "hamaFadeUp 360ms ease 240ms both", position: "relative", zIndex: 10 }}>
           <QuickScenarioGrid
             onPick={(q) => {
               logEvent(HamaEvents.home_quick_scenario, { query: q, page: "home" });

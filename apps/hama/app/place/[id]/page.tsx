@@ -466,7 +466,10 @@ export default function PlaceDetailPage() {
                 boxShadow: shadow.soft,
               }}
             >
-              {s.icon} {s.label}
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span style={{ display: "inline-flex", alignItems: "center" }}>{s.icon}</span>
+                {s.label}
+              </span>
             </button>
           ))}
         </div>

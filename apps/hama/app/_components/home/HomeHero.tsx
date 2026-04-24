@@ -17,7 +17,7 @@ export function HomeHero() {
         오늘 뭐할지{" "}
         <span
           style={{
-            background: "linear-gradient(transparent 64%, #FFE4CC 64%)",
+            background: `linear-gradient(transparent 64%, ${colors.primaryLight} 64%)`,
             padding: "0 2px",
           }}
         >

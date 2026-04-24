@@ -57,7 +57,7 @@ export function NextSuggestions({ scenarioObject, onSelect, suggestionOptions }:
               boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
             }}
           >
-            <span style={{ fontSize: 22 }} aria-hidden>
+            <span style={{ fontSize: 22, display: "inline-flex", alignItems: "center" }} aria-hidden>
               {s.icon}
             </span>
             <span>{s.label}</span>
