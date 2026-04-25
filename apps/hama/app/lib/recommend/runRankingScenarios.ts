@@ -69,6 +69,7 @@ function main() {
     intentType: "scenario_recommendation",
     scenario: "family_kids",
     rawQuery: "아이랑",
+    mealRequired: true,
   };
   const famDeck = buildTopRecommendations([sushi, familyOk], {
     intent: "family",
@@ -114,11 +115,11 @@ function main() {
   );
   assert.ok(chainDeck.some((s) => s.card.id === "fam-ok"), "가족·아이 적합 식당은 남음");
 
-  const closedOk = card({
+  const closedOk = {
     ...familyOk,
     id: "fam-ok-closed",
     business_state: "CLOSED",
-  });
+  } as HomeCard;
   const relaxedFamilyDeck = buildTopRecommendations([mega, closedOk], {
     intent: "family",
     userLat: 37.26,
@@ -133,6 +134,136 @@ function main() {
   assert.ok(
     relaxedFamilyDeck.some((s) => s.card.id === "fam-ok-closed"),
     "폴백에서는 영업 종료만 완화·카페 필터는 유지"
+  );
+
+  const compose = card({
+    id: "compose",
+    name: "컴포즈커피",
+    category: "cafe",
+    tags: ["커피"],
+  });
+  const bb = card({
+    id: "bb",
+    name: "빽다방",
+    category: "cafe",
+    tags: ["커피"],
+  });
+  const moreChains = buildTopRecommendations([compose, bb, familyOk], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑",
+    scenarioObject: familyKidsBare,
+  });
+  assert.ok(
+    !moreChains.some((s) => s.card.id === "compose" || s.card.id === "bb"),
+    "컴포즈·빽다방 등 체인 음료 카페도 제외"
+  );
+
+  const brunchDeck = buildTopRecommendations([starbucks, mega, familyOk, lightBrunch], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑",
+    scenarioObject: familyKidsBare,
+  });
+  assert.ok(brunchDeck.some((s) => s.card.id === "light-brunch"), "브런치·식사 신호 카페는 허용");
+  assert.ok(!brunchDeck.some((s) => s.card.id === "starbucks" || s.card.id === "mega"));
+  assert.equal(
+    brunchDeck[0]?.card.id,
+    "fam-ok",
+    "family_kids 메인 1순위는 카페가 아닌 식당"
+  );
+
+  const parentKids: ScenarioObject = {
+    intentType: "scenario_recommendation",
+    scenario: "family_kids",
+    rawQuery: "아이랑 부모님 맛집",
+    mealRequired: true,
+  };
+  const parentDeck = buildTopRecommendations([sushi, familyOk], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑 부모님 맛집",
+    scenarioObject: parentKids,
+  });
+  assert.ok(parentDeck.some((s) => s.card.id === "sushi"), "부모님·가족모임 맥락에서는 횟집류를 풀에 둘 수 있음");
+
+  const genericItalian = card({
+    id: "italian",
+    name: "○○트라토리아",
+    category: "restaurant",
+    tags: ["파스타", "양식"],
+  });
+  const don = card({
+    id: "don",
+    name: "금돈까스",
+    category: "restaurant",
+    tags: ["돈까스", "가족", "키즈"],
+    with_kids: true,
+  });
+  const mealDeck = buildTopRecommendations([genericItalian, don, mega], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑",
+    scenarioObject: familyKidsBare,
+  });
+  const donIdx = mealDeck.findIndex((s) => s.card.id === "don");
+  const itIdx = mealDeck.findIndex((s) => s.card.id === "italian");
+  assert.ok(
+    donIdx !== -1 && itIdx !== -1 && donIdx < itIdx,
+    "아이 동반 식사 추천에서 돈까스·가족형이 일반 양식보다 우선"
+  );
+
+  const codOnly = card({
+    id: "cod-only",
+    name: "○○코다리",
+    category: "restaurant",
+    tags: ["코다리조림", "한식"],
+  });
+  const codDeck = buildTopRecommendations([codOnly, familyOk], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑",
+    scenarioObject: familyKidsBare,
+  });
+  assert.ok(!codDeck.some((s) => s.card.id === "cod-only"), "코다리·생선조림류는 기본 아이 추천에서 제외");
+
+  const codSoft = card({
+    id: "cod-soft",
+    name: "○○한식",
+    category: "restaurant",
+    tags: ["생선조림", "아이메뉴", "맵지않은"],
+  });
+  const codSoftDeck = buildTopRecommendations([codSoft, familyOk], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑",
+    scenarioObject: familyKidsBare,
+  });
+  assert.ok(
+    codSoftDeck.some((s) => s.card.id === "cod-soft"),
+    "아이메뉴·순한맛 등 완화 태그가 있으면 생선조림 매장은 풀에 남고 감점만"
+  );
+
+  const codQueryScenario: ScenarioObject = {
+    ...familyKidsBare,
+    rawQuery: "아이랑 코다리",
+  };
+  const codQueryDeck = buildTopRecommendations([codOnly, familyOk], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑 코다리",
+    scenarioObject: codQueryScenario,
+  });
+  assert.ok(
+    codQueryDeck.some((s) => s.card.id === "cod-only"),
+    "쿼리에 코다리·생선요리 맥락이 있으면 조건부 허용"
   );
 
   // eslint-disable-next-line no-console

@@ -29,6 +29,7 @@ import {
 } from "./courseScoring";
 import { inferServingTypeForPlace, servingOkForStep } from "./courseServingType";
 import { isHardExcludedForKidsScenario } from "@/lib/recommend/childFriendlyScore";
+import { familyKidsBeamStepRejects } from "@/lib/recommend/placeFamilyClassification";
 import { scenarioCourseFlowBias } from "@/lib/recommend/scenarioForcedRules";
 
 const TAB_CATEGORY_BOOST = 25;
@@ -172,6 +173,12 @@ function beamFillTemplate(
 
       const scored = rawPool
         .map((card) => {
+          if (
+            (obj.scenario === "family_kids" || obj.scenario === "parent_child_outing") &&
+            familyKidsBeamStepRejects(card, stepType, si, obj)
+          ) {
+            return null;
+          }
           if (!servingOkForStep(card, stepType, obj, mealReq)) return null;
           const bp = brandPrefix(card.name ?? "");
           if (bp && brands.has(bp)) return null;
@@ -547,7 +554,7 @@ export function generateCourses(
     obj.scenario === "parent_child_outing" ||
     obj.scenario === "family"
   ) {
-    pool = places.filter((p) => !isHardExcludedForKidsScenario(p));
+    pool = places.filter((p) => !isHardExcludedForKidsScenario(p, { rawQuery: obj.rawQuery ?? "" }));
   }
   const byType = collectCandidatesByType(pool, config, { homeTab });
   const defs = mergeTemplateDefinitions(courseObj, config, opts.learningStore).slice(0, MAX_TEMPLATES_TRY);

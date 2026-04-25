@@ -2,33 +2,15 @@ import type { HomeCard } from "@/lib/storeTypes";
 import type { RecommendScenarioKey } from "@/lib/recommend/scenarioWeights";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { inferServingTypeForRecommendation } from "@/lib/recommend/recommendationCopy";
-
-/** 브런치·디저트·베이커리·키즈·가벼운 식사 신호가 있으면 drink-only 로 보지 않음 */
-const CAFE_MEAL_OR_KIDS_BLOB =
-  /브런치|디저트|베이커리|케이크|키즈|유아\s*동반|어린이|아이\s*메뉴|아이메뉴|아이와|식사|파스타|라면|샌드위치|샐러드|도시락|와플|팬케이크|토스트|빙수|덮밥|한끼|점심|정식|코스|샐러드바/i;
-
-function cafeBlobForDrinkOnlyHeuristic(card: HomeCard): string {
-  const c = card as any;
-  return [
-    c?.name,
-    ...(card.tags ?? []),
-    ...(card.mood ?? []),
-    typeof c?.description === "string" ? c.description : "",
-    ...(card.menu_keywords ?? []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
+import { computeFamilyPlaceProfile } from "@/lib/recommend/placeFamilyClassification";
 
 /**
- * drink-only 일반 카페(메가커피·스타벅스 등): category cafe 이고
- * 브런치/디저트/베이커리/키즈·식사형 태그가 없을 때.
+ * drink-only 일반 카페(메가커피·스타벅스 등).
+ * @see computeFamilyPlaceProfile
  */
 export function isDrinkOnlyCafeForMealContext(card: HomeCard): boolean {
   if (String(card.category ?? "").toLowerCase() !== "cafe") return false;
-  if (CAFE_MEAL_OR_KIDS_BLOB.test(cafeBlobForDrinkOnlyHeuristic(card))) return false;
-  return true;
+  return computeFamilyPlaceProfile(card).servingType === "drink_only";
 }
 
 /**
@@ -51,10 +33,7 @@ export function impliesMealServingContext(args: {
   if (so.timeOfDay === "lunch" || so.timeOfDay === "dinner" || so.timeOfDay === "brunch") return true;
   if ((so.menuIntent?.length ?? 0) > 0) return true;
   if (so.intentCategory === "FOOD" && so.intentType === "search_strict") return true;
-  if (
-    (so.scenario === "family" || so.scenario === "family_kids" || so.scenario === "parent_child_outing") &&
-    /식사|외식|맛집|식당|한끼/.test(q)
-  ) {
+  if (so.scenario === "family" && /식사|외식|맛집|식당|한끼/.test(q)) {
     return true;
   }
   return false;

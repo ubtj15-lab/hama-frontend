@@ -347,6 +347,7 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
   obj = resolveAmbiguousScenario(obj);
 
   if (obj.scenario === "family_kids" || obj.scenario === "parent_child_outing") {
+    /** 식사·액티비티 중심(meal_or_activity): 명시적 카페 탐색이 없으면 drink_only 카페는 랭킹에서 제외 */
     obj.mealRequired = true;
   }
 

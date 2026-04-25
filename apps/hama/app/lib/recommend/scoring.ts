@@ -67,6 +67,10 @@ import {
   isDrinkOnlyCafeForMealContext,
   shouldExcludeDrinkOnlyForScenarioRanking,
 } from "./mealContextSignals";
+import {
+  isHardExcludedForFamilyKidsListRecommend,
+  parentGatheringOrRestorativeQuery,
+} from "./placeFamilyClassification";
 
 export type RecommendScoreBreakdown = {
   distanceScore: number;
@@ -354,18 +358,30 @@ export function buildTopRecommendations(
       }
 
       if (
+        so &&
+        (so.scenario === "family_kids" || so.scenario === "parent_child_outing") &&
+        isHardExcludedForFamilyKidsListRecommend(card, so, ctx.searchQuery ?? null)
+      ) {
+        continue;
+      }
+
+      if (strict && !relaxed && strict.scenario === "family") {
+        if (isHardExcludedForKidsScenario(card, { rawQuery: strict.rawQuery })) continue;
+        const cat = normalizeCategory(card);
+        if ((cat === "restaurant" || cat === "cafe") && childFriendlyScore(card) < 0.28) {
+          continue;
+        }
+      }
+      if (
         strict &&
         !relaxed &&
-        (strict.scenario === "family" ||
-          strict.scenario === "family_kids" ||
-          strict.scenario === "parent_child_outing")
+        (strict.scenario === "family_kids" || strict.scenario === "parent_child_outing")
       ) {
-        if (isHardExcludedForKidsScenario(card)) continue;
         const cat = normalizeCategory(card);
-        if (
-          (cat === "restaurant" || cat === "cafe") &&
-          childFriendlyScore(card) < 0.28
-        ) {
+        const parentMealCtx = parentGatheringOrRestorativeQuery(
+          `${strict.rawQuery ?? ""} ${ctx.searchQuery ?? ""}`.toLowerCase()
+        );
+        if (!parentMealCtx && (cat === "restaurant" || cat === "cafe") && childFriendlyScore(card) < 0.22) {
           continue;
         }
       }

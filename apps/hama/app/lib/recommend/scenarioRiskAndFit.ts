@@ -4,6 +4,7 @@ import { scenarioTypeToRankKey } from "@/lib/scenarioEngine/scenarioRankBridge";
 import type { RecommendScenarioKey } from "@/lib/recommend/scenarioWeights";
 import { childFriendlyScore, isHardExcludedForKidsScenario } from "@/lib/recommend/childFriendlyScore";
 import { isDrinkOnlyCafeForMealContext } from "@/lib/recommend/mealContextSignals";
+import { computeFamilyPlaceProfile } from "@/lib/recommend/placeFamilyClassification";
 
 /** 시나리오 적합도가 낮을 때 거리 가산을 줄여 ‘가깝지만 안 맞는 곳’이 올라오지 않게 */
 export function distanceBlendForScenarioFit(scenarioRich: number): number {
@@ -35,8 +36,16 @@ export function isDisqualifiedMainPick(input: {
   }
 
   const sc = so.scenario;
-  if (sc === "family_kids" || sc === "parent_child_outing" || sc === "family") {
-    if (isHardExcludedForKidsScenario(card)) return true;
+  const rawQ = so.rawQuery ?? "";
+  if (sc === "family_kids" || sc === "parent_child_outing") {
+    if (isHardExcludedForKidsScenario(card, { rawQuery: rawQ })) return true;
+    if (String(card.category ?? "").toLowerCase() === "cafe") return true;
+    if (childFriendlyScore(card) < 0.33) return true;
+    if (sr < 36) return true;
+    return false;
+  }
+  if (sc === "family") {
+    if (isHardExcludedForKidsScenario(card, { rawQuery: rawQ })) return true;
     if (String(card.category ?? "").toLowerCase() === "cafe" && isDrinkOnlyCafeForMealContext(card)) return true;
     if (childFriendlyScore(card) < 0.33) return true;
     if (sr < 36) return true;
@@ -69,16 +78,24 @@ export function isBackupScenarioConflict(
   const so = scenarioObject;
   if (!so) return false;
   const sc = so.scenario;
-  const b = cardBlob;
-  if (sc === "family_kids" || sc === "parent_child_outing" || sc === "family") {
+  if (sc === "family_kids" || sc === "parent_child_outing") {
+    const prof = computeFamilyPlaceProfile(card);
     return (
-      isHardExcludedForKidsScenario(card) ||
+      isHardExcludedForKidsScenario(card, { rawQuery: so.rawQuery }) ||
+      childFriendlyScore(card) < 0.26 ||
+      prof.servingType === "drink_only" ||
+      (String(card.category ?? "").toLowerCase() === "cafe" && prof.servingType !== "light_meal")
+    );
+  }
+  if (sc === "family") {
+    return (
+      isHardExcludedForKidsScenario(card, { rawQuery: so.rawQuery }) ||
       childFriendlyScore(card) < 0.26 ||
       (String(card.category ?? "").toLowerCase() === "cafe" && isDrinkOnlyCafeForMealContext(card))
     );
   }
   if (sc === "date" || sc === "parents") {
-    return DATE_MAIN_CONFLICT.test(b) && !/프라이빗|조용|감성/.test(b);
+    return DATE_MAIN_CONFLICT.test(cardBlob) && !/프라이빗|조용|감성/.test(cardBlob);
   }
   if (sc === "solo" && so.mealRequired === true) {
     return isDrinkOnlyCafeForMealContext(card);

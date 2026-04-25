@@ -1,4 +1,10 @@
 import type { HomeCard } from "@/lib/storeTypes";
+import {
+  computeFamilyPlaceProfile,
+  familyKidsFishRiskMitigationTagsPresent,
+  isFamilyKidsFishStewRiskHaystack,
+  parentGatheringOrRestorativeQuery,
+} from "@/lib/recommend/placeFamilyClassification";
 
 /** 아이 동반 시나리오에서 하드 제외·문구 금지에 쓰는 키워드(부분 문자열) */
 export const FAMILY_EXCLUDE_KEYWORDS = [
@@ -27,26 +33,9 @@ const HARD_EXCLUDE_RE: RegExp[] = [
   /(?:^|\s)회(?:전|초밥|덮밥|뜯|포장)/,
 ];
 
-/** 감점: 술·야식·고급 주점류 */
-const PENALTY_RES: { re: RegExp; w: number }[] = [
-  { re: /횟집|회\s*전문|스시|초밥|사시미|오마카세/i, w: 0.22 },
-  { re: /포차|주점|술집|이자카야|(?:^|\s)bar(?:$|\s)/i, w: 0.22 },
-  { re: /맥주\s*집|소주\s*방|와인\s*바|칵테일|펍|pub/i, w: 0.2 },
-  { re: /야식|한잔|술\s*안주|안주\s*전문/i, w: 0.12 },
-  { re: /조용한\s*프라이빗|고급\s*다이닝|코스\s*요리\s*전문/i, w: 0.1 },
-  { re: /성인\s*중심|데이트\s*술집|회식\s*전문|단체\s*회식/i, w: 0.12 },
-];
+const FISH_RAW_HARD_EXCLUDE_INDEX = new Set([0, 1, 12]);
 
-/** 가산: 가족·아이 동반 친화 */
-const BONUS_RES: { re: RegExp; w: number }[] = [
-  { re: /가족|가족식당|키즈|키즈존|유아|아이\s*동반|어린이/i, w: 0.14 },
-  { re: /돈까스|돈가스|한식|분식|백반|국밥|죽|떡볶이|김밥/i, w: 0.08 },
-  { re: /좌석\s*넓|넓은\s*좌석|유아\s*의자|놀이\s*방|키즈\s*메뉴/i, w: 0.1 },
-  { re: /유모차|웨이팅\s*적|대기\s*적|바로\s*입장|아이\s*메뉴|어린이\s*메뉴/i, w: 0.08 },
-  { re: /활동적|소란|가족\s*분위기|떠들|아이\s*소음/i, w: 0.05 },
-];
-
-function haystack(card: HomeCard): string {
+export function haystackForKids(card: HomeCard): string {
   const parts = [
     card.name,
     card.category,
@@ -62,47 +51,86 @@ function haystack(card: HomeCard): string {
 }
 
 /**
- * 0~1. 아이 동반 적합도 (휴리스틱).
- * - DB `with_kids === true` 이면 가산
+ * 0~100. 아이 동반 적합도(가산·감점 명시 규칙).
+ * @see childFriendlyScore — UI·랭킹은 0~1 정규화
  */
-export function childFriendlyScore(card: HomeCard): number {
-  const h = haystack(card);
-  if ((card as any).with_kids === true) {
-    let s = 0.72;
-    for (const { re, w } of BONUS_RES) {
-      if (re.test(h)) s += w * 0.5;
-    }
-    for (const { re, w } of PENALTY_RES) {
-      if (re.test(h)) s -= w;
-    }
-    return Math.max(0, Math.min(1, s));
-  }
+export function childFriendlyPoints(card: HomeCard): number {
+  const prof = computeFamilyPlaceProfile(card);
+  const h = haystackForKids(card);
+  let p = 50;
 
-  let s = 0.5;
-  for (const { re, w } of BONUS_RES) {
-    if (re.test(h)) s += w;
+  if (/아이\s*메뉴|어린이\s*메뉴|아이메뉴/.test(h)) p += 20;
+  if (/키즈존|키즈\s*룸/.test(h)) p += 20;
+  if (/유아\s*의자|아기\s*의자/.test(h)) p += 15;
+  if (/좌석\s*넓|넓은\s*좌석/.test(h)) p += 15;
+  if (/주차\s*가능|주차장/.test(h)) p += 15;
+  if (/맵지\s*않|맵지않은|안\s*맵|순한\s*맛|아이\s*입맛/.test(h)) p += 15;
+  if (/웨이팅\s*적|대기\s*적|바로\s*입장/.test(h)) p += 10;
+  if (/유모차/.test(h)) p += 10;
+  if (/실내\s*넓|넓은\s*실내/.test(h)) p += 10;
+
+  if (/돈까스|돈가스|한식|분식|국밥|백반|죽|샤브|파스타|덮밥|떡볶이|김밥/.test(h)) p += 12;
+
+  if (prof.servingType === "drink_only") p -= 40;
+  if (/술집|포차|이자카야|주점|(?:^|\s)bar(?:\s|$)|와인\s*바|맥주\s*집|소주\s*방|펍\b|pub\b/.test(h)) p -= 40;
+  if (/횟집|회\s*전문|사시미|오마카세|장어\s*전문|스시\s*전문/.test(h)) p -= 35;
+  if (isFamilyKidsFishStewRiskHaystack(h)) {
+    p -= familyKidsFishRiskMitigationTagsPresent(card) ? 32 : 48;
   }
-  for (const { re, w } of PENALTY_RES) {
-    if (re.test(h)) s -= w;
-  }
-  return Math.max(0, Math.min(1, s));
+  if (/맵기\s*조절|매운\s*전문|극한\s*매운맛|핵\s*매움/.test(h)) p -= 30;
+  if (/회식\s*형|회식\s*전문|단체\s*회식/.test(h)) p -= 25;
+  if (/좌석\s*좁|좁은\s*좌석/.test(h)) p -= 20;
+  if (/웨이팅\s*길|대기\s*길|줄\s*서기/.test(h)) p -= 20;
+
+  if ((card as any).with_kids === true) p += 10;
+
+  return Math.max(0, Math.min(100, p));
 }
 
-/** 하드 제외: 아이랑(family_kids·parent_child_outing) 추천 풀 */
-export function isHardExcludedForKidsScenario(card: HomeCard): boolean {
-  const h = haystack(card);
-  for (const re of HARD_EXCLUDE_RE) {
-    if (re.test(h)) return true;
+/**
+ * 0~1. 아이 동반 적합도.
+ */
+export function childFriendlyScore(card: HomeCard): number {
+  return childFriendlyPoints(card) / 100;
+}
+
+/**
+ * 하드 제외: 가족·아이 코스 풀·레거시 호환.
+ * `rawQuery` 가 있으면 부모님·보양식·가족모임 맥락에서 횟집·회 중심 매장만 완화.
+ */
+export function isHardExcludedForKidsScenario(card: HomeCard, opts?: { rawQuery?: string }): boolean {
+  const raw = String(opts?.rawQuery ?? "");
+  const allowParent = parentGatheringOrRestorativeQuery(raw);
+  const h = haystackForKids(card);
+  const prof = computeFamilyPlaceProfile(card);
+  const cat = String(card.category ?? "").toLowerCase();
+
+  if (cat === "bar" || /(?:wine|pub)/i.test(cat)) return true;
+  if (prof.alcohol_focused) return true;
+
+  if (prof.familySuitability === "risky_for_kids" || prof.mealRisk === "high") {
+    if (!allowParent) return true;
+    if (/술집|포차|이자카야|주점|(?:^|\s)bar|와인\s*바|맥주\s*집|소주\s*방|펍|pub/i.test(h)) return true;
   }
+
+  for (let i = 0; i < HARD_EXCLUDE_RE.length; i++) {
+    const re = HARD_EXCLUDE_RE[i]!;
+    if (!re.test(h)) continue;
+    if (allowParent && FISH_RAW_HARD_EXCLUDE_INDEX.has(i)) continue;
+    return true;
+  }
+
   for (const kw of FAMILY_EXCLUDE_KEYWORDS) {
     if (kw === "술") {
       if (/(?:술집|주점|포차|맥주|소주|이자카야|야경\s*술)/.test(h)) return true;
       continue;
     }
-    if (h.includes(String(kw).toLowerCase())) return true;
+    if (h.includes(String(kw).toLowerCase())) {
+      if (allowParent && (kw === "횟집" || kw === "사시미")) continue;
+      return true;
+    }
   }
-  const cat = String(card.category ?? "").toLowerCase();
-  if (cat === "bar" || /(?:wine|pub)/i.test(cat)) return true;
+
   return false;
 }
 
