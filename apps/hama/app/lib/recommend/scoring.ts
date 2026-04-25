@@ -16,6 +16,8 @@ import {
   DIVERSITY_PENALTY_SAME_SCENARIO_VOICE,
 } from "./recommendConstants";
 import { computeScenarioForcedRawDelta, convenienceScoreFromParts } from "./scenarioForcedRules";
+import { distanceBlendForScenarioFit } from "./scenarioRiskAndFit";
+import { pickDeckWithBackupRoles } from "./recommendationDeckRoles";
 import { behaviorBoostVisibilityFactor, normalizeBehaviorRawToScore } from "./learnedBoostModel";
 import { getGlobalImpressionCount, getPersonalizationHints, getPlaceBehaviorRaw } from "./behaviorSignalStore";
 import { personalizationFitScore } from "./personalizationFromSignals";
@@ -44,7 +46,7 @@ import {
   businessScoreFromState,
   distanceScoreFromKm,
   keywordScoreFromQuery,
-  qualityScoreFromCard,
+  ratingScoreFromCard,
   type BusinessState,
 } from "./scoreParts";
 import { buildHomeRecommendationReason } from "./reasonPhrases";
@@ -53,7 +55,6 @@ import { buildRecommendationBadge, inferScenarioForBadgeWhenNeutral } from "./re
 import {
   isCategoryAllowedForScenarioStrict,
   isCategoryAllowedRelaxed,
-  isPreferredScenarioCategory,
   isHardExcludedNonPoi,
   normalizeCategory,
 } from "./scenarioCategoryRules";
@@ -158,6 +159,7 @@ function dateScenarioMismatchPenalty(blob: string): number {
   if (/혼밥|1인\s*석|혼자\s*식사|카운터\s*좌석|빠른\s*회전|회전\s*빠름/.test(blob)) pen += 22;
   if (/회식|단체\s*모임|단체\s*전문|야유회|포장마차\s*회식/.test(blob)) pen += 18;
   if (/푸드코트|food\s*court/i.test(blob)) pen += 12;
+  if (/시끄|북적|웅성|떠들|빠른\s*회전|회전\s*빠름/.test(blob)) pen += 16;
   return pen;
 }
 
@@ -168,8 +170,8 @@ function scenarioRawForKey(blob: string, key: RecommendScenarioKey, card: HomeCa
   }
   sum += scenarioCategoryBonusMax(blob, key);
   const c = card as any;
-  if (key === "family" && c?.with_kids === true && hasExplicitFamilySignalsInBlob(blob)) sum += 14;
-  else if (key === "family" && c?.with_kids === true) sum += 6;
+  if (key === "family" && c?.with_kids === true && hasExplicitFamilySignalsInBlob(blob)) sum += 9;
+  else if (key === "family" && c?.with_kids === true) sum += 2;
   if (key === "solo" && c?.for_work === true) sum += 14;
   if (key === "group" && c?.reservation_required === true) sum += 14;
 
@@ -293,35 +295,6 @@ function resolveRankKeyForCategoryFilter(ctx: BuildRecommendationsContext): Reco
   const k = intentionToScenarioKey(ctx.intent);
   if (k === "neutral") return "neutral";
   return k as RecommendScenarioKey;
-}
-
-/**
- * 시나리오 적합 카드 우선 — 3장 중 최소 2장은 허용 업종(가능할 때).
- * 부족하면 relaxed 풀에서만 채운 카드로 보완.
- */
-function selectDeckWithScenarioGuarantee(
-  sorted: ScoredRecommendItem[],
-  rankKey: RecommendScenarioKey | "neutral",
-  limit: number
-): ScoredRecommendItem[] {
-  const pref = sorted.filter((s) => isPreferredScenarioCategory(s.card, rankKey));
-  const fb = sorted.filter((s) => !isPreferredScenarioCategory(s.card, rankKey));
-
-  /** 가능하면 덱 전부(3장) 시나리오 허용 업종으로 채움 */
-  const minPref = pref.length >= limit ? limit : Math.min(2, limit);
-  if (pref.length >= minPref) {
-    const first = selectWithDiversity(pref, minPref);
-    const pickedIds = new Set(first.map((x) => x.card.id));
-    const restPool = [...pref.filter((x) => !pickedIds.has(x.card.id)), ...fb];
-    const second = selectWithDiversity(restPool, limit - first.length);
-    return [...first, ...second].slice(0, limit);
-  }
-
-  const first = selectWithDiversity(pref, pref.length);
-  const pickedIds = new Set(first.map((x) => x.card.id));
-  const restPool = fb.filter((x) => !pickedIds.has(x.card.id));
-  const second = selectWithDiversity(restPool, limit - first.length);
-  return [...first, ...second].slice(0, limit);
 }
 
 export function buildTopRecommendations(
@@ -475,8 +448,12 @@ export function buildTopRecommendations(
 
     const legacyIntent = ctx.scenarioObject ? scenarioObjectToIntention(ctx.scenarioObject) : ctx.intent;
 
-    const bizS = businessScoreFromState(businessState);
-    const qualS = qualityScoreFromCard(card);
+    let bizS = businessScoreFromState(businessState);
+    const cAny = card as any;
+    if (businessState === "OPEN" && (cAny.open_now === true || cAny.is_open_now === true || cAny.open_now_status === true)) {
+      bizS = Math.min(100, bizS + 5);
+    }
+    const qualS = ratingScoreFromCard(card);
     const kwS = keywordScoreFromQuery(ctx.searchQuery, card, blobBase);
     const bonS = bonusScoreFromCard(card, blobBase);
 
@@ -512,8 +489,11 @@ export function buildTopRecommendations(
       rankKeyFromObjEarly === "family" ||
       (!ctx.scenarioObject && intentionToScenarioKey(ctx.intent) === "family");
     if (familyRank) {
-      scenarioRich = Math.min(100, scenarioRich + childFriendlyScore(card) * 16);
+      const cfp = childFriendlyScore(card) * 100;
+      scenarioRich = Math.min(100, scenarioRich * 0.36 + cfp * 0.64);
     }
+
+    distS *= distanceBlendForScenarioFit(scenarioRich);
 
     const convS = convenienceScoreFromParts(bizS, bonS, kwS);
 
@@ -645,7 +625,12 @@ export function buildTopRecommendations(
   if (strictIntentCategorySearch) {
     return selectWithDiversity(scored, RECOMMEND_DECK_SIZE);
   }
-  return selectDeckWithScenarioGuarantee(scored, rankKeyForCategory, RECOMMEND_DECK_SIZE);
+  return pickDeckWithBackupRoles(
+    scored,
+    { scenarioObject: ctx.scenarioObject },
+    rankKeyForCategory,
+    RECOMMEND_DECK_SIZE
+  ) as ScoredRecommendItem[];
 }
 
 /** strict 시나리오 랭킹 — 내부적으로 buildTopRecommendations와 동일 */

@@ -22,9 +22,11 @@ export function useDeckRecommendationReasons(
     const uh = new Set<string>();
     const us = new Set<string>();
     const requestedScenario = scenarioRankKeyForRecommendationCopy(scenarioObject);
+    const roles = ["main", "near", "alt"] as const;
     return cards.slice(0, RECOMMEND_DECK_SIZE).map((card, i) =>
       buildRecommendationReason(card, {
         deckSlot: i,
+        deckRole: roles[i] ?? "main",
         timeOfDay: getClientTimeOfDay(),
         requestedScenario,
         usedHeadlines: uh,

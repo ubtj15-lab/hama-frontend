@@ -45,14 +45,14 @@ export const SCENARIO_BADGE_PRIORITY: Record<RecommendScenarioKey, string[]> = {
     "사진분위기",
   ],
   family: [
-    "아이동반",
-    "가족외식",
     "주차가능",
+    "대기부담적음",
+    "메뉴선택쉬움",
     "좌석넉넉",
     "유모차가능",
     "키즈존",
-    "대기부담적음",
-    "메뉴선택쉬움",
+    "가족외식",
+    "아이동반",
   ],
   group: ["단체가능", "모임", "회식", "좌석넉넉", "이야기하기좋음"],
 };
@@ -261,13 +261,15 @@ export function selectRecommendationBadges(input: SelectRecommendationBadgesInpu
 
   if (out.length === 0) {
     return scenario === "solo"
-      ? ["혼밥가능", "가성비", "조용함"].slice(0, max)
+      ? ["혼밥가능", "가성비", "빠른식사"].slice(0, max)
       : scenario === "date"
         ? ["데이트", "분위기", "조용함"].slice(0, max)
         : scenario === "family"
-          ? ["아이동반", "가족외식", "주차가능"].slice(0, max)
+          ? ["주차가능", "대기부담적음", "메뉴선택쉬움"].slice(0, max)
           : ["단체가능", "모임", "좌석넉넉"].slice(0, max);
   }
 
-  return out.slice(0, max);
+  const weakOnly = /^(좋아요|무난해요|편해요|추천)$/;
+  const cleaned = out.filter((b) => !weakOnly.test(b.replace(/\s/g, "")));
+  return (cleaned.length ? cleaned : out).slice(0, max);
 }

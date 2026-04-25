@@ -28,7 +28,7 @@ export const RECOMMENDATION_COPY: Record<RecommendationCopyKey, RecommendationCo
       "데이트로 분위기 좋아요",
       "둘이 대화하기 좋아요",
       "연인과 가볍게 들르기 좋아요",
-      "데이트 코스로 무난해요",
+      "데이트로 동선 짧게 가기 좋아요",
       "식사 후 이어가기 좋아요",
       "분위기 있는 데이트 장소예요",
       "조용하게 이야기 나누기 좋아요",
@@ -52,7 +52,7 @@ export const RECOMMENDATION_COPY: Record<RecommendationCopyKey, RecommendationCo
   family: {
     headlines: [
       "아이랑 가기 좋아요",
-      "가족 외식으로 무난해요",
+      "가족 외식으로 실패 확률 낮은 편이에요",
       "아이 동반 방문에 좋아요",
       "가족이 함께 들르기 좋아요",
       "부담 없이 가족끼리 가기 좋아요",
@@ -149,7 +149,7 @@ export const RECOMMENDATION_COPY: Record<RecommendationCopyKey, RecommendationCo
       "짧은 시간 머물기 좋아요",
       "부담 없이 들르기 좋아요",
       "간단히 쉬기 좋은 곳이에요",
-      "카페 코스로 무난해요",
+      "카페 코스로 이어가기 좋아요",
       "편하게 머물기 좋아요",
     ],
   },
@@ -168,7 +168,7 @@ function zipPairs(bundle: RecommendationCopyBundle): { headline: string; subline
 export const SCENARIO_HEADLINE_DENY: Record<RecommendScenarioKey, RegExp> = {
   date: /아이랑|혼자 가기 편해요|혼밥하기|가족 외식|아이 동반/,
   family: /데이트로 분위기|혼자 가기 편해요|둘이|연인과|데이트 코스/,
-  solo: /아이랑 가기|데이트 코스로 무난|연인과|데이트로 분위기|가족 외식/,
+  solo: /아이랑 가기|데이트 코스로|연인과|데이트로 분위기|가족 외식/,
   group: /^$/,
 };
 
@@ -207,6 +207,15 @@ function pairAllowedForFastMealRule(p: { headline: string; subline: string }, se
   if (serving === "meal" || serving === "light") return true;
   if (FAST_MEAL_SUBLINE.test(p.subline) || FAST_MEAL_SUBLINE.test(p.headline)) return false;
   return true;
+}
+
+/** ‘무난해요/좋아요/편해요’만 단독으로 쓰는 추상 문구 제외 */
+function pairIsAbstractOnly(p: { headline: string; subline: string }): boolean {
+  const h = p.headline.replace(/\s+/g, "");
+  if (/^(좋아요|무난해요|편해요)$/.test(h)) return true;
+  if (/데이트\s*코스로\s*무난|가족\s*외식으로\s*무난|카페\s*코스로\s*무난/.test(p.headline)) return true;
+  if (/무난하게\s*즐기기|무난하게\s*들르기/.test(p.subline) && p.subline.length < 22) return true;
+  return false;
 }
 
 /**
@@ -261,6 +270,7 @@ export function pickRecommendationPair(input: PickRecommendationPairInput): { he
   }
 
   pairs = pairs.filter((p) => pairAllowedForFastMealRule(p, serving));
+  pairs = pairs.filter((p) => !pairIsAbstractOnly(p));
 
   if (pairs.length === 0) {
     pairs = zipPairs(RECOMMENDATION_COPY.light)

@@ -22,11 +22,11 @@ export function businessScoreFromState(state: BusinessState): number {
     case "BREAK":
       return 20;
     case "UNKNOWN":
-      return 45;
+      return 34;
     case "CLOSED":
       return 0;
     default:
-      return 45;
+      return 34;
   }
 }
 
@@ -87,6 +87,34 @@ export function qualityScoreFromCard(card: HomeCard): number {
   else if (reviewCount < 20) mult = 0.8;
   else if (reviewCount < 50) mult = 0.9;
   return Math.min(100, Math.round(base * mult));
+}
+
+function reviewCountFromCard(card: HomeCard): number {
+  const c = card as any;
+  const n =
+    typeof c.review_count === "number"
+      ? c.review_count
+      : typeof c.reviews_count === "number"
+        ? c.reviews_count
+        : null;
+  return n != null && Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+/**
+ * 리뷰 수가 적은 만점 매장 과대평가 방지.
+ * ratingScore ≈ (rating/5)*100*reviewConfidence (0~100)
+ */
+export function ratingScoreFromCard(card: HomeCard): number {
+  const c = card as any;
+  const rating =
+    typeof c.rating === "number" ? c.rating : typeof c.rating_avg === "number" ? c.rating_avg : null;
+  const rc = reviewCountFromCard(card);
+  const reviewConfidence = Math.min(1, Math.log(rc + 1) / Math.log(50));
+  if (rating == null || Number.isNaN(rating)) {
+    return Math.round(48 + 40 * reviewConfidence);
+  }
+  const r5 = Math.max(0, Math.min(5, rating)) / 5;
+  return Math.round(100 * r5 * reviewConfidence + 46 * (1 - reviewConfidence));
 }
 
 function inferQueryCategoryHint(q: string): string | null {
@@ -162,5 +190,6 @@ export function bonusScoreFromCard(card: HomeCard, blob: string): number {
   if (c.reservation_required === true || /예약/.test(blob)) b += 20;
   if (/주차|무료주차|발렛/.test(blob)) b += 15;
   if (c.recently_popular === true || c.is_hot === true) b += 10;
+  if (c.open_now === true || c.is_open_now === true || c.open_now_status === true) b += 12;
   return Math.min(100, b);
 }

@@ -98,7 +98,7 @@ function businessClause(state: BusinessState): string {
       return "브레이크 시간이 있을 수 있어요";
     case "UNKNOWN":
     default:
-      return "영업 시간은 방문 전 확인하는 편이 좋아요";
+      return "영업 정보는 방문 전 확인해 주세요";
   }
 }
 

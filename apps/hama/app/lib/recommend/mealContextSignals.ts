@@ -43,7 +43,11 @@ export function shouldExcludeDrinkOnlyForScenarioRanking(
   searchQuery: string | null | undefined
 ): boolean {
   if (!impliesMealServingContext({ searchQuery, scenarioObject })) return false;
-  if (rankKey === "solo" || rankKey === "family") return true;
+  if (rankKey === "family") return true;
+  if (rankKey === "solo") {
+    if (scenarioObject?.mealRequired === true) return true;
+    return impliesMealServingContext({ searchQuery, scenarioObject });
+  }
   if (rankKey === "date" && /점심|저녁|식사|한끼|밥|브런치|외식|맛집/.test((searchQuery ?? "").toLowerCase())) {
     return true;
   }

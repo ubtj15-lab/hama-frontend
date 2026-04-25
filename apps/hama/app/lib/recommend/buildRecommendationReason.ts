@@ -4,7 +4,7 @@
  */
 import type { HomeCard } from "@/lib/storeTypes";
 import type { RecommendScenarioKey } from "@/lib/recommend/scenarioWeights";
-import { businessStateFromCard } from "@/lib/recommend/scoreParts";
+import { businessStateFromCard, type BusinessState } from "@/lib/recommend/scoreParts";
 import { childFriendlyScore, shouldBlockKidFriendlyMessaging } from "@/lib/recommend/childFriendlyScore";
 import {
   inferServingTypeForRecommendation,
@@ -44,10 +44,10 @@ function blob(card: HomeCard): string {
 
 function regionTrustLine(card: HomeCard): string | undefined {
   const t = `${card.area ?? ""} ${card.address ?? ""}`;
-  if (/오산/.test(t)) return "오산에서 가기 부담 없는 선택이에요";
+  if (/오산/.test(t)) return "오산에서 이동 부담 적은 편이에요";
   if (/동탄/.test(t)) return "동탄에서 바로 가기 좋은 편이에요";
-  if (/평택/.test(t)) return "평택 근처에서 무난한 선택이에요";
-  if (/오산|동탄|평택/.test(t)) return "이 근처에서 괜찮은 선택이에요";
+  if (/평택/.test(t)) return "평택 근처에서 동선 짧게 가기 좋아요";
+  if (/오산|동탄|평택/.test(t)) return "이 근처에서 바로 실행하기 좋아요";
   return undefined;
 }
 
@@ -59,9 +59,37 @@ function distanceSubline(km: number | null | undefined): string | null {
   return null;
 }
 
+function mergeMainDecisionBadges(
+  base: string[],
+  voice: RecommendScenarioKey | undefined,
+  biz: BusinessState,
+  km: number | null,
+  b: string,
+  card: HomeCard
+): string[] {
+  const add: string[] = [];
+  if (biz === "OPEN" || biz === "LAST_ORDER_SOON") add.push("지금 가면 대기 거의 없을 수 있어요");
+  if (km != null && km <= 1.8) add.push("근처에서 실패 확률 낮은 거리예요");
+  if (voice === "family" && !shouldBlockKidFriendlyMessaging(card) && childFriendlyScore(card) >= 0.4) {
+    add.push("아이 데리고 앉기 편한 구조를 봤어요");
+  }
+  if (voice === "date" && /조용|감성|야경|대화/.test(b)) add.push("대화·분위기에 집중하기 좋아요");
+  if (voice === "solo" && /혼밥|1인|가성비|빠른/.test(b)) add.push("혼자서도 빠르게 결정하기 좋아요");
+  const merged = [...add, ...base];
+  const seen = new Set<string>();
+  const out = merged.filter((x) => {
+    if (!x || seen.has(x)) return false;
+    seen.add(x);
+    return true;
+  });
+  return out.slice(0, 3);
+}
+
 export type BuildRecommendationReasonOptions = {
   /** 결과 덱에서의 순번(0~2) — 같은 voice여도 문구 분산 */
   deckSlot?: number;
+  /** 메인 / 거리 차선 / 다른 장점 차선 */
+  deckRole?: "main" | "near" | "alt";
   /** 클라이언트에서만 넘기면 점심/저녁 등 시간 문구 보조 */
   timeOfDay?: "morning" | "lunch" | "afternoon" | "evening" | "night";
   /**
@@ -106,16 +134,34 @@ export function buildRecommendationReason(
   const biz = businessStateFromCard(card);
   const dist = distanceSubline(km);
   const slot = opts?.deckSlot ?? 0;
+  const role = opts?.deckRole ?? (slot === 0 ? "main" : slot === 1 ? "near" : "alt");
   const voice = resolveEffectiveRecommendationVoice(card, opts);
   const serving = opts?.servingType ?? inferServingTypeForRecommendation(card);
 
   let headline = "오늘 가기 좋은 곳이에요";
-  let subline = "이 근처에서 무난하게 즐기기 좋아요";
+  let subline = "시간·동선·실행까지 한 번에 고려한 선택이에요";
+  let skipVoiceCopy = false;
 
   if (biz === "CLOSED") {
     headline = "영업 시간 확인이 필요해요";
     subline = "가기 전에 전화나 지도에서 영업 여부를 확인해 주세요";
-  } else if (voice === "family") {
+  } else if (role === "near") {
+    headline =
+      km != null && km <= 1.2 ? "거리를 먼저 본 가까운 차선이에요" : "이동이 짧게 끝나는 근거리예요";
+    subline =
+      km != null && km <= 1.2
+        ? "지금 시간에 바로 가면 실행이 쉬워요"
+        : "다음 일정까지 붙여 가기 좋은 선택이에요";
+    skipVoiceCopy = true;
+  } else if (role === "alt") {
+    headline = "메인과 다른 장점을 살린 차선이에요";
+    subline = "가성비·분위기·활동성 중 한쪽이 더 두드러져요";
+    skipVoiceCopy = true;
+  }
+
+  if (biz === "CLOSED") {
+    /* noop */
+  } else if (!skipVoiceCopy && voice === "family") {
     const cfs = childFriendlyScore(card);
     if (shouldBlockKidFriendlyMessaging(card)) {
       headline = "이 근처에서 한 끼하기 괜찮은 곳이에요";
@@ -134,7 +180,7 @@ export function buildRecommendationReason(
       headline = picked.headline;
       subline = picked.subline;
     }
-  } else if (voice === "date" || voice === "solo" || voice === "group") {
+  } else if (!skipVoiceCopy && (voice === "date" || voice === "solo" || voice === "group")) {
     const picked = pickRecommendationPair({
       scenario: voice,
       serving,
@@ -144,11 +190,11 @@ export function buildRecommendationReason(
     });
     headline = picked.headline;
     subline = picked.subline;
-  } else if (!voice) {
+  } else if (!skipVoiceCopy && !voice) {
     /** 시나리오 미지정 — 태그로 date/solo/family를 덮어쓰지 않고 light·시간·거리만 보조 */
     const tod = opts?.timeOfDay;
     if (tod === "lunch" && biz === "OPEN") {
-      headline = "점심으로 무난해요";
+      headline = "점심 한 끼 정하기 좋아요";
       subline = "한 끼 부담 없이 들르기 좋은 편이에요";
     } else if (tod === "evening" && biz === "OPEN" && /식당|restaurant|한식|양식|고기/.test(b)) {
       headline = "저녁 식사로 괜찮아요";
@@ -169,11 +215,15 @@ export function buildRecommendationReason(
     }
   }
 
+  if (biz === "UNKNOWN") {
+    subline = subline.includes("영업 정보") ? subline : `${subline} · 영업 정보는 방문 전 확인해 주세요`;
+  }
+
   if (biz !== "CLOSED" && dist && !subline.includes(dist)) {
     subline = `${subline} · ${dist}`;
   }
 
-  const badges = selectRecommendationBadges({
+  let badges = selectRecommendationBadges({
     scenario: voice,
     serving,
     card,
@@ -184,12 +234,25 @@ export function buildRecommendationReason(
     soloFriendlyScore: computeSoloFriendlyScore(b),
     max: 3,
   });
+
+  if (biz !== "CLOSED" && role === "main") {
+    badges = mergeMainDecisionBadges(badges, voice, biz, km, b, card);
+  } else if (biz !== "CLOSED" && role === "near") {
+    badges = [
+      km != null && km <= 1.5 ? "바로 도착 동선" : "이동 짧게",
+      "근거리 차선",
+      "지금 정하기 좋은 선택",
+    ];
+  } else if (biz !== "CLOSED" && role === "alt") {
+    badges = ["메인과 다른 매력", "가성비·분위기·활동 중 보강", "차선으로 두기 좋아요"];
+  }
+
   const regionTrust = regionTrustLine(card);
 
   return {
     headline,
     subline,
-    badges: badges.length ? badges : ["추천"],
+    badges: badges.length ? badges : ["지금 결정하기 좋아요", "동선 짧게", "실행 부담 적게"],
     regionTrust,
   };
 }
@@ -207,23 +270,23 @@ export function buildRecommendationBullets(
   const v = resolveEffectiveRecommendationVoice(card, opts);
   const serving = opts?.servingType ?? inferServingTypeForRecommendation(card);
   if ((v === "family" || /아이|가족/.test(reason.headline)) && !shouldBlockKidFriendlyMessaging(card)) {
-    bullets.push("아이와 방문하기 편한 동선이에요");
-    bullets.push("가족 단위로 찾기 좋은 분위기예요");
+    bullets.push("지금 가면 대기가 길지 않을 가능성이 있어요");
+    bullets.push("아이 데리고 앉기 편한 구조예요");
   } else if (v === "family" && shouldBlockKidFriendlyMessaging(card)) {
     bullets.push("메뉴·가격대는 방문 전에 한 번 더 확인해 보세요");
-    bullets.push("이동 거리는 부담 없는 편이에요");
+    bullets.push("근처에서 실패 확률을 줄이려면 리뷰를 함께 봐 주세요");
   } else if (v === "date" || /데이트|둘이|연인|코스로/.test(reason.headline)) {
     bullets.push("대화하기 좋은 분위기예요");
-    bullets.push("데이트로 기대해도 좋아요");
+    bullets.push("시간대에 맞춰 동선 짧게 이어가기 좋아요");
   } else if (v === "solo" || /혼자|혼밥|잠깐/.test(reason.headline)) {
     bullets.push("혼자 들러도 부담 없는 구성이에요");
     if (serving !== "drink") {
-      bullets.push("가볍게 한 끼 하기 좋아요");
+      bullets.push("빠르게 한 끼 정리하기 좋아요");
     } else {
-      bullets.push("가볍게 쉬어가기 좋아요");
+      bullets.push("잠깐 쉬었다 가기 좋아요");
     }
   } else {
-    bullets.push("이 근처에서 무난한 선택이에요");
+    bullets.push("지금 시간·거리 기준으로 실행하기 쉬워요");
     bullets.push("가기 전에 전화나 리뷰로 한 번 더 확인해 주세요");
   }
   if (typeof card.distanceKm === "number" && card.distanceKm <= 2) {
