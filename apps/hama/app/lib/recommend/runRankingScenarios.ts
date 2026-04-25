@@ -83,6 +83,58 @@ function main() {
   );
   assert.ok(famDeck.some((s) => s.card.id === "fam-ok"));
 
+  const starbucks = card({
+    id: "starbucks",
+    name: "스타벅스",
+    category: "cafe",
+    tags: ["커피"],
+  });
+  const mega = card({
+    id: "mega",
+    name: "메가커피",
+    category: "cafe",
+    tags: ["커피", "테이크아웃"],
+  });
+  const familyKidsBare: ScenarioObject = {
+    intentType: "scenario_recommendation",
+    scenario: "family_kids",
+    rawQuery: "아이랑",
+    mealRequired: true,
+  };
+  const chainDeck = buildTopRecommendations([starbucks, mega, familyOk], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑",
+    scenarioObject: familyKidsBare,
+  });
+  assert.ok(
+    !chainDeck.some((s) => s.card.id === "starbucks" || s.card.id === "mega"),
+    "아이랑만 있어도 스타벅스·메가커피 등 drink-only 카페는 제외"
+  );
+  assert.ok(chainDeck.some((s) => s.card.id === "fam-ok"), "가족·아이 적합 식당은 남음");
+
+  const closedOk = card({
+    ...familyOk,
+    id: "fam-ok-closed",
+    business_state: "CLOSED",
+  });
+  const relaxedFamilyDeck = buildTopRecommendations([mega, closedOk], {
+    intent: "family",
+    userLat: 37.26,
+    userLng: 127.02,
+    searchQuery: "아이랑",
+    scenarioObject: familyKidsBare,
+  });
+  assert.ok(
+    !relaxedFamilyDeck.some((s) => s.card.id === "mega"),
+    "폴백(relaxed)에서도 drink-only 카페는 제외"
+  );
+  assert.ok(
+    relaxedFamilyDeck.some((s) => s.card.id === "fam-ok-closed"),
+    "폴백에서는 영업 종료만 완화·카페 필터는 유지"
+  );
+
   // eslint-disable-next-line no-console
   console.log("buildTopRecommendations ranking tests: ok");
 }

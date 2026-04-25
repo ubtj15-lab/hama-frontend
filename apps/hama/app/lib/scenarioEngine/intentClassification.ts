@@ -346,6 +346,10 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
 
   obj = resolveAmbiguousScenario(obj);
 
+  if (obj.scenario === "family_kids" || obj.scenario === "parent_child_outing") {
+    obj.mealRequired = true;
+  }
+
   const famScenarios: ScenarioType[] = ["family", "family_kids", "parent_child_outing"];
   if (famScenarios.includes(obj.scenario) && obj.childAgeGroup == null) {
     obj.childAgeGroup = inferChildAgeGroupFromQuery(raw || q);

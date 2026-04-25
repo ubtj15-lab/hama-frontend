@@ -64,7 +64,7 @@ import {
   shouldBlockKidFriendlyMessaging,
 } from "./childFriendlyScore";
 import {
-  isDrinkOnlyCafeCard,
+  isDrinkOnlyCafeForMealContext,
   shouldExcludeDrinkOnlyForScenarioRanking,
 } from "./mealContextSignals";
 
@@ -325,7 +325,16 @@ export function buildTopRecommendations(
       if (strictIntentCategorySearch) {
         if (isHardExcludedNonPoi(card)) continue;
       } else if (relaxed) {
-        if (!isCategoryAllowedRelaxed(card, false)) continue;
+        const keepScenarioCategoryWhenRelaxed =
+          so &&
+          (so.scenario === "family_kids" ||
+            so.scenario === "parent_child_outing" ||
+            so.scenario === "family");
+        if (keepScenarioCategoryWhenRelaxed) {
+          if (!isCategoryAllowedForScenarioStrict(card, rankKeyForCategory)) continue;
+        } else if (!isCategoryAllowedRelaxed(card, false)) {
+          continue;
+        }
       } else if (!isCategoryAllowedForScenarioStrict(card, rankKeyForCategory)) {
         continue;
       }
@@ -368,9 +377,8 @@ export function buildTopRecommendations(
           ? (intentionToScenarioKey(ctx.intent) as RecommendScenarioKey)
           : null);
       if (
-        !relaxed &&
         rankKeyForDrink &&
-        isDrinkOnlyCafeCard(card) &&
+        isDrinkOnlyCafeForMealContext(card) &&
         shouldExcludeDrinkOnlyForScenarioRanking(rankKeyForDrink, strict, ctx.searchQuery ?? null)
       ) {
         continue;

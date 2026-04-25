@@ -26,6 +26,7 @@ export function mergeResultsScenario(
     recommendationMode: base.recommendationMode,
     intentCategory: base.intentCategory,
     intentStrict: base.intentStrict,
+    mealRequired: base.mealRequired ?? m.mealRequired,
     foodSubCategory: base.foodSubCategory ?? m.foodSubCategory,
     menuIntent: base.menuIntent?.length ? base.menuIntent : m.menuIntent,
     rawQuery: base.rawQuery,
