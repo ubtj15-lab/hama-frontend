@@ -16,6 +16,25 @@ import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassificati
 import { RECOMMEND_DECK_SIZE, RECOMMEND_POOL_SINGLE_TAB } from "@/lib/recommend/recommendConstants";
 import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 
+function mergeUserProfile(base: UserProfile | null, override: Partial<UserProfile> | null | undefined): UserProfile | null {
+  if (!base && !override) return null;
+  if (!base) return parseUserProfile(override);
+  if (!override) return base;
+  return {
+    ...base,
+    ...override,
+    companions:
+      override.companions != null && override.companions.length > 0 ? override.companions : base.companions,
+    dietary_restrictions:
+      override.dietary_restrictions != null && override.dietary_restrictions.length > 0
+        ? override.dietary_restrictions
+        : base.dietary_restrictions,
+    interests: override.interests != null && override.interests.length > 0 ? override.interests : base.interests,
+    gender: override.gender ?? base.gender,
+    onboarding_completed_at: base.onboarding_completed_at,
+  };
+}
+
 async function fetchRecommendPoolFallback(tab: HomeTabKey, count: number): Promise<HomeCard[]> {
   try {
     const res = await fetch(
@@ -111,26 +130,7 @@ export function useHomeCards(
     : "";
 
   const effectiveUserProfile = useMemo(() => {
-    if (!userProfile) return options.profileOverride ?? null;
-    if (!options.profileOverride) return userProfile;
-    return {
-      ...userProfile,
-      ...options.profileOverride,
-      companions:
-        options.profileOverride.companions != null && options.profileOverride.companions.length > 0
-          ? options.profileOverride.companions
-          : userProfile.companions,
-      dietary_restrictions:
-        options.profileOverride.dietary_restrictions != null && options.profileOverride.dietary_restrictions.length > 0
-          ? options.profileOverride.dietary_restrictions
-          : userProfile.dietary_restrictions,
-      interests:
-        options.profileOverride.interests != null && options.profileOverride.interests.length > 0
-          ? options.profileOverride.interests
-          : userProfile.interests,
-      gender: options.profileOverride.gender ?? userProfile.gender,
-      onboarding_completed_at: userProfile.onboarding_completed_at,
-    };
+    return mergeUserProfile(userProfile ?? null, options.profileOverride ?? null);
   }, [userProfile, profileOverrideKey]);
 
   useEffect(() => {

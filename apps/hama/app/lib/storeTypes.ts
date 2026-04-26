@@ -116,7 +116,7 @@ export type HomeCard = {
    * 클라이언트 랭킹 디버그/로깅용(optional) — UI에서 직접 쓰지 않아도 됨.
    * `useHomeCards` → `buildTopRecommendations` 결과를 얹어 둔다.
    */
-  recommendationScoreBreakdown?: Record<string, number>;
+  recommendationScoreBreakdown?: Record<string, string | number | null | undefined>;
 };
 
 // ✅ 기존 코드들이 Place 타입을 import하는 경우가 있어서 alias 제공
