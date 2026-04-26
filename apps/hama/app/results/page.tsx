@@ -28,13 +28,21 @@ import type { RecommendationMode, ScenarioObject } from "@/lib/scenarioEngine/ty
 import type { IntentionType } from "@/lib/intention";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { CoursePlan } from "@/lib/scenarioEngine/types";
-import { RECOMMEND_DECK_SIZE, RECENT_EXCLUDE_LIMIT } from "@/lib/recommend/recommendConstants";
+import {
+  HYBRID_WEIGHT_BEHAVIOR,
+  HYBRID_WEIGHT_CONVENIENCE,
+  HYBRID_WEIGHT_DISTANCE,
+  HYBRID_WEIGHT_PERSONAL,
+  HYBRID_WEIGHT_RATING,
+  HYBRID_WEIGHT_SCENARIO,
+  RECOMMEND_DECK_SIZE,
+  RECENT_EXCLUDE_LIMIT,
+} from "@/lib/recommend/recommendConstants";
 import { ResultsHeader } from "@/_components/results/ResultsHeader";
 import { ActiveConstraintChips } from "@/_components/results/ActiveConstraintChips";
 import { RecommendationList } from "@/_components/results/RecommendationList";
 import { SearchResultSection } from "@/_components/results/SearchResultSection";
 import { CourseDeckCard } from "@/_components/results/CourseDeckCard";
-import { RecommendationModeToggle } from "@/_components/results/RecommendationModeToggle";
 import { NextSuggestions } from "@/_components/results/NextSuggestions";
 import { colors, radius, space } from "@/lib/designTokens";
 import { logEvent } from "@/lib/logEvent";
@@ -54,9 +62,21 @@ import {
 import { recordRecentIntent } from "@/lib/recentIntents";
 import { recordPwaEngagement } from "@/lib/pwa/pwaEngagement";
 import FeedbackFab from "@/components/FeedbackFab";
+import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
+import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 
 /** 결과 페이지만: 고정 더미로 SearchResultSection/분기 검증 — `.env.local` 에 `NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION=1` */
 const DEBUG_FORCE_SEARCH_SECTION = process.env.NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION === "1";
+const LOGIN_FLAG_KEY = "hamaLoggedIn";
+
+function intentCategoryToCategoryClicked(intentCategory: string | null | undefined): string | null {
+  if (!intentCategory) return null;
+  if (intentCategory === "FOOD") return "푸드";
+  if (intentCategory === "CAFE") return "카페";
+  if (intentCategory === "BEAUTY") return "미용실";
+  if (intentCategory === "ACTIVITY") return "액티비티";
+  return intentCategory;
+}
 
 function ResultsContent() {
   const router = useRouter();
@@ -98,10 +118,43 @@ function ResultsContent() {
   const [shuffleKey, setShuffleKey] = useState(0);
   const [rejectedMainPickIds, setRejectedMainPickIds] = useState<string[]>([]);
   const [courseFilter, setCourseFilter] = useState<"all" | "food" | "indoor" | "under3h">("all");
+  const [retryInput, setRetryInput] = useState("");
   const started = useRef<number>(0);
   const [modeOverride, setModeOverride] = useState<RecommendationMode | null>(null);
 
   const [convCtx, setConvCtx] = useState<ConversationContext | null>(null);
+
+  const [serverProfile, setServerProfile] = useState<UserProfile | null>(null);
+  const [profileOverride, setProfileOverride] = useState<Partial<UserProfile> | null>(null);
+  const [scenarioPatch, setScenarioPatch] = useState<Partial<ScenarioObject> | null>(null);
+  const [relaxPersonalRules, setRelaxPersonalRules] = useState(false);
+  const recommendSessionIdRef = useRef<string | null>(null);
+  const [recommendSessionId, setRecommendSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const loggedIn = window.localStorage.getItem(LOGIN_FLAG_KEY) === "1";
+      if (!loggedIn) {
+        const returnTo = `${window.location.pathname}${window.location.search}`;
+        window.location.href = `/api/auth/kakao/login?return_to=${encodeURIComponent(returnTo)}`;
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/users/me/profile", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setServerProfile(parseUserProfile(json?.user_profile));
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setModeOverride(null);
@@ -126,6 +179,19 @@ function ResultsContent() {
     started.current = performance.now();
     setShuffleKey((k) => k + 1);
   }, [qRaw]);
+
+  useEffect(() => {
+    // 새 추천 세션마다 ID를 갱신 (보정/거절/클릭을 같은 세션에 묶기)
+    try {
+      recommendSessionIdRef.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    } catch {
+      recommendSessionIdRef.current = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+    setRecommendSessionId(recommendSessionIdRef.current);
+  }, [qRaw, shuffleKey]);
 
   useEffect(() => {
     if (!courseIdParam && !qRaw) router.replace("/");
@@ -198,7 +264,11 @@ function ResultsContent() {
 
   const fixedCourseFromSession = fixedPlan;
 
-  const scenarioObject = useMemo(() => mergeResultsScenario(queryForScenario, convCtx), [queryForScenario, convCtx]);
+  const scenarioObject = useMemo(() => {
+    const base = mergeResultsScenario(queryForScenario, convCtx);
+    if (!base || !scenarioPatch) return base;
+    return { ...base, ...scenarioPatch };
+  }, [queryForScenario, convCtx, scenarioPatch]);
 
   const effectiveMode: RecommendationMode = useMemo(() => {
     const inferred = scenarioObject?.recommendationMode ?? "single";
@@ -209,6 +279,52 @@ function ResultsContent() {
     if (!scenarioObject) return null;
     return applyRecommendationModeToScenario(scenarioObject, effectiveMode);
   }, [scenarioObject, effectiveMode]);
+
+  const mergedProfileForRanking = useMemo(() => {
+    if (!serverProfile) return profileOverride ?? null;
+    if (!profileOverride) return serverProfile;
+    return {
+      ...serverProfile,
+      ...profileOverride,
+      companions:
+        profileOverride.companions != null && profileOverride.companions.length > 0
+          ? profileOverride.companions
+          : serverProfile.companions,
+      dietary_restrictions:
+        profileOverride.dietary_restrictions != null && profileOverride.dietary_restrictions.length > 0
+          ? profileOverride.dietary_restrictions
+          : serverProfile.dietary_restrictions,
+      interests:
+        profileOverride.interests != null && profileOverride.interests.length > 0
+          ? profileOverride.interests
+          : serverProfile.interests,
+      gender: profileOverride.gender ?? serverProfile.gender,
+      onboarding_completed_at: serverProfile.onboarding_completed_at,
+    };
+  }, [serverProfile, profileOverride]);
+
+  const hybridWeightsForLog = useMemo(
+    () => ({
+      distance: HYBRID_WEIGHT_DISTANCE,
+      rating: HYBRID_WEIGHT_RATING,
+      scenario: HYBRID_WEIGHT_SCENARIO,
+      convenience: HYBRID_WEIGHT_CONVENIENCE,
+      behavior: HYBRID_WEIGHT_BEHAVIOR,
+      personal: HYBRID_WEIGHT_PERSONAL,
+    }),
+    []
+  );
+
+  const analyticsV2Base = useMemo(() => {
+    if (!recommendSessionId || !effectiveScenario) return null;
+    return {
+      recommendation_id: recommendSessionId,
+      category_clicked: intentCategoryToCategoryClicked(effectiveScenario.intentCategory),
+      user_profile: (mergedProfileForRanking ?? {}) as unknown as Record<string, unknown>,
+      scenario: effectiveScenario.scenario,
+      weights: hybridWeightsForLog,
+    };
+  }, [recommendSessionId, effectiveScenario, mergedProfileForRanking, hybridWeightsForLog]);
 
   const constraintChips = useMemo(
     () => (effectiveScenario ? summarizeActiveConstraints(effectiveScenario) : []),
@@ -253,6 +369,8 @@ function ResultsContent() {
       userLng: userLoc?.lng ?? null,
       excludeStoreIds: recentExcludeIds,
       rejectedMainPickIds,
+      profileOverride,
+      relaxPersonalRules,
       searchQuery: (convCtx?.cumulativeText ?? qRaw) || null,
       scenarioObject: effectiveScenario ?? undefined,
       /** 매장명 검색이 끝날 때까지 추천 페치·랭킹 지연 — 첫 프레임 레이스 방지 */
@@ -525,6 +643,47 @@ function ResultsContent() {
         course_fixed: isCourseFixedResults,
       })
     );
+
+    const recId = recommendSessionId;
+    if (recId && effectiveScenario) {
+      const now = new Date();
+      logRecommendationEvent({
+        event_name: "recommendation_impression",
+        entity_type: null,
+        entity_id: null,
+        scenario: effectiveScenario.scenario ?? null,
+        time_of_day: effectiveScenario.timeOfDay ?? null,
+        weather_condition: (effectiveScenario as any).weatherCondition ?? null,
+        source_page: "results",
+        place_ids: slice.map((c) => c.id),
+        metadata: {
+          query: qRaw,
+          recommendation_voices: slice.map((c) => c.recommendationVoice ?? null),
+          course_fixed: isCourseFixedResults,
+        },
+        analytics_v2: {
+          recommendation_id: recId,
+          category_clicked: intentCategoryToCategoryClicked(effectiveScenario.intentCategory),
+          user_profile: (mergedProfileForRanking ?? {}) as unknown as Record<string, unknown>,
+          shown_place_ids: slice.map((c) => c.id),
+          main_pick_id: slice[0]?.id ?? null,
+          recommendation_reasons: {
+            items: slice.map((c) => ({
+              id: c.id,
+              name: c.name,
+              voice: c.recommendationVoice ?? null,
+              reasonText: c.reasonText ?? null,
+              breakdown: (c as any).recommendationScoreBreakdown ?? null,
+            })),
+          },
+          weights: hybridWeightsForLog,
+          scenario: effectiveScenario.scenario,
+          weather: (effectiveScenario as any).weatherCondition ?? effectiveScenario.weatherHint ?? null,
+          day_of_week: now.getDay(),
+          time_of_day: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+        },
+      });
+    }
   }, [
     qRaw,
     pageBusy,
@@ -533,6 +692,10 @@ function ResultsContent() {
     primaryRecommendationCards,
     isCourseFixedResults,
     logBase,
+    effectiveScenario,
+    mergedProfileForRanking,
+    hybridWeightsForLog,
+    recommendSessionId,
   ]);
 
   useEffect(() => {
@@ -581,6 +744,26 @@ function ResultsContent() {
   const rejectMainAndRefresh = () => {
     const id = primaryRecommendationCards[0]?.id;
     if (!id) return;
+    const recId = recommendSessionId;
+    if (recId && effectiveScenario) {
+      logRecommendationEvent({
+        event_name: "reject_main_pick",
+        entity_type: "place",
+        entity_id: id,
+        scenario: effectiveScenario.scenario ?? null,
+        source_page: "results",
+        place_ids: [id],
+        metadata: { query: qRaw },
+        analytics_v2: {
+          recommendation_id: recId,
+          action: "reject",
+          selected_place_id: id,
+          category_clicked: intentCategoryToCategoryClicked(effectiveScenario.intentCategory),
+          user_profile: (mergedProfileForRanking ?? {}) as unknown as Record<string, unknown>,
+          scenario: effectiveScenario.scenario,
+        },
+      });
+    }
     setRejectedMainPickIds((prev) => [...new Set([...prev, id])]);
     setShuffleKey((k) => k + 1);
   };
@@ -716,19 +899,6 @@ function ResultsContent() {
           ← 홈으로
         </button>
         <ResultsHeader isLoading={headerLoading} resultCount={headerCount} />
-        {!bootstrapBusy && !showNameSearch && (
-          <RecommendationModeToggle
-            mode={effectiveMode}
-            onSelectCourse={() => {
-              setModeOverride("course");
-              setShuffleKey((k) => k + 1);
-            }}
-            onSelectSingle={() => {
-              setModeOverride("single");
-              setShuffleKey((k) => k + 1);
-            }}
-          />
-        )}
         <ActiveConstraintChips chips={constraintChips} />
 
         {strictHint && (
@@ -779,6 +949,7 @@ function ResultsContent() {
               <RecommendationList
                 cards={secondaryRecommendCards}
                 scenarioObject={effectiveScenario}
+                analyticsV2Click={analyticsV2Base ?? undefined}
                 showSoftFallbackCopy={false}
                 onPlaceClick={(card, rank) => {
                   logEvent(
@@ -848,6 +1019,7 @@ function ResultsContent() {
           <RecommendationList
             cards={primaryRecommendationCards}
             scenarioObject={effectiveScenario}
+            analyticsV2Click={analyticsV2Base ?? undefined}
             showSoftFallbackCopy={showSoftFallbackCopy}
             onPlaceClick={(card, rank) => {
               logEvent("place_click", mergeLogPayload(logBase, { place_id: card.id, name: card.name, card_rank: rank }));
@@ -873,24 +1045,67 @@ function ResultsContent() {
           showRecommendationList &&
           primaryRecommendationCards.length > 0 &&
           !isCourseFixedResults && (
-            <button
-              type="button"
-              onClick={() => rejectMainAndRefresh()}
+            <div
               style={{
-                width: "100%",
-                height: 46,
                 marginTop: 12,
                 borderRadius: radius.button,
                 border: `1.5px dashed ${colors.accentPrimary}`,
                 background: colors.primaryLight,
-                color: colors.textPrimary,
-                fontSize: 14,
-                fontWeight: 800,
-                cursor: "pointer",
+                padding: 10,
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
               }}
             >
-              마음에 안 들어? 첫 추천 빼고 다시 골라줄게
-            </button>
+              <input
+                value={retryInput}
+                onChange={(e) => setRetryInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const t = retryInput.trim();
+                    if (!t) return;
+                    rejectMainAndRefresh();
+                    applyNewQuery(t, "retry_input");
+                    setRetryInput("");
+                  }
+                }}
+                placeholder="맘에 안들면 여기 적어줘"
+                style={{
+                  flex: 1,
+                  height: 40,
+                  borderRadius: 10,
+                  border: `1px solid ${colors.borderSubtle}`,
+                  padding: "0 12px",
+                  fontSize: 14,
+                  outline: "none",
+                  background: "#fff",
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const t = retryInput.trim();
+                  if (!t) return;
+                  rejectMainAndRefresh();
+                  applyNewQuery(t, "retry_input");
+                  setRetryInput("");
+                }}
+                style={{
+                  height: 40,
+                  borderRadius: 10,
+                  border: "none",
+                  padding: "0 14px",
+                  background: colors.accentPrimary,
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                다시 찾기
+              </button>
+            </div>
           )}
 
         {!pageBusy && showCourseDeck && (
@@ -989,33 +1204,6 @@ function ResultsContent() {
             })}
             </div>
 
-            <div style={{ marginTop: 16 }}>
-              <h3 style={{ margin: "0 0 10px", fontSize: 16, fontWeight: 900, color: colors.textPrimary }}>이렇게 이어가도 좋아</h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {["조용한 흐름으로 다시", "특별한 분위기로 골라줘"].map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => applyNewQuery(label, "course_list_followup")}
-                    style={{
-                      width: "100%",
-                      height: 42,
-                      borderRadius: radius.button,
-                      border: `1px solid ${colors.borderSubtle}`,
-                      background: "#fff",
-                      color: colors.textPrimary,
-                      textAlign: "left",
-                      padding: "0 12px",
-                      fontSize: 14,
-                      fontWeight: 800,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </section>
         )}
 

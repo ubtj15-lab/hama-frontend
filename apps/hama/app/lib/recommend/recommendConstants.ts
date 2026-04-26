@@ -14,9 +14,10 @@ export const RECENT_EXCLUDE_LIMIT = 8;
  */
 export const HYBRID_WEIGHT_DISTANCE = 0.2;
 export const HYBRID_WEIGHT_RATING = 0.15;
-export const HYBRID_WEIGHT_SCENARIO = 0.35;
+export const HYBRID_WEIGHT_SCENARIO = 0.3;
 export const HYBRID_WEIGHT_CONVENIENCE = 0.15;
-export const HYBRID_WEIGHT_BEHAVIOR = 0.15;
+export const HYBRID_WEIGHT_BEHAVIOR = 0.1;
+export const HYBRID_WEIGHT_PERSONAL = 0.1;
 
 /**
  * 최종 점수 (각 항목은 0~100) — 랭킹 내부 보조·레거시 호환

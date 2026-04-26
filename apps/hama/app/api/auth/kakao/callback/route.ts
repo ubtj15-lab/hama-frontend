@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabase();
   let userId: string | null = null;
+  let isNewUser = false;
 
   if (supabase && kakaoId) {
     const { data: existing } = await supabase
@@ -103,7 +104,10 @@ export async function GET(req: NextRequest) {
         .select("id")
         .single();
 
-      if (!error && inserted) userId = inserted.id;
+      if (!error && inserted) {
+        userId = inserted.id;
+        isNewUser = true;
+      }
     }
   }
 
@@ -129,6 +133,11 @@ export async function GET(req: NextRequest) {
       sameSite: "lax",
     });
   }
+  res.cookies.set("hama_is_new_user", isNewUser ? "1" : "0", {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 3,
+    sameSite: "lax",
+  });
 
   return res;
 }

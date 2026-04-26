@@ -6,6 +6,7 @@ import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { useDeckRecommendationReasons } from "@/_hooks/useDeckRecommendationReasons";
 import { RecommendationCard } from "./RecommendationCard";
 import { space } from "@/lib/designTokens";
+import type { LogRecommendationEventInput } from "@/lib/analytics/types";
 
 type Props = {
   cards: HomeCard[];
@@ -13,6 +14,7 @@ type Props = {
   onPlaceClick: (card: HomeCard, rank: number) => void;
   onNavigate: (card: HomeCard, rank: number) => void;
   onCall: (card: HomeCard, rank: number) => void;
+  analyticsV2Click?: LogRecommendationEventInput["analytics_v2"];
   /** 메인 카드 아래 — 후보 부족·재추천 등 */
   showSoftFallbackCopy?: boolean;
 };
@@ -23,6 +25,7 @@ export function RecommendationList({
   onPlaceClick,
   onNavigate,
   onCall,
+  analyticsV2Click,
   showSoftFallbackCopy = false,
 }: Props) {
   const slice = cards.slice(0, 3);
@@ -37,6 +40,7 @@ export function RecommendationList({
           scenarioObject={scenarioObject}
           reason={deckReasons[i]}
           showSoftFallbackCopy={showSoftFallbackCopy}
+          analyticsV2Click={analyticsV2Click}
           onCardClick={() => onPlaceClick(card, i)}
           onNavigate={() => onNavigate(card, i)}
           onCall={() => onCall(card, i)}

@@ -167,18 +167,17 @@ function calcPersonalScore(card: HomeCard, profile: UserProfile | null | undefin
 
   if (profile.companions.includes("가족") && (c.with_kids === true || /키즈|가족|체험|박물관/.test(blob))) score += 16;
   if (profile.companions.includes("둘이서") && /데이트|분위기|조용|와인|칵테일|전시/.test(blob)) score += 10;
-  if (profile.companions.includes("친구") && /보드게임|단체|액티비티|pc방|플스/.test(blob)) score += 10;
+  if (profile.companions.includes("친구") && /보드게임|단체|액티비티|홀덤|pc방|플스|노래방|회식/.test(blob)) score += 12;
   if (profile.companions.includes("혼자") && (c.for_work === true || /혼밥|1인|집중|조용/.test(blob))) score += 10;
 
-  if (profile.interests.includes("전시/박물관") && (/museum|박물관|전시/.test(blob) || c.category === "museum")) score += 14;
-  if (profile.interests.includes("산책/공원") && /산책|공원|야외|정원/.test(blob)) score += 9;
-  if (profile.interests.includes("액티비티") && /activity|액티비티|체험|클라이밍|방탈출/.test(blob)) score += 10;
-  if (profile.interests.includes("만화카페/보드게임카페") && /만화|보드게임/.test(blob)) score += 12;
-  if (profile.interests.includes("영화/공연") && /영화|공연|시네마|연극|뮤지컬/.test(blob)) score += 11;
+  if (profile.interests.includes("전시/박물관") && (/museum|박물관|전시/.test(blob) || c.category === "museum")) score += 20;
+  if (profile.interests.includes("산책/공원") && /산책|공원|야외|정원|한강|숲길/.test(blob)) score += 10;
+  if (profile.interests.includes("액티비티") && /activity|액티비티|체험|클라이밍|방탈출|vr|보드게임/.test(blob)) score += 20;
+  if (profile.interests.includes("만화카페/보드게임카페") && /만화|보드게임/.test(blob)) score += 30;
+  if (profile.interests.includes("영화/공연") && /영화|공연|시네마|연극|뮤지컬|극장|cgv|롯데시네마|메가박스/.test(blob)) score += 10;
 
-  if (profile.gender !== "선택 안 함" && /홀덤|pc방|플스방|포커/.test(blob)) {
-    score += profile.gender === "남성" ? 5 : 3;
-  }
+  if (profile.gender === "남성" && /홀덤|포커|pc방|플스방/.test(blob)) score += 25;
+  if (profile.gender === "여성" && /여성전용|레이디|여성\s*전용/.test(blob)) score += 30;
 
   if (profile.dietary_restrictions.includes("알레르기") && /알레르기|allergen|원재료|성분표/.test(blob)) {
     score += 8;
@@ -288,6 +287,7 @@ function preferredScenarioFromProfile(profile: UserProfile | null | undefined): 
   const companions = profile.companions ?? [];
   if (companions.includes("가족")) return "family";
   if (companions.includes("둘이서")) return "date";
+  if (companions.includes("친구")) return "group";
   if (companions.includes("혼자")) return "solo";
   return null;
 }
@@ -724,13 +724,6 @@ export function buildTopRecommendations(
     }
     scored = runPass(true);
   }
-  if (scored.length === 0 && ctx.userProfile && !ctx.relaxPersonalRules) {
-    scored = buildTopRecommendations(candidates, {
-      ...ctx,
-      relaxPersonalRules: true,
-    });
-  }
-
   scored.sort((a, b) => b.breakdown.finalScore - a.breakdown.finalScore);
 
   logScenarioEngineDebug({

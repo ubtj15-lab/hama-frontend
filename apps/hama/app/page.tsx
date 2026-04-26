@@ -24,6 +24,7 @@ import { recordRecentIntent } from "@/lib/recentIntents";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { stashPlaceForSession } from "@/lib/session/placeSession";
 import { colors, space } from "@/lib/designTokens";
+import { isOnboardingCompleted, parseUserProfile } from "@/lib/onboardingProfile";
 
 interface HamaUser {
   nickname: string;
@@ -40,6 +41,7 @@ interface PointLog {
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
 const LOGIN_FLAG_KEY = "hamaLoggedIn";
+const ONBOARDING_PROMPT_DISMISSED_KEY = "hama_onboarding_prompt_dismissed";
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -207,6 +209,10 @@ function HomePageContent() {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes hamaFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
       `}</style>
       <div
         style={{
@@ -230,7 +236,12 @@ function HomePageContent() {
           />
         </div>
         <div style={{ animation: "hamaFadeUp 360ms ease 120ms both", position: "relative", zIndex: 10 }}>
-          <HomeHero />
+          <HomeHero
+            onSubmitQuery={(q) => {
+              logEvent(HamaEvents.home_scenario_submit, { query: q, page: "home", source: "hero_natural_input" });
+              goResults(q, "hero_natural_input");
+            }}
+          />
         </div>
         <div style={{ animation: "hamaFadeUp 360ms ease 240ms both", position: "relative", zIndex: 10 }}>
           <QuickScenarioGrid
@@ -259,6 +270,168 @@ function HomePageContent() {
   );
 }
 
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[2]) : null;
+}
+
+function HomeEntryGate() {
+  const router = useRouter();
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
+  const [showLegacyPrompt, setShowLegacyPrompt] = useState(false);
+  const [showPromptBadge, setShowPromptBadge] = useState(false);
+
+  useEffect(() => {
+    const loggedIn = localStorage.getItem(LOGIN_FLAG_KEY) === "1";
+    setIsLoggedIn(loggedIn);
+    if (!loggedIn) {
+      setIsCheckingProfile(false);
+      return;
+    }
+
+    const isNewUser = getCookie("hama_is_new_user") === "1";
+    void (async () => {
+      try {
+        const res = await fetch("/api/users/me/profile", { cache: "no-store" });
+        if (!res.ok) {
+          // 쿠키 동기화 타이밍 이슈로 프로필 조회가 실패해도
+          // 로그인 직후 사용자가 설문을 놓치지 않도록 안전 분기한다.
+          if (isNewUser) {
+            router.replace("/onboarding?return_to=%2F");
+            return;
+          }
+          const dismissed = localStorage.getItem(ONBOARDING_PROMPT_DISMISSED_KEY) === "1";
+          setShowLegacyPrompt(!dismissed);
+          setShowPromptBadge(dismissed);
+          setIsCheckingProfile(false);
+          return;
+        }
+        const json = await res.json();
+        const profile = parseUserProfile(json?.user_profile);
+        const completed = isOnboardingCompleted(profile);
+        if (!completed && isNewUser) {
+          router.replace("/onboarding?return_to=%2F");
+          return;
+        }
+        if (!completed && !isNewUser) {
+          const dismissed = localStorage.getItem(ONBOARDING_PROMPT_DISMISSED_KEY) === "1";
+          setShowLegacyPrompt(!dismissed);
+          setShowPromptBadge(dismissed);
+        }
+      } catch (e) {
+        console.error("[home] profile check failed", e);
+        if (isNewUser) {
+          router.replace("/onboarding?return_to=%2F");
+          return;
+        }
+        const dismissed = localStorage.getItem(ONBOARDING_PROMPT_DISMISSED_KEY) === "1";
+        setShowLegacyPrompt(!dismissed);
+        setShowPromptBadge(dismissed);
+      } finally {
+        setIsCheckingProfile(false);
+      }
+    })();
+  }, [router]);
+
+  if (isLoggedIn == null || isCheckingProfile) {
+    return (
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: colors.bgDefault }}>
+        로딩 중...
+      </main>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: colors.bgDefault, padding: 20 }}>
+        <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 8px 20px rgba(15,23,42,0.08)" }}>
+          <h1 style={{ margin: "0 0 8px", fontSize: 24 }}>HAMA 시작하기</h1>
+          <p style={{ margin: "0 0 16px", color: "#475569", lineHeight: 1.45 }}>
+            카카오 로그인 후 바로 맞춤 추천을 받아보세요.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = "/api/auth/kakao/login?return_to=%2F";
+            }}
+            style={{ width: "100%", border: "none", borderRadius: 12, padding: "12px 14px", background: "#FEE500", fontWeight: 800, cursor: "pointer" }}
+          >
+            카카오로 로그인
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <>
+      {showLegacyPrompt && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(2,6,23,0.55)",
+            zIndex: 1200,
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: 360, background: "#fff", borderRadius: 14, padding: 16 }}>
+            <h2 style={{ margin: "0 0 6px", fontSize: 18 }}>더 정확한 추천을 위해 30초만 알려주세요</h2>
+            <p style={{ margin: "0 0 12px", color: "#64748b", fontSize: 13 }}>지금 알려주면 첫 추천부터 바로 반영돼요.</p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                style={{ flex: 1, border: "none", borderRadius: 10, padding: "10px 12px", background: "#2563eb", color: "#fff", fontWeight: 700 }}
+                onClick={() => router.push("/onboarding?return_to=%2F")}
+              >
+                지금 알려주기
+              </button>
+              <button
+                type="button"
+                style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", background: "#fff", fontWeight: 700 }}
+                onClick={() => {
+                  localStorage.setItem(ONBOARDING_PROMPT_DISMISSED_KEY, "1");
+                  setShowLegacyPrompt(false);
+                  setShowPromptBadge(true);
+                }}
+              >
+                나중에
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showPromptBadge && (
+        <button
+          type="button"
+          onClick={() => router.push("/onboarding?return_to=%2F")}
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: "calc(84px + env(safe-area-inset-bottom, 0px))",
+            zIndex: 1000,
+            border: "none",
+            borderRadius: 999,
+            background: "#2563eb",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: 12,
+            padding: "8px 12px",
+            boxShadow: "0 8px 14px rgba(37,99,235,0.35)",
+          }}
+        >
+          설문 미완료
+        </button>
+      )}
+      <HomePageContent />
+    </>
+  );
+}
+
 export default function HomePage() {
   return (
     <Suspense
@@ -276,7 +449,7 @@ export default function HomePage() {
         </div>
       }
     >
-      <HomePageContent />
+      <HomeEntryGate />
     </Suspense>
   );
 }

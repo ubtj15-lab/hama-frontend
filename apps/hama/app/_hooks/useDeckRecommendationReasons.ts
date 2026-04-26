@@ -22,6 +22,7 @@ export function useDeckRecommendationReasons(
   scenarioObject: ScenarioObject | null
 ): RecommendationReasonBlock[] {
   const [profileScenario, setProfileScenario] = useState<RecommendScenarioKey | undefined>(undefined);
+  const [profileCompanions, setProfileCompanions] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +33,7 @@ export function useDeckRecommendationReasons(
         const json = await res.json();
         const profile = parseUserProfile(json?.user_profile);
         if (cancelled) return;
+        setProfileCompanions(profile.companions ?? []);
         if (profile.companions.includes("가족")) {
           setProfileScenario("family");
           return;
@@ -42,6 +44,10 @@ export function useDeckRecommendationReasons(
         }
         if (profile.companions.includes("혼자")) {
           setProfileScenario("solo");
+          return;
+        }
+        if (profile.companions.includes("친구")) {
+          setProfileScenario("group");
           return;
         }
         setProfileScenario(undefined);
@@ -63,9 +69,10 @@ export function useDeckRecommendationReasons(
         deckRole: roles[i] ?? "main",
         timeOfDay: getClientTimeOfDay(),
         requestedScenario,
+        profileCompanions,
         usedHeadlines: uh,
         usedSublines: us,
       })
     );
-  }, [cards, scenarioObject, profileScenario]);
+  }, [cards, scenarioObject, profileScenario, profileCompanions]);
 }

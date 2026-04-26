@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import {
   fetchHomeCardsByTab,
@@ -14,6 +14,7 @@ import { buildTopRecommendations } from "@/lib/recommend/scoring";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassification";
 import { RECOMMEND_DECK_SIZE, RECOMMEND_POOL_SINGLE_TAB } from "@/lib/recommend/recommendConstants";
+import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 
 async function fetchRecommendPoolFallback(tab: HomeTabKey, count: number): Promise<HomeCard[]> {
   try {
@@ -63,6 +64,13 @@ export type UseHomeCardsOptions = {
   skipFetch?: boolean;
   /** 메인 추천 거절 등 — 해당 매장 id 는 재랭킹에서 제외 */
   rejectedMainPickIds?: string[];
+  /**
+   * 일회성 프로필 보정(결과 화면 칩/자유입력).
+   * DB의 user_profile 은 바꾸지 않고 랭킹/카피에만 반영.
+   */
+  profileOverride?: Partial<UserProfile> | null;
+  /** 식단 등 개인화 하드필터만 완화(랭킹은 유지) */
+  relaxPersonalRules?: boolean;
 };
 
 /**
@@ -80,6 +88,7 @@ export function useHomeCards(
   const [coursePool, setCoursePool] = useState<HomeCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [deckIncomplete, setDeckIncomplete] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const excludeMerged = [
     ...new Set(
       [
@@ -96,6 +105,48 @@ export function useHomeCards(
 
   const deferRanking = options.deferRanking === true;
   const skipFetch = options.skipFetch === true;
+  const relaxPersonalRules = options.relaxPersonalRules === true;
+  const profileOverrideKey = options.profileOverride
+    ? JSON.stringify(options.profileOverride)
+    : "";
+
+  const effectiveUserProfile = useMemo(() => {
+    if (!userProfile) return options.profileOverride ?? null;
+    if (!options.profileOverride) return userProfile;
+    return {
+      ...userProfile,
+      ...options.profileOverride,
+      companions:
+        options.profileOverride.companions != null && options.profileOverride.companions.length > 0
+          ? options.profileOverride.companions
+          : userProfile.companions,
+      dietary_restrictions:
+        options.profileOverride.dietary_restrictions != null && options.profileOverride.dietary_restrictions.length > 0
+          ? options.profileOverride.dietary_restrictions
+          : userProfile.dietary_restrictions,
+      interests:
+        options.profileOverride.interests != null && options.profileOverride.interests.length > 0
+          ? options.profileOverride.interests
+          : userProfile.interests,
+      gender: options.profileOverride.gender ?? userProfile.gender,
+      onboarding_completed_at: userProfile.onboarding_completed_at,
+    };
+  }, [userProfile, profileOverrideKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/users/me/profile", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled) setUserProfile(parseUserProfile(json?.user_profile));
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (skipFetch) {
@@ -153,6 +204,8 @@ export function useHomeCards(
           excludeStoreIds: excludeMerged,
           searchQuery: options.searchQuery,
           scenarioObject: options.scenarioObject ?? null,
+          userProfile: effectiveUserProfile,
+          relaxPersonalRules,
         };
         let picked = buildTopRecommendations(fetched, ctx);
 
@@ -174,7 +227,21 @@ export function useHomeCards(
         if (!cancelled) {
           setPool(fetched);
           setCoursePool(wantCourse ? courseFetched : []);
-          setCards(picked.map((p) => p.card));
+          setCards(
+            picked.map((p) => ({
+              ...p.card,
+              recommendationScoreBreakdown: {
+                final: p.breakdown.finalScore,
+                distance: p.breakdown.distanceScore,
+                rating: p.breakdown.qualityScore,
+                scenario: p.breakdown.scenarioRichScore,
+                convenience: p.breakdown.convenienceScore,
+                behavior: p.breakdown.behaviorBoostPillar * p.breakdown.behaviorVisibility,
+                personal: p.breakdown.personalizationScore,
+                activeScenario: String(p.breakdown.activeScenario),
+              },
+            }))
+          );
           setDeckIncomplete(!wantCourse && picked.length > 0 && picked.length < RECOMMEND_DECK_SIZE);
         }
       } catch (e) {
@@ -202,6 +269,10 @@ export function useHomeCards(
     options.searchQuery,
     excludeKey,
     scenarioKey,
+    userProfile,
+    effectiveUserProfile,
+    profileOverrideKey,
+    relaxPersonalRules,
     deferRanking,
     skipFetch,
   ]);

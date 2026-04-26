@@ -2,12 +2,19 @@ import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { logRecommendationEvent } from "./logRecommendationEvent";
 import { courseScenarioFieldsFromObject } from "./recommendationContext";
+import type { LogRecommendationEventInput } from "./types";
 
 export function logRecommendationPlace(
   event_name: "place_impression" | "place_click",
   card: HomeCard,
   obj: ScenarioObject | null,
-  extra: { recommendation_rank?: number; rank_position?: number; source_page?: string; metadata?: Record<string, unknown> } = {}
+  extra: {
+    recommendation_rank?: number;
+    rank_position?: number;
+    source_page?: string;
+    metadata?: Record<string, unknown>;
+    analytics_v2?: LogRecommendationEventInput["analytics_v2"];
+  } = {}
 ): void {
   if (!obj) return;
   const ctx = courseScenarioFieldsFromObject(obj);
@@ -26,5 +33,6 @@ export function logRecommendationPlace(
       phone: (card as any).phone ?? null,
     },
     metadata: { name: card.name, ...extra.metadata },
+    analytics_v2: extra.analytics_v2,
   });
 }

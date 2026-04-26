@@ -16,6 +16,7 @@ import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
 import { FlameIcon, SparkleIcon } from "@icons";
 import { Chip } from "@ui/Chip";
 import { Touchable } from "@ui/Touchable";
+import type { LogRecommendationEventInput } from "@/lib/analytics/types";
 
 function bizLabel(s: BusinessState): string {
   switch (s) {
@@ -54,6 +55,7 @@ type Props = {
   /** 목록에서 미리 계산한 이유(덱 variation) — 없으면 카드 내부에서 생성 */
   reason?: RecommendationReasonBlock;
   showSoftFallbackCopy?: boolean;
+  analyticsV2Click?: LogRecommendationEventInput["analytics_v2"];
   onCardClick: () => void;
   onNavigate: () => void;
   onCall: () => void;
@@ -65,6 +67,7 @@ export function RecommendationCard({
   scenarioObject,
   reason: reasonOverride,
   showSoftFallbackCopy = false,
+  analyticsV2Click,
   onCardClick,
   onNavigate,
   onCall,
@@ -81,6 +84,7 @@ export function RecommendationCard({
           logRecommendationPlace("place_impression", card, scenarioObject, {
             rank_position: rank,
             source_page: "results",
+            analytics_v2: analyticsV2Click,
           });
         }
       },
@@ -133,6 +137,11 @@ export function RecommendationCard({
             rank_position: rank,
             source_page: "results",
             metadata: { selected_rank: rank },
+            analytics_v2: {
+              ...analyticsV2Click,
+              action: "click",
+              selected_place_id: card.id,
+            },
           });
           onCardClick();
         }}
@@ -225,10 +234,31 @@ export function RecommendationCard({
       </div>
 
       <div style={{ padding: featured ? 18 : space.cardPadding, display: "flex", flexDirection: "column", gap: 8 }}>
-        <p style={{ ...typo.cardReason, fontSize: 15, color: closed ? colors.textSecondary : colors.reasonHot, margin: 0, lineHeight: 1.35, fontWeight: 900, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 6 }}>
-          {!closed && <FlameIcon size={14} color={colors.reasonHot} />}
-          <span>{reason.scenarioLabel}</span>
-        </p>
+        <div
+          style={{
+            ...typo.cardReason,
+            fontSize: 15,
+            color: closed ? colors.textSecondary : colors.reasonHot,
+            margin: 0,
+            lineHeight: 1.35,
+            fontWeight: 900,
+            letterSpacing: "-0.02em",
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          {String(reason.scenarioLabel ?? "")
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line) => (
+              <div key={line} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {!closed && <FlameIcon size={14} color={colors.reasonHot} />}
+                <span>{line}</span>
+              </div>
+            ))}
+        </div>
 
         <div
           style={{
@@ -242,6 +272,17 @@ export function RecommendationCard({
         >
           {card.name}
         </div>
+
+        {reason.timeContextLine ? (
+          <div style={{ fontSize: 13, fontWeight: 800, color: colors.textSecondary, marginTop: -2 }}>
+            ✨ {reason.timeContextLine}
+          </div>
+        ) : null}
+        {reason.liveStatusLine ? (
+          <div style={{ fontSize: 13, fontWeight: 800, color: colors.textSecondary }}>
+            ✨ {reason.liveStatusLine}
+          </div>
+        ) : null}
 
         <div
           style={{

@@ -20,6 +20,10 @@ import {
 export type RecommendationReasonBlock = {
   /** 추천 이유 첫 줄 — 상황 라벨 */
   scenarioLabel: string;
+  /** 오늘 [요일] [시간], [상황] */
+  timeContextLine?: string;
+  /** 지금 가면 [상태] */
+  liveStatusLine?: string;
   headline: string;
   subline: string;
   /** 2~3개, 짧은 상황형 라벨 */
@@ -103,7 +107,69 @@ export type BuildRecommendationReasonOptions = {
   /** 같은 덱에서 headline/subline 중복 방지 — build 시 mutate */
   usedHeadlines?: Set<string>;
   usedSublines?: Set<string>;
+  /** 온보딩 companions — 상단 라벨(복수 가능) */
+  profileCompanions?: string[];
 };
+
+function scenarioLabelLineFromCompanions(companions: string[] | undefined): string | null {
+  if (!companions?.length) return null;
+  const labels: string[] = [];
+  const add = (cond: boolean, text: string) => {
+    if (!cond) return;
+    if (!labels.includes(text)) labels.push(text);
+  };
+  // 안정적인 출력 순서
+  add(companions.includes("가족"), "🔥 아이랑 가기 좋아");
+  add(companions.includes("둘이서"), "🔥 데이트 분위기");
+  add(companions.includes("혼자"), "🔥 혼자 가기 편해");
+  add(companions.includes("친구"), "🔥 친구랑 가기 좋아");
+  if (!labels.length) return null;
+  return labels.join("\n");
+}
+
+function dayNameKo(day: number): string {
+  return ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"][day] ?? "오늘";
+}
+
+function timeBandKo(hours: number): string {
+  if (hours < 10) return "아침";
+  if (hours < 15) return "점심";
+  if (hours < 19) return "저녁";
+  return "밤";
+}
+
+function scenarioContextKo(
+  voice: RecommendScenarioKey | undefined,
+  companions: string[] | undefined
+): string {
+  if (companions?.includes("가족")) return "가족 외식";
+  if (companions?.includes("둘이서")) return "데이트";
+  if (companions?.includes("혼자")) return "혼밥";
+  if (companions?.includes("친구")) return "친구 모임";
+  if (voice === "family") return "가족 외식";
+  if (voice === "date") return "데이트";
+  if (voice === "solo") return "혼밥";
+  if (voice === "group") return "친구 모임";
+  return "지금 일정";
+}
+
+function buildTimeContextLine(
+  voice: RecommendScenarioKey | undefined,
+  companions: string[] | undefined
+): string {
+  const now = new Date();
+  return `오늘 ${dayNameKo(now.getDay())} ${timeBandKo(now.getHours())}, ${scenarioContextKo(voice, companions)}`;
+}
+
+function buildLiveStatusLine(card: HomeCard, biz: BusinessState, b: string): string | undefined {
+  if (/대기\s?\d+분|웨이팅\s?\d+분/.test(b)) {
+    const m = b.match(/(대기|웨이팅)\s?(\d+)\s?분/);
+    if (m?.[2]) return `지금 가면 대기 ${m[2]}분`;
+  }
+  if (/한산|안\s?붐빔|여유/.test(b)) return "지금 안 붐벼요";
+  if (biz === "OPEN" || biz === "LAST_ORDER_SOON") return "지금 영업 중";
+  return undefined;
+}
 
 /** 클라이언트에서 점심/저녁 추천 문구 보조용 */
 export function getClientTimeOfDay(): BuildRecommendationReasonOptions["timeOfDay"] | undefined {
@@ -261,16 +327,21 @@ export function buildRecommendationReason(
   const regionTrust = regionTrustLine(card);
 
   const scenarioLabel =
-    voice === "family"
+    scenarioLabelLineFromCompanions(opts?.profileCompanions) ??
+    (voice === "family"
       ? "🔥 아이랑 가기 좋아"
       : voice === "date"
         ? "🔥 데이트 분위기"
         : voice === "solo"
           ? "🔥 혼자 가기 편해"
-          : "🔥 지금 가기 좋아";
+          : voice === "group"
+            ? "🔥 친구랑 가기 좋아"
+            : "🔥 지금 가기 좋아");
 
   return {
     scenarioLabel,
+    timeContextLine: buildTimeContextLine(voice, opts?.profileCompanions),
+    liveStatusLine: buildLiveStatusLine(card, biz, b),
     headline,
     subline,
     badges: badges.length ? badges : ["지금 결정하기 좋아요", "동선 짧게", "실행 부담 적게"],

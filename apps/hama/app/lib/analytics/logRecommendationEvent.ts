@@ -45,6 +45,7 @@ export function logRecommendationEvent(
         place_snapshot: input.place_snapshot ?? null,
         course_snapshot: input.course_snapshot ?? null,
       },
+      analytics_v2: input.analytics_v2,
     };
 
     fetch("/api/recommendation/log", {

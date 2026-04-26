@@ -62,6 +62,24 @@ export default function MyPage() {
           </h1>
           <div style={{ width: 56 }} />
         </header>
+        <section style={{ marginBottom: 20 }}>
+          <button
+            type="button"
+            onClick={() => router.push("/onboarding?return_to=%2Fmy")}
+            style={{
+              width: "100%",
+              border: "1px solid #bfdbfe",
+              borderRadius: 12,
+              padding: "12px 14px",
+              background: "#eff6ff",
+              color: "#1d4ed8",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            추천 설문 수정하기
+          </button>
+        </section>
 
         {/* 저장한 카드 */}
         <section style={{ marginBottom: 28 }}>

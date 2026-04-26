@@ -1,6 +1,6 @@
 // app/lib/storeTypes.ts
 
-export type HomeTabKey = "all" | "restaurant" | "cafe" | "salon" | "activity";
+export type HomeTabKey = "all" | "restaurant" | "cafe" | "salon" | "activity" | "museum";
 
 // DB category 값이 restaurant/cafe/salon/activity 라는 전제
 export type Category = Exclude<HomeTabKey, "all">;
@@ -32,6 +32,8 @@ export type StoreRow = {
   with_kids: boolean | null;
   for_work: boolean | null;
   reservation_required: boolean | null;
+  vegetarian_available?: boolean | null;
+  halal_available?: boolean | null;
 
   price_level: string | null;
   updated_at: string | null;
@@ -95,6 +97,8 @@ export type HomeCard = {
   with_kids?: boolean | null;
   for_work?: boolean | null;
   reservation_required?: boolean | null;
+  vegetarian_available?: boolean | null;
+  halal_available?: boolean | null;
 
   price_level?: string | null;
   updated_at?: string | null;
@@ -107,6 +111,12 @@ export type HomeCard = {
 
   /** meal | light | drink — 추천 문구(식사 vs 음료 전용) 보정용(optional) */
   servingType?: "meal" | "light" | "drink";
+
+  /**
+   * 클라이언트 랭킹 디버그/로깅용(optional) — UI에서 직접 쓰지 않아도 됨.
+   * `useHomeCards` → `buildTopRecommendations` 결과를 얹어 둔다.
+   */
+  recommendationScoreBreakdown?: Record<string, number>;
 };
 
 // ✅ 기존 코드들이 Place 타입을 import하는 경우가 있어서 alias 제공

@@ -16,6 +16,10 @@ export const RECOMMENDATION_EVENT_NAMES = [
   "quick_exit",
   "course_restore_success",
   "course_restore_fail",
+  "recommendation_impression",
+  "recommendation_response",
+  "correction_event",
+  "reject_main_pick",
 ] as const;
 
 export type RecommendationEventName = (typeof RECOMMENDATION_EVENT_NAMES)[number];
@@ -47,6 +51,26 @@ export type LogRecommendationEventInput = {
   step_pattern?: string | null;
   place_ids?: string[];
   metadata?: Record<string, unknown>;
+  analytics_v2?: {
+    recommendation_id?: string | null;
+    category_clicked?: string | null;
+    user_profile?: Record<string, unknown> | null;
+    shown_place_ids?: string[] | null;
+    main_pick_id?: string | null;
+    recommendation_reasons?: Record<string, unknown> | null;
+    weights?: Record<string, unknown> | null;
+    scenario?: string | null;
+    weather?: string | null;
+    day_of_week?: number | null;
+    time_of_day?: string | null;
+    action?: string | null;
+    selected_place_id?: string | null;
+    reject_reason?: string | null;
+    correction_used?: string | null;
+    correction_value?: unknown;
+    correction_kind?: string | null;
+    correction_free_text?: string | null;
+  };
 };
 
 export type RecommendationPatternStatRow = {

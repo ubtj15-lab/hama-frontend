@@ -2,10 +2,10 @@ import {
   HYBRID_WEIGHT_BEHAVIOR,
   HYBRID_WEIGHT_CONVENIENCE,
   HYBRID_WEIGHT_DISTANCE,
+  HYBRID_WEIGHT_PERSONAL,
   HYBRID_WEIGHT_RATING,
   HYBRID_WEIGHT_SCENARIO,
 } from "./recommendConstants";
-import { PERSONALIZATION_BLEND } from "./personalizationFromSignals";
 
 export type HybridScoreParts = {
   distanceScore: number;
@@ -26,11 +26,12 @@ export type HybridScoreParts = {
 export function computeHybridRecommendationFinal(parts: HybridScoreParts): number {
   const behaviorPoints =
     parts.behaviorVisibility <= 0 ? 0 : parts.behaviorPillar * HYBRID_WEIGHT_BEHAVIOR * parts.behaviorVisibility;
-  const hybridCore =
+  return (
     parts.distanceScore * HYBRID_WEIGHT_DISTANCE +
     parts.ratingScore * HYBRID_WEIGHT_RATING +
     parts.scenarioRichScore * HYBRID_WEIGHT_SCENARIO +
     parts.convenienceScore * HYBRID_WEIGHT_CONVENIENCE +
-    behaviorPoints;
-  return hybridCore * (1 - PERSONALIZATION_BLEND) + parts.personalizationScore * PERSONALIZATION_BLEND;
+    behaviorPoints +
+    parts.personalizationScore * HYBRID_WEIGHT_PERSONAL
+  );
 }
