@@ -2,26 +2,24 @@
 
 import React, { useState } from "react";
 import { colors, radius, shadow, space } from "@/lib/designTokens";
-import { FamilyIcon, FerrisWheelIcon, HeartIcon, RiceBowlIcon } from "@icons";
 import { Touchable } from "@ui/Touchable";
 
-/** 홈 — 빠른 시나리오 4개 이하 */
-export const HOME_QUICK_SCENARIO_LIMIT = 4;
-
-export const QUICK_SCENARIO_CANDIDATES: {
+export const QUICK_CATEGORY_CANDIDATES: {
   label: string;
   subtitle: string;
   query: string;
-  icon: React.ReactNode;
+  icon: string;
   bg: string;
 }[] = [
-  { label: "아이랑", subtitle: "가족끼리 편하게", query: "아이랑 가족끼리 편하게 갈 만한 곳 추천해줘", icon: <FamilyIcon size={20} color={colors.primaryDark} />, bg: colors.category.family },
-  { label: "데이트", subtitle: "둘만의 시간", query: "둘만의 데이트 장소 추천해줘", icon: <HeartIcon size={20} color={colors.primaryDark} />, bg: colors.category.date },
-  { label: "혼밥", subtitle: "나만의 한 끼", query: "혼자 밥 먹기 좋은 곳 추천해줘", icon: <RiceBowlIcon size={20} color={colors.primaryDark} />, bg: colors.category.solo },
-  { label: "코스", subtitle: "하루를 통째로", query: "하루 코스로 갈 만한 일정 추천해줘", icon: <FerrisWheelIcon size={20} color={colors.primaryDark} />, bg: colors.category.course },
+  { label: "푸드", subtitle: "식당 중심", query: "식당 추천해줘", icon: "🍴", bg: "#FFF3E7" },
+  { label: "카페", subtitle: "커피·디저트·베이커리", query: "카페 추천해줘 디저트 베이커리", icon: "☕", bg: "#EEF6FF" },
+  { label: "미용실", subtitle: "헤어·네일", query: "미용실 추천해줘", icon: "💇", bg: "#F3EFFF" },
+  { label: "액티비티", subtitle: "체험·게임·전시", query: "액티비티 추천해줘 체험 게임 박물관", icon: "🎨", bg: "#EDFAF3" },
+  { label: "코스", subtitle: "식당+카페+액티비티", query: "코스 추천해줘 식당 카페 액티비티", icon: "🗺️", bg: colors.category.course },
 ];
 
-const HOME_ITEMS = QUICK_SCENARIO_CANDIDATES.slice(0, HOME_QUICK_SCENARIO_LIMIT);
+const HOME_GRID_ITEMS = QUICK_CATEGORY_CANDIDATES.slice(0, 4);
+const HOME_COURSE_ITEM = QUICK_CATEGORY_CANDIDATES[4];
 
 type Props = { onPick: (query: string) => void };
 
@@ -41,7 +39,7 @@ export function QuickScenarioGrid({ onPick }: Props) {
           gap: 12,
         }}
       >
-        {HOME_ITEMS.map((it) => {
+        {HOME_GRID_ITEMS.map((it) => {
           const on = selected === it.label;
           return (
             <Touchable key={it.label}>
@@ -68,7 +66,7 @@ export function QuickScenarioGrid({ onPick }: Props) {
                 }}
               >
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <span aria-hidden style={{ display: "inline-flex", lineHeight: 1 }}>
+                  <span aria-hidden style={{ display: "inline-flex", lineHeight: 1, fontSize: 21 }}>
                     {it.icon}
                   </span>
                   <strong style={{ fontSize: 18, letterSpacing: "-0.03em" }}>{it.label}</strong>
@@ -79,6 +77,61 @@ export function QuickScenarioGrid({ onPick }: Props) {
           );
         })}
       </div>
+      {HOME_COURSE_ITEM ? (
+        <div style={{ marginTop: 12 }}>
+          <Touchable>
+            <button
+              type="button"
+              onClick={() => {
+                setSelected(HOME_COURSE_ITEM.label);
+                onPick(HOME_COURSE_ITEM.query);
+              }}
+              className="hama-press"
+              style={{
+                minHeight: 112,
+                width: "100%",
+                borderRadius: radius.card,
+                border:
+                  selected === HOME_COURSE_ITEM.label
+                    ? `2px solid ${colors.accentPrimary}`
+                    : `1px solid ${colors.borderSubtle}`,
+                background: HOME_COURSE_ITEM.bg,
+                color: colors.textPrimary,
+                cursor: "pointer",
+                boxShadow: selected === HOME_COURSE_ITEM.label ? shadow.card : "none",
+                boxSizing: "border-box",
+                textAlign: "left",
+                padding: "15px 14px 13px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span style={{ display: "inline-flex", lineHeight: 1, fontSize: 21 }} aria-hidden>
+                    {HOME_COURSE_ITEM.icon}
+                  </span>
+                  <strong style={{ fontSize: 19, letterSpacing: "-0.03em" }}>{HOME_COURSE_ITEM.label}</strong>
+                  <span style={{ fontSize: 13, color: colors.textSecondary, fontWeight: 700 }}>
+                    {HOME_COURSE_ITEM.subtitle}
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 900,
+                    letterSpacing: "0.01em",
+                    color: colors.accentPrimary,
+                    background: "rgba(255,255,255,0.9)",
+                    borderRadius: 999,
+                    padding: "6px 10px",
+                  }}
+                >
+                  묶음 추천
+                </span>
+              </div>
+            </button>
+          </Touchable>
+        </div>
+      ) : null}
     </div>
   );
 }

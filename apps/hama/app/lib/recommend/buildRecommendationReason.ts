@@ -18,6 +18,8 @@ import {
 } from "@/lib/recommend/selectRecommendationBadges";
 
 export type RecommendationReasonBlock = {
+  /** 추천 이유 첫 줄 — 상황 라벨 */
+  scenarioLabel: string;
   headline: string;
   subline: string;
   /** 2~3개, 짧은 상황형 라벨 */
@@ -219,6 +221,15 @@ export function buildRecommendationReason(
     subline = subline.includes("영업 정보") ? subline : `${subline} · 영업 정보는 방문 전 확인해 주세요`;
   }
 
+  if (card.category === "museum" || /박물관|museum|전시/.test(b)) {
+    headline = "오늘 비 와서 실내 체험 좋아";
+    if (/아이|키즈|체험/.test(b)) {
+      subline = "아이가 좋아할 만한 전시 진행 중";
+    } else {
+      subline = "데이트 코스 마무리하기 좋은 분위기";
+    }
+  }
+
   if (biz !== "CLOSED" && dist && !subline.includes(dist)) {
     subline = `${subline} · ${dist}`;
   }
@@ -249,7 +260,17 @@ export function buildRecommendationReason(
 
   const regionTrust = regionTrustLine(card);
 
+  const scenarioLabel =
+    voice === "family"
+      ? "🔥 아이랑 가기 좋아"
+      : voice === "date"
+        ? "🔥 데이트 분위기"
+        : voice === "solo"
+          ? "🔥 혼자 가기 편해"
+          : "🔥 지금 가기 좋아";
+
   return {
+    scenarioLabel,
     headline,
     subline,
     badges: badges.length ? badges : ["지금 결정하기 좋아요", "동선 짧게", "실행 부담 적게"],

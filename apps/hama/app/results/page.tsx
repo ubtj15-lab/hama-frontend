@@ -574,6 +574,9 @@ function ResultsContent() {
   const showSoftFallbackCopy = Boolean(
     strictHint || deckIncomplete || rejectedMainPickIds.length > 0
   );
+  const strictBeautyEmpty =
+    effectiveScenario?.intentType === "search_strict" &&
+    effectiveScenario?.intentCategory === "BEAUTY";
 
   const rejectMainAndRefresh = () => {
     const id = primaryRecommendationCards[0]?.id;
@@ -819,7 +822,9 @@ function ResultsContent() {
           primaryRecommendationCards.length === 0 &&
           placeLookupDone && (
             <p style={{ color: colors.textSecondary }}>
-              {placeSearchEnabled
+              {strictBeautyEmpty
+                ? "이 지역에 매장이 적어요"
+                : placeSearchEnabled
                 ? "이름으로는 찾지 못했어. 다른 말로 한 번만 더 말해줄래?"
                 : "지금은 보여줄 카드가 없어. 다른 말로 한 번만 더 말해줄래?"}
             </p>

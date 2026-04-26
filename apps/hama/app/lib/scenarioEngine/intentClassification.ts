@@ -34,6 +34,8 @@ const FOOD_HINTS = [
   "밥",
   "먹",
   "식사",
+  "식당",
+  "레스토랑",
   "점심",
   "저녁",
   "아침",
@@ -107,7 +109,7 @@ export function detectStrictCategory(rawQuery: string): IntentCategory | null {
   if (ties.length === 1) return ties[0]!;
 
   if (ties.includes("CAFE") && /카페|커피|디저트|빵집|베이커리/.test(q)) return "CAFE";
-  if (ties.includes("FOOD") && /점심|저녁|아침|브런치|맛집|식사|밥|먹|점메추|저메추|뭐\s*먹|뭐먹/.test(q))
+  if (ties.includes("FOOD") && /점심|저녁|아침|브런치|맛집|식사|식당|레스토랑|밥|먹|점메추|저메추|뭐\s*먹|뭐먹/.test(q))
     return "FOOD";
   if (ties.includes("BEAUTY")) return "BEAUTY";
   if (ties.includes("ACTIVITY")) return "ACTIVITY";

@@ -71,6 +71,7 @@ import {
   isHardExcludedForFamilyKidsListRecommend,
   parentGatheringOrRestorativeQuery,
 } from "./placeFamilyClassification";
+import type { UserProfile } from "@/lib/onboardingProfile";
 
 export type RecommendScoreBreakdown = {
   distanceScore: number;
@@ -109,6 +110,8 @@ export type BuildRecommendationsContext = {
   searchQuery?: string | null;
   /** Parsed scenario from natural language (ranking, badges) */
   scenarioObject?: ScenarioObject | null;
+  userProfile?: UserProfile | null;
+  relaxPersonalRules?: boolean;
 };
 
 function normBlob(card: HomeCard): string {
@@ -156,6 +159,53 @@ function distanceKmToCard(card: HomeCard, ctx: BuildRecommendationsContext): num
   return haversineKm({ lat: ctx.userLat, lng: ctx.userLng }, { lat, lng });
 }
 
+function calcPersonalScore(card: HomeCard, profile: UserProfile | null | undefined, blobBase: string): number {
+  if (!profile) return 50;
+  const blob = blobBase.toLowerCase();
+  let score = 50;
+  const c = card as any;
+
+  if (profile.companions.includes("가족") && (c.with_kids === true || /키즈|가족|체험|박물관/.test(blob))) score += 16;
+  if (profile.companions.includes("둘이서") && /데이트|분위기|조용|와인|칵테일|전시/.test(blob)) score += 10;
+  if (profile.companions.includes("친구") && /보드게임|단체|액티비티|pc방|플스/.test(blob)) score += 10;
+  if (profile.companions.includes("혼자") && (c.for_work === true || /혼밥|1인|집중|조용/.test(blob))) score += 10;
+
+  if (profile.interests.includes("전시/박물관") && (/museum|박물관|전시/.test(blob) || c.category === "museum")) score += 14;
+  if (profile.interests.includes("산책/공원") && /산책|공원|야외|정원/.test(blob)) score += 9;
+  if (profile.interests.includes("액티비티") && /activity|액티비티|체험|클라이밍|방탈출/.test(blob)) score += 10;
+  if (profile.interests.includes("만화카페/보드게임카페") && /만화|보드게임/.test(blob)) score += 12;
+  if (profile.interests.includes("영화/공연") && /영화|공연|시네마|연극|뮤지컬/.test(blob)) score += 11;
+
+  if (profile.gender !== "선택 안 함" && /홀덤|pc방|플스방|포커/.test(blob)) {
+    score += profile.gender === "남성" ? 5 : 3;
+  }
+
+  if (profile.dietary_restrictions.includes("알레르기") && /알레르기|allergen|원재료|성분표/.test(blob)) {
+    score += 8;
+  }
+
+  return Math.max(0, Math.min(100, score));
+}
+
+function violatesDietaryProfile(
+  card: HomeCard,
+  profile: UserProfile | null | undefined,
+  relaxPersonalRules: boolean
+): boolean {
+  if (!profile || relaxPersonalRules) return false;
+  const dietary = profile.dietary_restrictions;
+  if (!dietary.length || dietary.includes("없음")) return false;
+  const blob = normBlob(card);
+  const c = card as any;
+  if (dietary.includes("채식") && !(/비건|채식|vegan|vegetarian/.test(blob) || c.vegetarian_available === true)) {
+    return true;
+  }
+  if (dietary.includes("할랄") && !(/할랄|halal/.test(blob) || c.halal_available === true)) {
+    return true;
+  }
+  return false;
+}
+
 /** 데이트 시나리오 랭킹: 가족·혼밥·회식 느낌이 강하면 감점(텍스트 휴리스틱) */
 function dateScenarioMismatchPenalty(blob: string): number {
   let pen = 0;
@@ -176,6 +226,11 @@ function scenarioRawForKey(blob: string, key: RecommendScenarioKey, card: HomeCa
   const c = card as any;
   if (key === "family" && c?.with_kids === true && hasExplicitFamilySignalsInBlob(blob)) sum += 9;
   else if (key === "family" && c?.with_kids === true) sum += 2;
+  if (c?.category === "museum") {
+    if (key === "family") sum += /체험|키즈|어린이/.test(blob) ? 18 : 10;
+    if (key === "date") sum += /분위기|야간|전시/.test(blob) ? 14 : 9;
+    if (key === "solo") sum += 5;
+  }
   if (key === "solo" && c?.for_work === true) sum += 14;
   if (key === "group" && c?.reservation_required === true) sum += 14;
 
@@ -228,6 +283,15 @@ function pickActiveScenario(
   return { key: bestK, raw: bestRaw, norm: scenarioNormFromRaw(bestRaw, bestK) };
 }
 
+function preferredScenarioFromProfile(profile: UserProfile | null | undefined): RecommendScenarioKey | null {
+  if (!profile) return null;
+  const companions = profile.companions ?? [];
+  if (companions.includes("가족")) return "family";
+  if (companions.includes("둘이서")) return "date";
+  if (companions.includes("혼자")) return "solo";
+  return null;
+}
+
 function mainCategoryKey(card: HomeCard): string {
   return String(card.category ?? "unknown").toLowerCase();
 }
@@ -252,6 +316,16 @@ function brandKey(card: HomeCard): string | null {
   if (first.length < 2) return null;
   if (KNOWN_BRAND_PREFIX.has(first)) return first;
   return null;
+}
+
+function isChainCafe(card: HomeCard): boolean {
+  const cat = String(card.category ?? "").toLowerCase();
+  if (cat !== "cafe") return false;
+  if (brandKey(card) != null) return true;
+  const name = String(card.name ?? "").toLowerCase().replace(/\s+/g, "");
+  return /스타벅스|메가(?:mgc)?커피|컴포즈|빽다방|이디야|투썸|할리스|탐앤탐스|폴바셋|엔제리너스|매머드/.test(
+    name
+  );
 }
 
 function diversityPenalty(item: ScoredRecommendItem, picked: ScoredRecommendItem[]): number {
@@ -296,6 +370,8 @@ function resolveRankKeyForCategoryFilter(ctx: BuildRecommendationsContext): Reco
     if (so.scenario === "generic") return "neutral";
     return scenarioTypeToRankKey(so.scenario);
   }
+  const profileScenario = preferredScenarioFromProfile(ctx.userProfile);
+  if (profileScenario) return profileScenario;
   const k = intentionToScenarioKey(ctx.intent);
   if (k === "neutral") return "neutral";
   return k as RecommendScenarioKey;
@@ -314,6 +390,10 @@ export function buildTopRecommendations(
   const strictFood =
     so?.intentType === "search_strict" &&
     so.intentCategory === "FOOD" &&
+    so.intentStrict !== false;
+  const strictCafe =
+    so?.intentType === "search_strict" &&
+    so.intentCategory === "CAFE" &&
     so.intentStrict !== false;
 
   let pool = candidates;
@@ -356,6 +436,12 @@ export function buildTopRecommendations(
       if (strictFood && so && !cardMatchesStrictFoodIntent(card, so)) {
         continue;
       }
+      if (!relaxed && strictCafe && isChainCafe(card)) {
+        continue;
+      }
+      if (violatesDietaryProfile(card, ctx.userProfile, Boolean(ctx.relaxPersonalRules))) {
+        continue;
+      }
 
       if (
         so &&
@@ -387,11 +473,14 @@ export function buildTopRecommendations(
       }
 
       const rankKeyFromObjEarly = ctx.scenarioObject ? scenarioTypeToRankKey(ctx.scenarioObject.scenario) : null;
-      const rankKeyForDrink =
+      const profileScenarioKey = preferredScenarioFromProfile(ctx.userProfile);
+      const userScenarioKey = intentionToScenarioKey(ctx.intent);
+      const explicitScenarioKey =
         rankKeyFromObjEarly ??
-        (intentionToScenarioKey(ctx.intent) !== "neutral"
-          ? (intentionToScenarioKey(ctx.intent) as RecommendScenarioKey)
-          : null);
+        (userScenarioKey !== "neutral" ? userScenarioKey : null) ??
+        profileScenarioKey;
+      const rankKeyForDrink =
+        explicitScenarioKey;
       if (
         rankKeyForDrink &&
         isDrinkOnlyCafeForMealContext(card) &&
@@ -446,13 +535,17 @@ export function buildTopRecommendations(
     let scenarioS: number;
     let rawScenario: number;
 
-    if (rankKeyFromObjEarly && scenarioCfg) {
-      activeScenario = rankKeyFromObjEarly;
+    if (explicitScenarioKey && scenarioCfg) {
+      activeScenario = explicitScenarioKey;
       const boost = configTagBoostRaw(blob, scenarioCfg);
       const typeFit = placeTypePreferenceRaw(card, scenarioCfg);
-      rawScenario = scenarioRawForKey(blob, rankKeyFromObjEarly, card) + boost + typeFit + forcedRaw;
-      const cap = (SCENARIO_RAW_CAP[rankKeyFromObjEarly] || 1) + 55;
+      rawScenario = scenarioRawForKey(blob, explicitScenarioKey, card) + boost + typeFit + forcedRaw;
+      const cap = (SCENARIO_RAW_CAP[explicitScenarioKey] || 1) + 55;
       scenarioS = Math.min(100, (rawScenario / cap) * 100);
+    } else if (explicitScenarioKey) {
+      activeScenario = explicitScenarioKey;
+      rawScenario = scenarioRawForKey(blob, explicitScenarioKey, card) + forcedRaw;
+      scenarioS = scenarioNormFromRaw(Math.max(0, rawScenario), explicitScenarioKey);
     } else {
       const picked = pickActiveScenario(card, ctx.intent, blob);
       activeScenario = picked.key;
@@ -463,12 +556,7 @@ export function buildTopRecommendations(
       );
     }
 
-    const userScenarioKey = intentionToScenarioKey(ctx.intent);
-    const voiceForContent = ctx.scenarioObject
-      ? scenarioTypeToRankKey(ctx.scenarioObject.scenario)
-      : userScenarioKey !== "neutral"
-        ? userScenarioKey
-        : activeScenario;
+    const voiceForContent = explicitScenarioKey ?? activeScenario;
 
     const legacyIntent = ctx.scenarioObject ? scenarioObjectToIntention(ctx.scenarioObject) : ctx.intent;
 
@@ -479,7 +567,10 @@ export function buildTopRecommendations(
     }
     const qualS = ratingScoreFromCard(card);
     const kwS = keywordScoreFromQuery(ctx.searchQuery, card, blobBase);
-    const bonS = bonusScoreFromCard(card, blobBase);
+    let bonS = bonusScoreFromCard(card, blobBase);
+    if (isChainCafe(card)) {
+      bonS = Math.max(0, bonS - 12);
+    }
 
     const useFoodRanking =
       strictFood &&
@@ -510,8 +601,7 @@ export function buildTopRecommendations(
       scenarioRich = Math.min(100, scenarioRich * 0.88 + compS * 0.12);
     }
     const familyRank =
-      rankKeyFromObjEarly === "family" ||
-      (!ctx.scenarioObject && intentionToScenarioKey(ctx.intent) === "family");
+      explicitScenarioKey === "family";
     if (familyRank) {
       const cfp = childFriendlyScore(card) * 100;
       scenarioRich = Math.min(100, scenarioRich * 0.36 + cfp * 0.64);
@@ -530,9 +620,11 @@ export function buildTopRecommendations(
       typeof window !== "undefined"
         ? getPersonalizationHints()
         : { preferredTags: [] as string[], avoidTags: [] as string[], preferredScenarios: [] as string[] };
-    const personalizationS = personalizationFitScore(blobBase, ctx.scenarioObject ?? null, hints);
+    const signalPersonalization = personalizationFitScore(blobBase, ctx.scenarioObject ?? null, hints);
+    const profilePersonal = calcPersonalScore(card, ctx.userProfile, blobBase);
+    const personalizationS = Math.round(signalPersonalization * 0.4 + profilePersonal * 0.6);
 
-    const finalScore = computeHybridRecommendationFinal({
+    let finalScore = computeHybridRecommendationFinal({
       distanceScore: distS,
       ratingScore: qualS,
       scenarioRichScore: scenarioRich,
@@ -541,6 +633,9 @@ export function buildTopRecommendations(
       behaviorVisibility: vis,
       personalizationScore: personalizationS,
     });
+    if (isChainCafe(card)) {
+      finalScore = Math.max(0, finalScore - 22);
+    }
 
     const breakdown: RecommendScoreBreakdown = {
       distanceScore: distS,
@@ -628,6 +723,12 @@ export function buildTopRecommendations(
       console.warn("[buildTopRecommendations] strict pass produced 0 cards; using relaxed pass");
     }
     scored = runPass(true);
+  }
+  if (scored.length === 0 && ctx.userProfile && !ctx.relaxPersonalRules) {
+    scored = buildTopRecommendations(candidates, {
+      ...ctx,
+      relaxPersonalRules: true,
+    });
   }
 
   scored.sort((a, b) => b.breakdown.finalScore - a.breakdown.finalScore);

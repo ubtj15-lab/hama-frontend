@@ -38,6 +38,15 @@ function kmLine(card: HomeCard): string {
   return "";
 }
 
+function categoryWithIcon(card: HomeCard): string {
+  const c = String(card.category ?? "").toLowerCase();
+  if (c === "restaurant") return "🍴 푸드";
+  if (c === "cafe") return "☕ 카페";
+  if (c === "salon") return "💇 미용실";
+  if (c === "activity" || c === "museum") return "🎨 액티비티";
+  return card.categoryLabel ?? card.category ?? "추천";
+}
+
 type Props = {
   card: HomeCard;
   rank: number;
@@ -99,7 +108,7 @@ export function RecommendationCard({
   const phone = String(card.phone ?? "").trim();
   const imgH = featured ? 228 : 132;
   const closed = bs === "CLOSED";
-  const reasonLead = reason.headline.replace(/^🔥\s*/, "");
+  const categoryBadge = categoryWithIcon(card);
   const reasonItems = [reason.badges[0], reason.badges[1], reason.badges[2]].filter(
     (v): v is string => Boolean(v && String(v).trim())
   );
@@ -218,7 +227,7 @@ export function RecommendationCard({
       <div style={{ padding: featured ? 18 : space.cardPadding, display: "flex", flexDirection: "column", gap: 8 }}>
         <p style={{ ...typo.cardReason, fontSize: 15, color: closed ? colors.textSecondary : colors.reasonHot, margin: 0, lineHeight: 1.35, fontWeight: 900, letterSpacing: "-0.02em", display: "flex", alignItems: "center", gap: 6 }}>
           {!closed && <FlameIcon size={14} color={colors.reasonHot} />}
-          <span>{reasonLead}</span>
+          <span>{reason.scenarioLabel}</span>
         </p>
 
         <div
@@ -232,6 +241,17 @@ export function RecommendationCard({
           }}
         >
           {card.name}
+        </div>
+
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            color: colors.textSecondary,
+            marginTop: -2,
+          }}
+        >
+          {categoryBadge}
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
