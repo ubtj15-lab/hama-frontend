@@ -10,6 +10,13 @@
     "build:hama": "npm run build --workspace=apps/hama",
     "build:partner": "npm run build --workspace=apps/partner",
     "test:recommend-places": "npm run test:recommend-places --workspace=apps/hama",
+    "test:survey-reflection": "npm run test:survey-reflection --workspace=apps/hama",
+    "classify:stores": "npm run classify:stores --workspace=apps/hama",
+    "verify:classification": "npm run verify:classification --workspace=apps/hama",
+    "compare:classifications": "npm run compare:classifications --workspace=apps/hama",
+    "select:priority-stores": "npm run select:priority-stores --workspace=apps/hama",
+    "map:classifications-to-capability": "npm run map:classifications-to-capability --workspace=apps/hama",
+    "test:recommend-scenarios": "npm run test:recommend-scenarios --workspace=apps/hama",
     "clean:next": "node -e \"['.next','apps/hama/.next','apps/partner/.next'].forEach(p=>{try{require('fs').rmSync(p,{recursive:true,force:true})}catch(e){}})\""
   },
   "workspaces": [

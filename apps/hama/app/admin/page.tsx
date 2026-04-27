@@ -88,6 +88,15 @@ export default function AdminDashboardPage() {
           <Link href="/admin/stores" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
             매장·매장주 연결
           </Link>
+          <Link href="/admin/capabilities" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            capability 수동입력
+          </Link>
+          <Link href="/admin/store-verification" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            분류 검증
+          </Link>
+          <Link href="/admin/recommend-test" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            추천 시나리오 테스트
+          </Link>
           <Link href="/admin/reservations" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none" }}>
             예약 목록
           </Link>

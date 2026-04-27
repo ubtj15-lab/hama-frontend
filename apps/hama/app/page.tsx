@@ -42,6 +42,7 @@ const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
 const LOGIN_FLAG_KEY = "hamaLoggedIn";
 const ONBOARDING_PROMPT_DISMISSED_KEY = "hama_onboarding_prompt_dismissed";
+const EXPERIMENT_INTRO_SEEN_KEY = "hama_experiment_intro_seen";
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -282,10 +283,17 @@ function HomeEntryGate() {
   const [isCheckingProfile, setIsCheckingProfile] = useState(true);
   const [showLegacyPrompt, setShowLegacyPrompt] = useState(false);
   const [showPromptBadge, setShowPromptBadge] = useState(false);
+  const [showExperimentIntro, setShowExperimentIntro] = useState(false);
 
   useEffect(() => {
     const loggedIn = localStorage.getItem(LOGIN_FLAG_KEY) === "1";
     setIsLoggedIn(loggedIn);
+    if (loggedIn) {
+      const introSeen = localStorage.getItem(EXPERIMENT_INTRO_SEEN_KEY) === "1";
+      setShowExperimentIntro(!introSeen);
+    } else {
+      setShowExperimentIntro(false);
+    }
     if (!loggedIn) {
       setIsCheckingProfile(false);
       return;
@@ -426,6 +434,67 @@ function HomeEntryGate() {
         >
           설문 미완료
         </button>
+      )}
+      {showExperimentIntro && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1300,
+            background: "rgba(2,6,23,0.62)",
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              borderRadius: 16,
+              background: "#fff",
+              padding: 18,
+              boxShadow: "0 14px 28px rgba(2,6,23,0.22)",
+            }}
+          >
+            <div style={{ margin: 0, lineHeight: 1.68, color: "#0f172a", fontSize: 14 }}>
+              <div style={{ marginBottom: 8, fontWeight: 700, color: "#334155" }}>✍️ 마케팅 느낌 버전</div>
+              <p style={{ margin: 0, whiteSpace: "pre-line" }}>
+                {"안녕하세요, 이범기입니다.\n\nAI는 점점 똑똑해지고 있지만,\n정작 \"오늘 뭐 먹지?\", \"어디 갈까?\" 같은\n일상의 결정은 여전히 번거롭고 어렵습니다.\n\n그래서 직접 만들어봤습니다."}
+              </p>
+              <p style={{ margin: "10px 0 0", fontWeight: 900, whiteSpace: "pre-line" }}>
+                {"AI가 우리의 일상적인 선택까지 도와줄 수 있을지,\n실제로 검증해보는 서비스입니다."}
+              </p>
+              <p style={{ margin: "10px 0 0", whiteSpace: "pre-line" }}>
+                {"하마는\n복잡한 검색 대신,\n당신의 상황에 맞는 선택을 딱 골라주는 것을 목표로 합니다.\n\n그리고 이 실험은\n여러분의 실제 선택 데이터를 통해 점점 더 똑똑해집니다.\n\n지금 직접 경험해보세요.\n생각보다 더 편해질지도 모릅니다."}
+              </p>
+              <p style={{ margin: "12px 0 0", textAlign: "right", color: "#475569", fontWeight: 700 }}>
+                — 이범기 드림
+              </p>
+            </div>
+            <button
+              type="button"
+              style={{
+                marginTop: 14,
+                width: "100%",
+                border: "none",
+                borderRadius: 12,
+                background: "#111827",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: 15,
+                padding: "12px 14px",
+                cursor: "pointer",
+              }}
+              onClick={() => {
+                localStorage.setItem(EXPERIMENT_INTRO_SEEN_KEY, "1");
+                setShowExperimentIntro(false);
+              }}
+            >
+              실험 참여하기
+            </button>
+          </div>
+        </div>
       )}
       <HomePageContent />
     </>

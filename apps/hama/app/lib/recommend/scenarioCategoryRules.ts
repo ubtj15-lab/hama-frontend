@@ -6,19 +6,18 @@ export type NormalizedCategory = "restaurant" | "cafe" | "salon" | "activity" | 
 
 /**
  * 시나리오별 허용 업종(카테고리).
- * - date/family: 외식·카페·놀거리 (미용 제외)
- * - solo: 가볍게 식사·카페 중심
- * - group: 식사·단체 놀거리 (카페 제외)
+ * - 명시 카테고리 검색(예: beauty)은 상위 필터에서 이미 후보를 좁혀 전달된다.
+ * - strict 단계에서는 salon을 완전 배제하지 않고, 점수 체계로 자연스럽게 후순위화한다.
  */
 const SCENARIO_ALLOWED: Record<RecommendScenarioKey, ReadonlySet<NormalizedCategory>> = {
-  date: new Set(["restaurant", "cafe", "activity"]),
-  family: new Set(["restaurant", "cafe", "activity"]),
-  solo: new Set(["restaurant", "cafe"]),
-  group: new Set(["restaurant", "cafe", "activity"]),
+  date: new Set(["restaurant", "cafe", "activity", "salon"]),
+  family: new Set(["restaurant", "cafe", "activity", "salon"]),
+  solo: new Set(["restaurant", "cafe", "salon"]),
+  group: new Set(["restaurant", "cafe", "activity", "salon"]),
 };
 
-/** neutral(시나리오 불명): 식음·액티비티 중심, 미용은 글로벌 제외로 걸러짐 */
-const NEUTRAL_ALLOWED = new Set<NormalizedCategory>(["restaurant", "cafe", "activity"]);
+/** neutral(시나리오 불명): 전 카테고리 허용, 랭킹 점수로 우선순위 정렬 */
+const NEUTRAL_ALLOWED = new Set<NormalizedCategory>(["restaurant", "cafe", "activity", "salon"]);
 
 /** 시나리오 추천에서 항상 제외(의료·금융·편의 등). 미용은 별도 처리. */
 const HARD_NON_POI_PATTERNS: RegExp[] = [
@@ -57,13 +56,9 @@ function isSalonLike(card: HomeCard): boolean {
   return SALON_HINT_PATTERNS.test(blobForHeuristics(card));
 }
 
-/**
- * 시나리오 추천용: 미용실(salon) + 비대상 POI 제외.
- * `search_strict` + BEAUTY 의도일 때는 미용 허용 → {@link isHardExcludedNonPoi} 만 쓸 것.
- */
+/** 시나리오 추천용: 비대상 POI 제외. salon은 정책상 배제하지 않는다. */
 export function isGloballyExcludedCategory(card: HomeCard): boolean {
-  if (isHardExcludedNonPoi(card)) return true;
-  return isSalonLike(card);
+  return isHardExcludedNonPoi(card);
 }
 
 function inferCategoryFromBlob(card: HomeCard): NormalizedCategory {
@@ -95,7 +90,7 @@ export function isCategoryAllowedForScenarioStrict(
 ): boolean {
   if (isGloballyExcludedCategory(card)) return false;
   const cat = normalizeCategory(card);
-  if (cat === "unknown" || cat === "salon") return false;
+  if (cat === "unknown") return false;
   if (rankKey === "neutral") return NEUTRAL_ALLOWED.has(cat);
   return SCENARIO_ALLOWED[rankKey].has(cat);
 }

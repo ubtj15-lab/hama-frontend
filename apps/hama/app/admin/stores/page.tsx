@@ -145,6 +145,9 @@ export default function AdminStoresPage() {
           <Link href="/admin/reservations" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none" }}>
             예약 목록
           </Link>
+          <Link href="/admin/capabilities" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none" }}>
+            capability 수동입력
+          </Link>
         </div>
       </div>
 
