@@ -206,8 +206,8 @@ export function buildRecommendationReason(
   const voice = resolveEffectiveRecommendationVoice(card, opts);
   const serving = opts?.servingType ?? inferServingTypeForRecommendation(card);
 
-  let headline = "오늘 가기 좋은 곳이에요";
-  let subline = "시간·동선·실행까지 한 번에 고려한 선택이에요";
+  let headline = "도보 이동 부담이 적은 후보예요";
+  let subline = "지금 시간대 기준으로 방문 동선이 단순해요";
   let skipVoiceCopy = false;
 
   if (biz === "CLOSED") {
@@ -268,8 +268,8 @@ export function buildRecommendationReason(
       headline = "저녁 식사로 괜찮아요";
       subline = "부담 없이 자리 잡기 좋은 편이에요";
     } else if (km != null && km <= 1.2) {
-      headline = "지금 가기 편해요";
-      subline = dist ?? "이동 부담이 적은 편이에요";
+      headline = "도보 이동 부담이 적은 후보예요";
+      subline = dist ?? "지금 출발해도 이동 부담이 큰 편은 아니에요";
     } else {
       const picked = pickRecommendationPair({
         scenario: "light",
@@ -344,7 +344,7 @@ export function buildRecommendationReason(
     liveStatusLine: buildLiveStatusLine(card, biz, b),
     headline,
     subline,
-    badges: badges.length ? badges : ["지금 결정하기 좋아요", "동선 짧게", "실행 부담 적게"],
+    badges: badges.length ? badges : ["도보 이동 부담 적음", "영업 상태 확인 완료", "지금 방문 동선 용이"],
     regionTrust,
   };
 }

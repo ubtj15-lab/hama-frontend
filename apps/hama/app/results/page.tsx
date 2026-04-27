@@ -770,17 +770,6 @@ function ResultsContent() {
 
   const headerLoading = bootstrapBusy || (placeLookupBusy && !showNameSearch);
 
-  const headerCount =
-    !pageBusy && isCourseMode && coursePlans.length > 0
-      ? coursePlans.length
-      : !pageBusy && isCourseFixedResults
-        ? primaryRecommendationCards.length
-        : !pageBusy && showNameSearch
-          ? Math.min(placeHits.length, RECOMMEND_DECK_SIZE)
-          : !pageBusy
-            ? primaryRecommendationCards.length
-            : undefined;
-
   if (DEBUG_FORCE_SEARCH_SECTION) {
     const debugResults: HomeCard[] = [{ id: "debug-1", name: "두부마을", category: null }];
     if (process.env.NODE_ENV === "development") {
@@ -881,7 +870,7 @@ function ResultsContent() {
         background: `linear-gradient(180deg, ${colors.bgDefault} 0%, ${colors.bgMuted} 100%)`,
       }}
     >
-      <div style={{ maxWidth: 430, margin: "0 auto", padding: `16px ${space.pageX}px 0` }}>
+      <div style={{ maxWidth: 1080, margin: "0 auto", padding: `16px ${space.pageX}px 0` }}>
         <button
           type="button"
           onClick={() => router.push("/")}
@@ -898,7 +887,7 @@ function ResultsContent() {
         >
           ← 홈으로
         </button>
-        <ResultsHeader isLoading={headerLoading} resultCount={headerCount} />
+        <ResultsHeader isLoading={headerLoading} />
         <ActiveConstraintChips chips={constraintChips} />
 
         {strictHint && (

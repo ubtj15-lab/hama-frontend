@@ -46,6 +46,21 @@ export function RecommendationList({
           onCall={() => onCall(card, i)}
         />
       ))}
+      {slice.length > 0 ? (
+        <div
+          style={{
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.7)",
+            border: "1px solid #E5E7EB",
+            color: "#6B7280",
+            fontSize: 13,
+            fontWeight: 700,
+            padding: "10px 14px",
+          }}
+        >
+          ⓘ 근처 실제 매장 기준으로 추천했어요. 상황에 따라 혼잡도는 달라질 수 있어요.
+        </div>
+      ) : null}
     </div>
   );
 }

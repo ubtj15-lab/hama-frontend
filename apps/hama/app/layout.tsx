@@ -4,7 +4,17 @@ import { AuthSync } from "./_components/AuthSync";
 import { UIOverlayProvider } from "./_providers/UIOverlayProvider";
 import { PwaClient } from "./_components/pwa/PwaClient";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+function safeSiteOrigin(): string {
+  const raw = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").trim();
+  if (!raw) return "http://localhost:3000";
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return "http://localhost:3000";
+  }
+}
+
+const siteUrl = safeSiteOrigin();
 
 export const metadata: Metadata = {
   applicationName: "HAMA",
@@ -37,10 +47,21 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const devSwCleanupScript =
+  process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_PWA_SW_IN_DEV !== "1"
+    ? `(function(){if(typeof navigator==="undefined"||!navigator.serviceWorker)return;navigator.serviceWorker.getRegistrations().then(function(r){return Promise.all(r.map(function(x){return x.unregister();}));});})();`
+    : null;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
       <body style={{ margin: 0 }}>
+        {devSwCleanupScript ? (
+          <script
+            // 개발: 예전 SW가 먼저 로드되면 React 자체가 안 뜰 수 있어, hydration 전에 해제
+            dangerouslySetInnerHTML={{ __html: devSwCleanupScript }}
+          />
+        ) : null}
         <AuthSync />
         <UIOverlayProvider>
           {children}

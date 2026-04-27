@@ -13,7 +13,8 @@
     "test:course": "npx tsx app/lib/scenarioEngine/runCourseEngineTests.ts",
     "test:vitest": "vitest run",
     "test:vitest:watch": "vitest",
-    "test:recommend": "vitest run app/lib/recommend"
+    "test:recommend": "vitest run app/lib/recommend",
+    "test:recommend-places": "npx tsx app/services/runRecommendPlacesSample.ts"
   },
   "dependencies": {
     "@hama/shared": "file:../../packages/shared",

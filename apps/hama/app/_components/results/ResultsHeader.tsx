@@ -2,53 +2,56 @@
 
 import React from "react";
 import { colors, space, typo } from "@/lib/designTokens";
-import { RECOMMEND_DECK_SIZE } from "@/lib/recommend/recommendConstants";
 
 type Props = {
-  /** 노출된 추천 장 수(로딩 중이면 생략) */
-  resultCount?: number;
   isLoading?: boolean;
+  onOpenCriteria?: () => void;
 };
 
-export function ResultsHeader({ resultCount, isLoading }: Props) {
+export function ResultsHeader({ isLoading, onOpenCriteria }: Props) {
   const loading = Boolean(isLoading);
-  const n =
-    resultCount != null ? Math.min(Math.max(0, resultCount), RECOMMEND_DECK_SIZE) : null;
-
-  const title =
-    loading || n == null
-      ? "지금 상황에 맞춰 바로 정해볼게"
-      : n === 0
-        ? "지금은 바로 정해줄 후보가 없어"
-        : "오늘의 결정 후보";
-
-  const subtitle = loading
-    ? "고민할 필요 없게, 핵심 1개와 보조 2개를 고르는 중…"
-    : n === 0
-      ? "조건은 알았어. 다른 말로 한 번만 더 말해줄래?"
-      : "메인 추천 1개를 먼저 보고, 필요하면 보조 추천 2개에서 안전하게 고르면 돼";
 
   return (
-    <header style={{ marginBottom: space.section }}>
-      <h1
+    <header style={{ marginBottom: space.section, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+      <div>
+        <h1
+          style={{
+            ...typo.sectionTitle,
+            color: colors.textPrimary,
+            margin: 0,
+            letterSpacing: "-0.02em",
+            fontWeight: 900,
+          }}
+        >
+          오늘의 추천 🔥
+        </h1>
+        <p
+          style={{
+            ...typo.body,
+            color: colors.textSecondary,
+            margin: "8px 0 0",
+          }}
+        >
+          {loading ? "지금 상황 기준으로 추천 정리 중이에요…" : "지금 상황 기준으로 가장 잘 맞는 곳을 골랐어요!"}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onOpenCriteria}
         style={{
-          ...typo.sectionTitle,
+          border: `1px solid ${colors.borderSubtle}`,
+          borderRadius: 999,
+          background: "#fff",
           color: colors.textPrimary,
-          margin: 0,
-          letterSpacing: "-0.02em",
+          fontSize: 13,
+          fontWeight: 800,
+          padding: "9px 14px",
+          whiteSpace: "nowrap",
+          cursor: "pointer",
         }}
       >
-        {title}
-      </h1>
-      <p
-        style={{
-          ...typo.body,
-          color: colors.textSecondary,
-          margin: "8px 0 0",
-        }}
-      >
-        {subtitle}
-      </p>
+        추천 기준 보기 ▾
+      </button>
     </header>
   );
 }

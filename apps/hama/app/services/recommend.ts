@@ -30,6 +30,7 @@ export function recommendPlaces<T extends ScorePlace>(places: T[], context: Scor
       scenarioFit: p.detail.scenarioFit,
       distance: p.detail.distance,
       categoryMatch: p.detail.categoryMatch,
+      timeCtx: p.detail.timeContext,
       capability: p.detail.capability,
       penalty: p.detail.penalty,
     }))

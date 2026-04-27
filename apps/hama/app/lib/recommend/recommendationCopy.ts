@@ -312,7 +312,7 @@ export function pickRecommendationPair(input: PickRecommendationPairInput): { he
   if (picked) return picked;
 
   return {
-    headline: "오늘 가기 좋은 곳이에요",
-    subline: "이 근처에서 무난하게 즐기기 좋아요",
+    headline: "지금 시간대 방문하기 편해요",
+    subline: "이동 동선이 짧아 바로 결정하기 쉬워요",
   };
 }
