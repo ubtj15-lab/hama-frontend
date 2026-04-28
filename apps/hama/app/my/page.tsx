@@ -18,11 +18,40 @@ export default function MyPage() {
   const router = useRouter();
   const { savedCards, loading: savedLoading, toggleSaved, isSaved, refetch: refetchSaved } = useSaved();
   const { recentCards, loading: recentLoading, recordView, refetch: refetchRecent } = useRecent();
+  const [betaVisitCount, setBetaVisitCount] = React.useState(0);
+  const [betaRewarded, setBetaRewarded] = React.useState(false);
+  const [betaLoaded, setBetaLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/beta/state", { cache: "no-store" });
+        const json = (await res.json().catch(() => ({}))) as { ok?: boolean; visit_count?: number; is_rewarded?: boolean };
+        if (!alive || !res.ok || !json.ok) return;
+        setBetaVisitCount(Number(json.visit_count ?? 0));
+        setBetaRewarded(json.is_rewarded === true);
+      } catch {
+      } finally {
+        if (alive) setBetaLoaded(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const handleCardClick = async (card: HomeCard) => {
     await recordView(card.id);
     router.push(`/?open=${encodeURIComponent(card.id)}`);
   };
+
+  const betaLine = React.useMemo(() => {
+    if (betaRewarded || betaVisitCount >= 3) return "🎉 3/3 완료! 커피 지급 대상입니다";
+    if (betaVisitCount === 2) return "2/3 완료, 한 번만 더 하면 커피 지급 대상이에요";
+    if (betaVisitCount === 1) return "1/3 완료 👍";
+    return "이번 달 AI 추천 실험 참여 중";
+  }, [betaRewarded, betaVisitCount]);
 
   return (
     <main
@@ -63,6 +92,20 @@ export default function MyPage() {
           <div style={{ width: 56 }} />
         </header>
         <section style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              marginBottom: 10,
+              border: "1px solid #E2E8F0",
+              borderRadius: 12,
+              background: "#fff",
+              padding: "10px 12px",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>베타 진행도</div>
+            <div style={{ marginTop: 4, fontSize: 13, fontWeight: 700, color: "#0F172A" }}>
+              {betaLoaded ? betaLine : "불러오는 중..."}
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => router.push("/onboarding?return_to=%2Fmy")}

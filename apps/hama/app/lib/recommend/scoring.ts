@@ -67,6 +67,8 @@ import {
   isDrinkOnlyCafeForMealContext,
   shouldExcludeDrinkOnlyForScenarioRanking,
 } from "./mealContextSignals";
+import { isKidFocusedVenue, isKidVenueExcludedWhenNoYoungChild } from "./kidVenueSignals";
+import { isBoardGameVenue, isCompanionSoloOnly } from "./boardVenueSignals";
 import {
   isHardExcludedForFamilyKidsListRecommend,
   parentGatheringOrRestorativeQuery,
@@ -183,6 +185,12 @@ function calcPersonalScore(card: HomeCard, profile: UserProfile | null | undefin
     score += 8;
   }
 
+  if (profile.young_child === "있음") {
+    if (c.with_kids === true) score += 12;
+    if (isKidFocusedVenue(card)) score += 14;
+    else if (/아이동반|유아|어린이\s*체험|키즈존|키즈룸/.test(blob)) score += 10;
+  }
+
   return Math.max(0, Math.min(100, score));
 }
 
@@ -203,6 +211,55 @@ function violatesDietaryProfile(
     return true;
   }
   return false;
+}
+
+function beautySubcategoryMatches(card: HomeCard, beautySubCategory: string | null | undefined): boolean {
+  if (!beautySubCategory) return true;
+  const blob = normBlob(card);
+  switch (beautySubCategory) {
+    case "hair":
+      return /hair|미용실|헤어|커트|컷|펌|염색/.test(blob);
+    case "nail":
+      return /nail|네일|네일아트/.test(blob);
+    case "eyelash":
+      return /eyelash|속눈썹|래쉬|lash/.test(blob);
+    case "waxing":
+      return /waxing|제모|왁싱|왁스/.test(blob);
+    default:
+      return true;
+  }
+}
+
+function timeOfDayBonusForFoodCafe(card: HomeCard, strict: ScenarioObject | null | undefined, blob: string): number {
+  if (!strict?.intentCategory) return 0;
+  if (strict.intentCategory !== "FOOD" && strict.intentCategory !== "CAFE") return 0;
+  const now = new Date();
+  const minuteOfDay = now.getHours() * 60 + now.getMinutes();
+  const has = (re: RegExp) => re.test(blob);
+  let bonus = 0;
+
+  // 07:00~10:30
+  if (minuteOfDay >= 420 && minuteOfDay < 630) {
+    if (has(/브런치|브렉퍼스트|아침|베이커리|빵|카페|커피/)) bonus += 15;
+  }
+  // 10:30~14:00
+  else if (minuteOfDay >= 630 && minuteOfDay < 840) {
+    if (has(/브런치|점심|런치|식사|덮밥|국밥|샌드위치|베이커리/)) bonus += 20;
+    if (strict.intentCategory === "CAFE" && has(/브런치|베이커리|디저트|샌드위치/)) bonus += 8;
+  }
+  // 14:00~17:00
+  else if (minuteOfDay >= 840 && minuteOfDay < 1020) {
+    if (has(/카페|디저트|케이크|빙수|베이커리|커피/)) bonus += 20;
+  }
+  // 17:00~21:00
+  else if (minuteOfDay >= 1020 && minuteOfDay < 1260) {
+    if (has(/저녁|디너|회식|가족\s*식사|식당|고기|한식|양식|중식|일식/)) bonus += 20;
+  }
+  // 21:00~
+  else if (minuteOfDay >= 1260) {
+    if (has(/늦게|야간|심야|카페|가벼운\s*식사|디저트|브런치/)) bonus += 15;
+  }
+  return bonus;
 }
 
 /** 데이트 시나리오 랭킹: 가족·혼밥·회식 느낌이 강하면 감점(텍스트 휴리스틱) */
@@ -443,6 +500,14 @@ export function buildTopRecommendations(
         continue;
       }
 
+      if (ctx.userProfile?.young_child === "없음" && isKidVenueExcludedWhenNoYoungChild(card)) {
+        continue;
+      }
+
+      if (isCompanionSoloOnly(ctx.userProfile) && isBoardGameVenue(card)) {
+        continue;
+      }
+
       if (
         so &&
         (so.scenario === "family_kids" || so.scenario === "parent_child_outing") &&
@@ -636,6 +701,17 @@ export function buildTopRecommendations(
     if (isChainCafe(card)) {
       finalScore = Math.max(0, finalScore - 22);
     }
+
+    if (
+      strict?.intentCategory === "BEAUTY" &&
+      strict.beautySubCategory &&
+      strict.intentType !== "course_generation" &&
+      !beautySubcategoryMatches(card, strict.beautySubCategory)
+    ) {
+      finalScore = Math.max(0, finalScore - 50);
+    }
+
+    finalScore = Math.max(0, Math.min(100, finalScore + timeOfDayBonusForFoodCafe(card, strict, blob)));
 
     const breakdown: RecommendScoreBreakdown = {
       distanceScore: distS,

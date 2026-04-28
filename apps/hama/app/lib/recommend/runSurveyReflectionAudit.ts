@@ -1,5 +1,5 @@
 /**
- * 설문(companions/gender/dietary/interests) 반영 점검 스크립트.
+ * 설문(companions/gender/dietary/young_child/interests) 반영 점검 스크립트.
  *
  * 실행:
  *   npm run test:survey-reflection
@@ -46,6 +46,7 @@ function printUserProfile(profile: UserProfile) {
   console.log(`- companions: ${toList(profile.companions)}`);
   console.log(`- gender: '${profile.gender}'`);
   console.log(`- dietary: ${toList(profile.dietary_restrictions)}`);
+  console.log(`- young_child: '${profile.young_child}'`);
   console.log(`- interests: ${toList(profile.interests)}`);
 }
 
@@ -62,6 +63,7 @@ function neutralProfile(): UserProfile {
     companions: [],
     gender: "선택 안 함",
     dietary_restrictions: ["없음"],
+    young_child: "없음",
     interests: [],
     onboarding_completed_at: "debug",
   };
@@ -355,6 +357,7 @@ function detectMissingUsage() {
     gender: /profile\.gender/.test(src),
     dietary: /dietary_restrictions|violatesDietaryProfile/.test(src),
     interests: /profile\.interests/.test(src),
+    young_child: /young_child/.test(src),
   };
 
   const missing = Object.entries(usage)
@@ -362,7 +365,7 @@ function detectMissingUsage() {
     .map(([k]) => k);
   console.log("\n=== 누락 항목 점검 ===");
   if (missing.length === 0) {
-    console.log("누락 없음: companions/gender/dietary/interests 모두 코드 사용 흔적 확인");
+    console.log("누락 없음: companions/gender/dietary/young_child/interests 모두 코드 사용 흔적 확인");
   } else {
     for (const m of missing) {
       console.log(`- ${m}: 현재 추천에 반영 X`);
@@ -404,6 +407,7 @@ async function main() {
         companions: ["가족"],
         gender: "여성",
         dietary_restrictions: ["채식"],
+        young_child: "있음",
         interests: ["전시/박물관", "액티비티"],
         onboarding_completed_at: "debug",
       },
@@ -414,6 +418,7 @@ async function main() {
         companions: ["혼자"],
         gender: "선택 안 함",
         dietary_restrictions: ["없음"],
+        young_child: "없음",
         interests: ["만화카페/보드게임카페"],
         onboarding_completed_at: "debug",
       },
@@ -424,6 +429,7 @@ async function main() {
         companions: ["친구"],
         gender: "남성",
         dietary_restrictions: ["할랄"],
+        young_child: "없음",
         interests: ["영화/공연"],
         onboarding_completed_at: "debug",
       },
@@ -495,6 +501,7 @@ async function main() {
     companions: ["혼자"],
     gender: "선택 안 함",
     dietary_restrictions: ["없음"],
+    young_child: "없음",
     interests: ["만화카페/보드게임카페"],
     onboarding_completed_at: "debug",
   };

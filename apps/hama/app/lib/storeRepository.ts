@@ -51,6 +51,7 @@ export type StoreRow = {
   food_sub_category?: string | null;
 
   with_kids: boolean | null;
+  hama_pay_enabled?: boolean | null;
   for_work: boolean | null;
   reservation_required: boolean | null;
 
@@ -140,6 +141,7 @@ export function toHomeCard(row: StoreRow): HomeCard {
       : {}),
 
     with_kids: row.with_kids ?? null,
+    hama_pay_enabled: (row as StoreRow).hama_pay_enabled ?? null,
     for_work: row.for_work ?? null,
     reservation_required: row.reservation_required ?? null,
 
@@ -183,6 +185,7 @@ export async function fetchHomeCardsByTab(
       menu_keywords,
       food_sub_category,
       with_kids,
+      hama_pay_enabled,
       for_work,
       reservation_required,
       price_level,
@@ -278,6 +281,7 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
       menu_keywords,
       food_sub_category,
       with_kids,
+      hama_pay_enabled,
       for_work,
       reservation_required,
       price_level,

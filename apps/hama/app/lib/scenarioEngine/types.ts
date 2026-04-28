@@ -30,6 +30,8 @@ export type FoodSubCategory =
   | "WESTERN"
   | "FASTFOOD";
 
+export type BeautySubCategory = "hair" | "nail" | "eyelash" | "waxing";
+
 /** 가족/아이 코스 — 연령대(쿼리·수동 설정) */
 export type ChildAgeGroup = "toddler" | "child" | "mixed" | "unknown";
 
@@ -62,6 +64,8 @@ export type ScenarioObject = {
   intentStrict?: boolean;
   /** 음식 장르 힌트(FOOD + 키워드 매칭 시) */
   foodSubCategory?: FoodSubCategory;
+  /** 미용 세부 목적 (BEAUTY strict에서 우선 반영) */
+  beautySubCategory?: BeautySubCategory;
   /** 정규화된 메뉴명(예: 짜장면, 초밥) — FOOD 랭킹·카드 태그 */
   menuIntent?: string[];
   /** 음식 취향 토큰: spicy_brothy, light_clean, light, hearty, brothy, hangover, kid_friendly_menu, parent_friendly_menu 등 */

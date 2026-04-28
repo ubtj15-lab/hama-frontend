@@ -299,6 +299,7 @@ function ResultsContent() {
           ? profileOverride.interests
           : serverProfile.interests,
       gender: profileOverride.gender ?? serverProfile.gender,
+      young_child: profileOverride.young_child ?? serverProfile.young_child,
       onboarding_completed_at: serverProfile.onboarding_completed_at,
     };
   }, [serverProfile, profileOverride]);
@@ -946,7 +947,6 @@ function ResultsContent() {
                     mergeLogPayload(logBase, { place_id: card.id, name: card.name, card_rank: rank, source: "secondary_recommend" })
                   );
                   stashPlaceForSession(card);
-                  recordView(card.id);
                   router.push(`/place/${encodeURIComponent(card.id)}`);
                 }}
                 onNavigate={(card, rank) => {
@@ -1013,7 +1013,6 @@ function ResultsContent() {
             onPlaceClick={(card, rank) => {
               logEvent("place_click", mergeLogPayload(logBase, { place_id: card.id, name: card.name, card_rank: rank }));
               stashPlaceForSession(card);
-              recordView(card.id);
               router.push(`/place/${encodeURIComponent(card.id)}`);
             }}
             onNavigate={(card, rank) => {

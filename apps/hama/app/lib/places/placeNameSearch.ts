@@ -120,6 +120,7 @@ function mapStoresStarRowToStoreRow(raw: Record<string, unknown>): StoreRow {
     menu_keywords: Array.isArray(raw.menu_keywords) ? (raw.menu_keywords as string[]) : null,
     food_sub_category: raw.food_sub_category != null ? String(raw.food_sub_category) : null,
     with_kids: typeof raw.with_kids === "boolean" ? raw.with_kids : null,
+    hama_pay_enabled: typeof raw.hama_pay_enabled === "boolean" ? raw.hama_pay_enabled : null,
     for_work: typeof raw.for_work === "boolean" ? raw.for_work : null,
     reservation_required: typeof raw.reservation_required === "boolean" ? raw.reservation_required : null,
     price_level: raw.price_level != null ? String(raw.price_level) : null,

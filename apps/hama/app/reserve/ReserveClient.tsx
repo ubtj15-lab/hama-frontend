@@ -48,12 +48,16 @@ export default function ReserveClient() {
 
   const [step, setStep] = useState<FlowStep>("pick");
   const [party, setParty] = useState(2);
-  const [timeLabel, setTimeLabel] = useState(() => preview.slotLabels[0] ?? "18:00");
+  const [showTomorrowSlots, setShowTomorrowSlots] = useState(false);
+  const [timeLabel, setTimeLabel] = useState(() => preview.slotLabels[0] ?? preview.tomorrowSlotLabels?.[0] ?? "18:00");
   const [doneCoursePlan, setDoneCoursePlan] = useState<CoursePlan | null>(null);
 
   useEffect(() => {
-    setTimeLabel(preview.slotLabels[0] ?? "18:00");
-  }, [preview.slotLabels]);
+    const next = showTomorrowSlots
+      ? preview.tomorrowSlotLabels?.[0] ?? preview.slotLabels[0] ?? "18:00"
+      : preview.slotLabels[0] ?? preview.tomorrowSlotLabels?.[0] ?? "18:00";
+    setTimeLabel(next);
+  }, [preview.slotLabels, preview.tomorrowSlotLabels, showTomorrowSlots]);
 
   useEffect(() => {
     if (name || storeId) {
@@ -98,6 +102,7 @@ export default function ReserveClient() {
   }, [step, courseId]);
 
   const dateLabel = "오늘";
+  const visibleSlots = showTomorrowSlots ? preview.tomorrowSlotLabels ?? [] : preview.slotLabels;
 
   const handleOpenNaver = () => {
     logEvent("reserve_naver_click", { store_id: storeId, name, page: "reserve" });
@@ -300,13 +305,50 @@ export default function ReserveClient() {
               </div>
 
               <p style={{ ...typo.caption, fontWeight: 800, color: colors.textPrimary, margin: "18px 0 8px" }}>시간</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {preview.slotLabels.map((t) => (
-                  <button key={t} type="button" onClick={() => setTimeLabel(t)} style={chipBase(timeLabel === t)}>
-                    {t}
+              {visibleSlots.length > 0 ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {visibleSlots.map((t) => (
+                    <button key={t} type="button" onClick={() => setTimeLabel(t)} style={chipBase(timeLabel === t)}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    borderRadius: 12,
+                    border: `1px solid ${colors.borderSubtle}`,
+                    background: colors.bgMuted,
+                    padding: "10px 12px",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: colors.textPrimary }}>
+                    오늘 가능한 시간이 없어요
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12, color: colors.textSecondary }}>
+                    내일 예약 가능 시간을 확인해보세요
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowTomorrowSlots(true)}
+                    style={{
+                      width: 120,
+                      height: 34,
+                      borderRadius: 10,
+                      border: "none",
+                      background: colors.accentPrimary,
+                      color: "#fff",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    내일 시간 보기
                   </button>
-                ))}
-              </div>
+                </div>
+              )}
             </section>
 
             <button
@@ -315,6 +357,7 @@ export default function ReserveClient() {
                 logEvent("reserve_step_pick_next", { store_id: storeId, party, time: timeLabel });
                 setStep("deposit");
               }}
+              disabled={visibleSlots.length === 0}
               style={{
                 width: "100%",
                 height: 52,
@@ -324,7 +367,8 @@ export default function ReserveClient() {
                 color: colors.accentOnPrimary,
                 fontWeight: 900,
                 fontSize: 16,
-                cursor: "pointer",
+                cursor: visibleSlots.length === 0 ? "not-allowed" : "pointer",
+                opacity: visibleSlots.length === 0 ? 0.5 : 1,
                 boxShadow: shadow.cta,
               }}
             >

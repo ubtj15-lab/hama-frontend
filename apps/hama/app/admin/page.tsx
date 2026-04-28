@@ -97,6 +97,9 @@ export default function AdminDashboardPage() {
           <Link href="/admin/recommend-test" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
             추천 시나리오 테스트
           </Link>
+          <Link href="/admin/beta-verifications" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none", fontWeight: 600 }}>
+            베타 인증 대시보드
+          </Link>
           <Link href="/admin/reservations" style={{ fontSize: 14, color: "#2563eb", textDecoration: "none" }}>
             예약 목록
           </Link>

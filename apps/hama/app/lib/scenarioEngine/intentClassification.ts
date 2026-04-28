@@ -11,6 +11,7 @@ import { inferChildAgeGroupFromQuery } from "./familyCourseContext";
 
 export { detectFoodSubCategory, detectMenuIntent } from "./foodIntent";
 import type { IntentCategory, ScenarioObject, ScenarioType, UserIntentType } from "./types";
+import type { BeautySubCategory } from "./types";
 import type { HomeTabKey } from "@/lib/storeTypes";
 import type { HomeCard } from "@/lib/storeTypes";
 import { normIntentQuery } from "./intentQueryNormalize";
@@ -60,6 +61,16 @@ const BEAUTY_HINTS = [
   "피부관리",
   "미용",
 ];
+
+function detectBeautySubCategory(rawQuery: string): BeautySubCategory | null {
+  const q = normIntentQuery(rawQuery);
+  if (!q) return null;
+  if (/(속눈썹|래쉬|lash|eyelash)/.test(q)) return "eyelash";
+  if (/(제모|왁싱|waxing|왁스)/.test(q)) return "waxing";
+  if (/(네일|네일아트|nail)/.test(q)) return "nail";
+  if (/(헤어|미용실|커트|컷|펌|염색|hair)/.test(q)) return "hair";
+  return null;
+}
 
 /** '머리' 단독은 오탐이 많아 미용/헤어 맥락과 함께만 인정 */
 const BEAUTY_HAIR_CONTEXT = /머리\s*(짜르|자르|깎|잘라|해줘|예약|잘)/;
@@ -300,6 +311,7 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
   }
 
   let foodSub = detectFoodSubCategory(q);
+  let beautySub = detectBeautySubCategory(q);
   const menuIntent = detectMenuIntent(raw);
 
   if (menuIntent.length && !foodSub) {
@@ -313,6 +325,11 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
 
   if (menuIntent.length && intentType === "search_strict" && !intentCategory) {
     intentCategory = "FOOD";
+    intentStrict = true;
+  }
+
+  if (beautySub && intentType === "search_strict" && !intentCategory) {
+    intentCategory = "BEAUTY";
     intentStrict = true;
   }
 
@@ -335,6 +352,10 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
     (obj.intentCategory === "FOOD" || intentType === "course_generation")
   ) {
     obj.menuIntent = menuIntent;
+  }
+
+  if (beautySub && (obj.intentCategory === "BEAUTY" || intentType === "course_generation")) {
+    obj.beautySubCategory = beautySub;
   }
 
   obj = mergeScenarioObject(obj, modifierPartial);

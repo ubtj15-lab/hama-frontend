@@ -69,6 +69,8 @@ export function useDeckRecommendationReasons(
         deckRole: roles[i] ?? "main",
         timeOfDay: getClientTimeOfDay(),
         requestedScenario,
+        intentCategory: scenarioObject?.intentCategory,
+        beautySubCategory: scenarioObject?.beautySubCategory,
         profileCompanions,
         usedHeadlines: uh,
         usedSublines: us,

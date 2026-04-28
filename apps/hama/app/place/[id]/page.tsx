@@ -23,6 +23,13 @@ import { useSaved } from "@/_hooks/useSaved";
 import { ReservationSummaryCard } from "@/_components/reservation/ReservationSummaryCard";
 import { getReservationPreviewForStore } from "@/lib/reservation/bookingDummy";
 import { buildReserveQueryFromPlace } from "@/lib/reservation/buildReserveSearchParams";
+import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
+
+const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
+const SHOW_HAMA_PAY_MOCK =
+  ENABLE_HAMA_PAY_UI &&
+  (process.env.NODE_ENV === "development" ||
+    process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY_MOCK === "true");
 
 function bizKr(card: HomeCard): string {
   const s = businessStateFromCard(card);
@@ -50,11 +57,62 @@ export default function PlaceDetailPage() {
   const params = useParams();
   const id = decodeURIComponent(String(params.id ?? ""));
   const [card, setCard] = useState<HomeCard | null>(null);
+  const [payMockSaving, setPayMockSaving] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
   const { isSaved, toggleSaved } = useSaved();
 
   useEffect(() => {
     if (!id) return;
     setCard(readPlaceFromSession(id));
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/stores/${encodeURIComponent(id)}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const json = (await res.json().catch(() => null)) as
+          | { ok?: boolean; item?: Record<string, unknown> }
+          | null;
+        const item = json?.item;
+        if (!json?.ok || !item || cancelled) return;
+        const merged: HomeCard = {
+          ...(readPlaceFromSession(id) ?? {}),
+          ...(card ?? {}),
+          id: String(item.id ?? id),
+          name: String(item.name ?? card?.name ?? ""),
+          category: (item.category as string | null | undefined) ?? card?.category ?? null,
+          area: (item.area as string | null | undefined) ?? card?.area ?? null,
+          address: (item.address as string | null | undefined) ?? card?.address ?? null,
+          lat: typeof item.lat === "number" ? item.lat : card?.lat ?? null,
+          lng: typeof item.lng === "number" ? item.lng : card?.lng ?? null,
+          phone: (item.phone as string | null | undefined) ?? card?.phone ?? null,
+          image_url: (item.image_url as string | null | undefined) ?? card?.image_url ?? null,
+          tags: Array.isArray(item.tags) ? (item.tags as string[]) : card?.tags ?? [],
+          mood: Array.isArray(item.mood) ? (item.mood as string[]) : card?.mood ?? [],
+          description: (item.description as string | null | undefined) ?? card?.description ?? null,
+          with_kids: typeof item.with_kids === "boolean" ? item.with_kids : card?.with_kids ?? null,
+          hama_pay_enabled:
+            typeof item.hama_pay_enabled === "boolean"
+              ? item.hama_pay_enabled
+              : card?.hama_pay_enabled ?? null,
+          for_work: typeof item.for_work === "boolean" ? item.for_work : card?.for_work ?? null,
+          reservation_required:
+            typeof item.reservation_required === "boolean"
+              ? item.reservation_required
+              : card?.reservation_required ?? null,
+          price_level: (item.price_level as string | null | undefined) ?? card?.price_level ?? null,
+          updated_at: (item.updated_at as string | null | undefined) ?? card?.updated_at ?? null,
+        };
+        setCard(merged);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {
@@ -98,9 +156,93 @@ export default function PlaceDetailPage() {
   const suggests = getNextSuggestions(scenarioGuess).slice(0, 3);
 
   const reservationPreview = getReservationPreviewForStore(card.id, card.category);
+  const hamaPayEnabled = ENABLE_HAMA_PAY_UI && card.hama_pay_enabled === true;
 
   const goReserve = () => {
     router.push(`/reserve?${buildReserveQueryFromPlace({ storeId: card.id, name: card.name, card }).toString()}`);
+  };
+
+  const completeMockPayment = async () => {
+    const loggedIn = typeof window !== "undefined" && window.localStorage.getItem("hamaLoggedIn") === "1";
+    if (!loggedIn) {
+      alert("로그인 후 참여 기록을 남길 수 있어요.");
+      return;
+    }
+    if (payMockSaving) return;
+    setPayMockSaving(true);
+    try {
+      const res = await fetch("/api/hama-pay/mock-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          place_id: card.id,
+          place_name: card.name,
+          amount: null,
+          context_json: {
+            source_page: "place_detail",
+            cta: "mock_payment",
+          },
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean };
+      if (!res.ok || !json.ok) {
+        alert("결제 완료 테스트 저장에 실패했어요. (테이블 미생성 상태일 수 있어요)");
+        return;
+      }
+      logEvent("hama_pay_mock_completed", {
+        place_id: card.id,
+        place_name: card.name,
+        source: "place_detail",
+      });
+      setFeedbackOpen(true);
+    } catch (e) {
+      console.error("[place detail mock pay] failed", e);
+      alert("결제 완료 테스트 처리 중 오류가 발생했어요.");
+    } finally {
+      setPayMockSaving(false);
+    }
+  };
+
+  const submitVisitFeedback = async (payload: VisitFeedbackPayload) => {
+    if (feedbackSaving) return;
+    setFeedbackSaving(true);
+    try {
+      const reqBody = {
+        place_id: card.id,
+        place_name: card.name,
+        source: "hama_pay",
+        satisfaction: payload.satisfaction,
+        feedback_tags: Array.isArray(payload.feedback_tags) ? payload.feedback_tags : [],
+        memo: typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : null,
+      };
+      console.log("[visit-feedback] request(place_detail):", reqBody);
+      const res = await fetch("/api/visit-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      });
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: string };
+      console.log("[visit-feedback] response(place_detail):", { status: res.status, ...json });
+      if (!res.ok || !json.ok) {
+        console.error("[visit-feedback] failed(place_detail):", { status: res.status, ...json, reqBody });
+        alert(`피드백 저장에 실패했어요.\n${json.error ?? "unknown_error"}${json.detail ? `: ${json.detail}` : ""}`);
+        return;
+      }
+      logEvent("visit_feedback_submitted", {
+        place_id: card.id,
+        place_name: card.name,
+        source: "place_detail",
+        satisfaction: payload.satisfaction,
+        tags: payload.feedback_tags,
+      });
+      console.log("visit_feedback_saved");
+      setFeedbackOpen(false);
+    } catch (e) {
+      console.error("[place detail visit feedback] failed", e);
+      alert("피드백 저장 중 오류가 발생했어요.");
+    } finally {
+      setFeedbackSaving(false);
+    }
   };
 
   return (
@@ -165,6 +307,22 @@ export default function PlaceDetailPage() {
         <h1 style={{ ...typo.cardTitle, fontSize: 22, margin: "20px 0 0", lineHeight: 1.25, fontWeight: 900 }}>
           {card.name}
         </h1>
+        {hamaPayEnabled ? (
+          <div
+            style={{
+              display: "inline-flex",
+              marginTop: 8,
+              borderRadius: 999,
+              background: "#DCFCE7",
+              color: "#166534",
+              fontSize: 12,
+              fontWeight: 900,
+              padding: "6px 10px",
+            }}
+          >
+            HAMA Pay 가능
+          </div>
+        ) : null}
         <p style={{ ...typo.caption, color: colors.textMuted, margin: "6px 0 0", fontWeight: 700 }}>상황 태그</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
           {reason.badges.map((t) => (
@@ -222,6 +380,27 @@ export default function PlaceDetailPage() {
         >
           지금 예약하기
         </button>
+        {hamaPayEnabled && SHOW_HAMA_PAY_MOCK ? (
+          <button
+            type="button"
+            onClick={completeMockPayment}
+            disabled={payMockSaving}
+            style={{
+              width: "100%",
+              height: 50,
+              marginTop: 10,
+              borderRadius: radius.button,
+              border: "none",
+              background: payMockSaving ? "#86EFAC" : "#16A34A",
+              color: "#fff",
+              fontWeight: 900,
+              fontSize: 15,
+              cursor: payMockSaving ? "wait" : "pointer",
+            }}
+          >
+            {payMockSaving ? "처리 중..." : "결제 완료 테스트"}
+          </button>
+        ) : null}
 
         <div style={{ display: "flex", gap: space.buttonGap, marginTop: 10 }}>
           <button
@@ -474,6 +653,13 @@ export default function PlaceDetailPage() {
           ))}
         </div>
       </div>
+      <VisitFeedbackModal
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        onSubmit={submitVisitFeedback}
+        submitting={feedbackSaving}
+        placeName={card.name}
+      />
     </main>
   );
 }

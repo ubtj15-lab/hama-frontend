@@ -31,6 +31,7 @@ function mergeUserProfile(base: UserProfile | null, override: Partial<UserProfil
         : base.dietary_restrictions,
     interests: override.interests != null && override.interests.length > 0 ? override.interests : base.interests,
     gender: override.gender ?? base.gender,
+    young_child: override.young_child ?? base.young_child,
     onboarding_completed_at: base.onboarding_completed_at,
   };
 }

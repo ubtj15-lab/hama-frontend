@@ -1,0 +1,640 @@
+{
+  "generatedAt": "2026-04-27T14:41:26.664Z",
+  "totalScenarios": 10,
+  "passCount": 8,
+  "passRate": 80,
+  "recommendation": "PASS 80%+ → 다음 주 배포 OK",
+  "suspiciousStores": [],
+  "failedScenarios": [
+    {
+      "id": 6,
+      "name": "가족 + 채식 + 저녁 + food (동탄)",
+      "checks": [
+        {
+          "label": "top3 존재",
+          "pass": false
+        },
+        {
+          "label": "top3 채식 신호 포함",
+          "pass": false
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "가족 + 미용실 + beauty (오산)",
+      "checks": [
+        {
+          "label": "top1 카테고리 미용",
+          "pass": false
+        }
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "가족 + 저녁 + food (오산)",
+      "pass": true,
+      "checks": [
+        {
+          "label": "top1 kids/group 친화",
+          "pass": true
+        }
+      ],
+      "top1": {
+        "id": "d8dbd7b8-9a0c-4d82-b704-a1b969879dab",
+        "name": "오산할매김밥",
+        "category": "restaurant",
+        "score": 52.98,
+        "reason": "아이 동반에 무난한 곳이에요, 주요 매력은 아이동반가능 쪽이에요, 도보로 가기 좋은 거리예요, 영업 정보는 방문 전 확인해 주세요.",
+        "blob": "오산할매김밥 restaurant 경기도 오산시 역광장로 55 동일빌딩 기본 아이동반 가성비 카카오 네이버 오산 식당 식사 식사 ",
+        "capability": {
+          "with_kids": true,
+          "group_seating": true,
+          "solo_friendly": true,
+          "private_room": false,
+          "alcohol_available": false,
+          "formal_atmosphere": false,
+          "fast_food": true,
+          "vegan_available": false,
+          "for_work": false
+        }
+      },
+      "top23": [
+        {
+          "id": "88f1178e-2034-4e08-b256-fa0c4eab4f64",
+          "name": "특별한초밥 오산점",
+          "category": "restaurant",
+          "score": 50.16,
+          "reason": "아이 동반에 무난한 곳이에요, 주요 매력은 아이동반가능 쪽이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "특별한초밥 오산점 restaurant 경기도 오산시 성호대로 130 204호 기본 아이동반 보통 카카오 네이버 오산 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        },
+        {
+          "id": "ce76a464-9231-49d6-a71c-c3dd0dfad1b8",
+          "name": "최고야 한식뷔페",
+          "category": "restaurant",
+          "score": 42.64,
+          "reason": "아이 동반에 무난한 곳이에요, 주요 매력은 아이동반가능·메뉴다양함 쪽이에요, 거리는 조금 있는 편이에요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "최고야 한식뷔페 restaurant 경기도 오산시 세남로14번길 57 1층 기본 아이동반 가성비 카카오 네이버 오산 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        }
+      ],
+      "suspicious": false
+    },
+    {
+      "id": 2,
+      "name": "혼자 + 점심 + food (동탄)",
+      "pass": true,
+      "checks": [
+        {
+          "label": "top3 중 solo 친화 존재",
+          "pass": true
+        }
+      ],
+      "top1": {
+        "id": "35b990f0-5d94-4d2d-a93c-edf5c0fb676c",
+        "name": "돌탄순댓국 동탄테크노밸리점",
+        "category": "restaurant",
+        "score": 55.47,
+        "reason": "혼밥·혼술에 부담이 적어요, 주요 매력은 혼밥가능·빠른식사 쪽이에요, 도보로 가기 좋은 거리예요, 영업 정보는 방문 전 확인해 주세요.",
+        "blob": "돌탄순댓국 동탄테크노밸리점 restaurant 경기 화성시 동탄기흥로520번가길 26 1층 기본 아이동반 가성비 카카오 네이버 동탄 식당 식사 식사 ",
+        "capability": {
+          "with_kids": true,
+          "group_seating": true,
+          "solo_friendly": false,
+          "private_room": false,
+          "alcohol_available": false,
+          "formal_atmosphere": false,
+          "fast_food": false,
+          "vegan_available": false,
+          "for_work": false
+        }
+      },
+      "top23": [
+        {
+          "id": "503b409e-98e0-44ca-aa01-fff63bb3028b",
+          "name": "디라이프스타일키친 롯데백화점 동탄점",
+          "category": "restaurant",
+          "score": 32.75,
+          "reason": "혼밥·혼술에 부담이 적어요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "디라이프스타일키친 롯데백화점 동탄점 restaurant 경기 화성시 오산동 967-157 롯데백화점 동탄점 기본 아이동반 보통 카카오 네이버 동탄 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        },
+        {
+          "id": "66d3fca5-a779-4487-877f-d3c575131396",
+          "name": "맥도날드 동탄2 DT점",
+          "category": "restaurant",
+          "score": 53.22,
+          "reason": "혼밥·혼술에 부담이 적어요, 주요 매력은 혼밥가능·빠른식사 쪽이에요, 거리는 가까운 편이에요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "맥도날드 동탄2 dt점 restaurant 경기 화성시 동탄순환대로 754-9 기본 아이동반 가성비 카카오 네이버 동탄 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": true,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": true,
+            "vegan_available": false,
+            "for_work": false
+          }
+        }
+      ],
+      "suspicious": false
+    },
+    {
+      "id": 3,
+      "name": "회식 + 저녁 + food (오산)",
+      "pass": true,
+      "checks": [
+        {
+          "label": "top1 패스트푸드 회피",
+          "pass": true
+        },
+        {
+          "label": "top3 중 술/단체 조건",
+          "pass": true
+        }
+      ],
+      "top1": {
+        "id": "7db1c93f-b204-42d9-907a-5bee21bea8a1",
+        "name": "천지연 오산시청점",
+        "category": "restaurant",
+        "score": 41.74,
+        "reason": "회식·모임에 맞는 편이에요, 주요 매력은 예약가능 쪽이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+        "blob": "천지연 오산시청점 restaurant 경기도 오산시 경기대로 290 기본 아이동반 예약필수 프리미엄 카카오 네이버 오산 식당 식사 식사 ",
+        "capability": {
+          "with_kids": true,
+          "group_seating": true,
+          "solo_friendly": false,
+          "private_room": true,
+          "alcohol_available": false,
+          "formal_atmosphere": true,
+          "fast_food": false,
+          "vegan_available": false,
+          "for_work": false
+        }
+      },
+      "top23": [
+        {
+          "id": "88f1178e-2034-4e08-b256-fa0c4eab4f64",
+          "name": "특별한초밥 오산점",
+          "category": "restaurant",
+          "score": 32.7,
+          "reason": "회식·모임에 맞는 편이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "특별한초밥 오산점 restaurant 경기도 오산시 성호대로 130 204호 기본 아이동반 보통 카카오 네이버 오산 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        },
+        {
+          "id": "5b505108-fc2b-43b3-86bc-af4db8fdcf6a",
+          "name": "더브라질 스테이크 오산점",
+          "category": "restaurant",
+          "score": 41.74,
+          "reason": "회식·모임에 맞는 편이에요, 주요 매력은 예약가능 쪽이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "더브라질 스테이크 오산점 restaurant 경기도 오산시 운암로 13-10 3층 기본 아이동반 예약필수 프리미엄 카카오 네이버 오산 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": true,
+            "alcohol_available": false,
+            "formal_atmosphere": true,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        }
+      ],
+      "suspicious": false
+    },
+    {
+      "id": 4,
+      "name": "데이트 + 저녁 + food (동탄)",
+      "pass": true,
+      "checks": [
+        {
+          "label": "top3 중 격식/룸 조건",
+          "pass": true
+        }
+      ],
+      "top1": {
+        "id": "35b990f0-5d94-4d2d-a93c-edf5c0fb676c",
+        "name": "돌탄순댓국 동탄테크노밸리점",
+        "category": "restaurant",
+        "score": 49.53,
+        "reason": "데이트 상황에 어울리는 곳이에요, 도보로 가기 좋은 거리예요, 영업 정보는 방문 전 확인해 주세요.",
+        "blob": "돌탄순댓국 동탄테크노밸리점 restaurant 경기 화성시 동탄기흥로520번가길 26 1층 기본 아이동반 가성비 카카오 네이버 동탄 식당 식사 식사 ",
+        "capability": {
+          "with_kids": true,
+          "group_seating": true,
+          "solo_friendly": false,
+          "private_room": false,
+          "alcohol_available": false,
+          "formal_atmosphere": false,
+          "fast_food": false,
+          "vegan_available": false,
+          "for_work": false
+        }
+      },
+      "top23": [
+        {
+          "id": "503b409e-98e0-44ca-aa01-fff63bb3028b",
+          "name": "디라이프스타일키친 롯데백화점 동탄점",
+          "category": "restaurant",
+          "score": 37.36,
+          "reason": "데이트 상황에 어울리는 곳이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "디라이프스타일키친 롯데백화점 동탄점 restaurant 경기 화성시 오산동 967-157 롯데백화점 동탄점 기본 아이동반 보통 카카오 네이버 동탄 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        },
+        {
+          "id": "77fce1f7-8370-4522-96a8-6e99fcc3d87c",
+          "name": "애슐리퀸즈 동탄타임테라스점",
+          "category": "restaurant",
+          "score": 46.41,
+          "reason": "데이트 상황에 어울리는 곳이에요, 주요 매력은 분위기좋음·야간분위기 쪽이에요, 거리는 가까운 편이에요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "애슐리퀸즈 동탄타임테라스점 restaurant 경기 화성시 동탄중앙로 220 타임테라스 a블럭 b2f 기본 아이동반 예약필수 보통 카카오 네이버 동탄 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": true,
+            "alcohol_available": false,
+            "formal_atmosphere": true,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        }
+      ],
+      "suspicious": false
+    },
+    {
+      "id": 5,
+      "name": "친구 + 점심 + food (오산)",
+      "pass": true,
+      "checks": [
+        {
+          "label": "top1 극단치 회피(점수>40)",
+          "pass": true
+        }
+      ],
+      "top1": {
+        "id": "7db1c93f-b204-42d9-907a-5bee21bea8a1",
+        "name": "천지연 오산시청점",
+        "category": "restaurant",
+        "score": 41.74,
+        "reason": "회식·모임에 맞는 편이에요, 주요 매력은 예약가능 쪽이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+        "blob": "천지연 오산시청점 restaurant 경기도 오산시 경기대로 290 기본 아이동반 예약필수 프리미엄 카카오 네이버 오산 식당 식사 식사 ",
+        "capability": {
+          "with_kids": true,
+          "group_seating": true,
+          "solo_friendly": false,
+          "private_room": true,
+          "alcohol_available": false,
+          "formal_atmosphere": true,
+          "fast_food": false,
+          "vegan_available": false,
+          "for_work": false
+        }
+      },
+      "top23": [
+        {
+          "id": "88f1178e-2034-4e08-b256-fa0c4eab4f64",
+          "name": "특별한초밥 오산점",
+          "category": "restaurant",
+          "score": 32.7,
+          "reason": "회식·모임에 맞는 편이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "특별한초밥 오산점 restaurant 경기도 오산시 성호대로 130 204호 기본 아이동반 보통 카카오 네이버 오산 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        },
+        {
+          "id": "5b505108-fc2b-43b3-86bc-af4db8fdcf6a",
+          "name": "더브라질 스테이크 오산점",
+          "category": "restaurant",
+          "score": 41.74,
+          "reason": "회식·모임에 맞는 편이에요, 주요 매력은 예약가능 쪽이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "더브라질 스테이크 오산점 restaurant 경기도 오산시 운암로 13-10 3층 기본 아이동반 예약필수 프리미엄 카카오 네이버 오산 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": true,
+            "alcohol_available": false,
+            "formal_atmosphere": true,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        }
+      ],
+      "suspicious": false
+    },
+    {
+      "id": 6,
+      "name": "가족 + 채식 + 저녁 + food (동탄)",
+      "pass": false,
+      "checks": [
+        {
+          "label": "top3 존재",
+          "pass": false
+        },
+        {
+          "label": "top3 채식 신호 포함",
+          "pass": false
+        }
+      ],
+      "top1": null,
+      "top23": [],
+      "suspicious": true
+    },
+    {
+      "id": 7,
+      "name": "혼자 + 카페에서 일하기 + cafe (동탄)",
+      "pass": true,
+      "checks": [
+        {
+          "label": "top3 work/solo 신호",
+          "pass": true
+        }
+      ],
+      "top1": {
+        "id": "21cb500d-d39d-4101-88c1-cc747388a88f",
+        "name": "데일리 오아시",
+        "category": "cafe",
+        "score": 49.77,
+        "reason": "혼밥·혼술에 부담이 적어요, 주요 매력은 혼밥가능·빠른식사 쪽이에요, 거리는 조금 있는 편이에요, 영업 정보는 방문 전 확인해 주세요.",
+        "blob": "데일리 오아시 cafe 경기도 오산시 수청동 628-13 조용한 혼밥 보통 카카오 오산 카페 커피 데이트 ",
+        "capability": {
+          "with_kids": false,
+          "group_seating": false,
+          "solo_friendly": true,
+          "private_room": true,
+          "alcohol_available": false,
+          "formal_atmosphere": true,
+          "fast_food": false,
+          "vegan_available": false,
+          "for_work": false
+        }
+      },
+      "top23": [
+        {
+          "id": "a283cb92-e094-4253-b67e-372f6bdeb852",
+          "name": "디허케이크룸",
+          "category": "cafe",
+          "score": 30.62,
+          "reason": "혼밥·혼술에 부담이 적어요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "디허케이크룸 cafe 경기 화성시 동탄역로 150 동탄역롯데캐슬 상가 a동 112호 기본 아이동반 보통 카카오 네이버 동탄 카페 커피 가족 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": true,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        },
+        {
+          "id": "b87dd607-1fc9-4e17-9f15-0fdbdf68f061",
+          "name": "후니카페",
+          "category": "cafe",
+          "score": 48.5,
+          "reason": "혼밥·혼술에 부담이 적어요, 주요 매력은 혼밥가능·빠른식사 쪽이에요, 거리는 조금 있는 편이에요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "후니카페 cafe 경기 오산시 발안로 1356-14 1,2층 기본 업무 가성비 카카오 네이버 오산 카페 커피 데이트 ",
+          "capability": {
+            "with_kids": false,
+            "group_seating": false,
+            "solo_friendly": true,
+            "private_room": true,
+            "alcohol_available": false,
+            "formal_atmosphere": true,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": true
+          }
+        }
+      ],
+      "suspicious": false
+    },
+    {
+      "id": 8,
+      "name": "가족 + 액티비티 + activity (오산)",
+      "pass": true,
+      "checks": [
+        {
+          "label": "top3 중 kids 신호 1개 이상",
+          "pass": true
+        }
+      ],
+      "top1": {
+        "id": "33aa6d6d-58eb-4f0e-aa47-79f288a50cda",
+        "name": "키키즈룸",
+        "category": "activity",
+        "score": 54.98,
+        "reason": "아이 동반에 무난한 곳이에요, 주요 매력은 아이동반가능 쪽이에요, 거리는 가까운 편이에요, 영업 정보는 방문 전 확인해 주세요.",
+        "blob": "키키즈룸 activity 경기도 오산시 원당로 22 위드스타프라자 314호 (원동) 기본 아이동반 예약필수 보통 카카오 네이버 오산 액티비티 가족 ",
+        "capability": {
+          "with_kids": true,
+          "group_seating": true,
+          "solo_friendly": false,
+          "private_room": true,
+          "alcohol_available": false,
+          "formal_atmosphere": true,
+          "fast_food": false,
+          "vegan_available": false,
+          "for_work": false
+        }
+      },
+      "top23": [
+        {
+          "id": "41483722-a3cf-4839-9a31-f686a1b852e8",
+          "name": "애니팝 오산점",
+          "category": "activity",
+          "score": 52.43,
+          "reason": "아이 동반에 무난한 곳이에요, 주요 매력은 아이동반가능 쪽이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "애니팝 오산점 activity 경기 오산시 성호대로 127 5층 기본 아이동반 보통 카카오 네이버 오산 액티비티 가족 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        },
+        {
+          "id": "8c959ef3-d3af-44de-9593-097212c41c0d",
+          "name": "마이유키즈룸",
+          "category": "activity",
+          "score": 49.73,
+          "reason": "아이 동반에 무난한 곳이에요, 주요 매력은 아이동반가능 쪽이에요, 거리는 조금 있는 편이에요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "마이유키즈룸 activity 경기도 화성시 동탄대로2길 94 1층 (송동) 기본 아이동반 예약필수 보통 카카오 네이버 오산 동탄 액티비티 가족 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": true,
+            "alcohol_available": false,
+            "formal_atmosphere": true,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        }
+      ],
+      "suspicious": false
+    },
+    {
+      "id": 9,
+      "name": "데이트 + 코스 + course (동탄)",
+      "pass": true,
+      "checks": [
+        {
+          "label": "top1 reason 존재",
+          "pass": true
+        }
+      ],
+      "top1": {
+        "id": "35b990f0-5d94-4d2d-a93c-edf5c0fb676c",
+        "name": "돌탄순댓국 동탄테크노밸리점",
+        "category": "restaurant",
+        "score": 49.53,
+        "reason": "데이트 상황에 어울리는 곳이에요, 도보로 가기 좋은 거리예요, 영업 정보는 방문 전 확인해 주세요.",
+        "blob": "돌탄순댓국 동탄테크노밸리점 restaurant 경기 화성시 동탄기흥로520번가길 26 1층 기본 아이동반 가성비 카카오 네이버 동탄 식당 식사 식사 ",
+        "capability": {
+          "with_kids": true,
+          "group_seating": true,
+          "solo_friendly": false,
+          "private_room": false,
+          "alcohol_available": false,
+          "formal_atmosphere": false,
+          "fast_food": false,
+          "vegan_available": false,
+          "for_work": false
+        }
+      },
+      "top23": [
+        {
+          "id": "503b409e-98e0-44ca-aa01-fff63bb3028b",
+          "name": "디라이프스타일키친 롯데백화점 동탄점",
+          "category": "restaurant",
+          "score": 37.36,
+          "reason": "데이트 상황에 어울리는 곳이에요, 바로 근처에 있어요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "디라이프스타일키친 롯데백화점 동탄점 restaurant 경기 화성시 오산동 967-157 롯데백화점 동탄점 기본 아이동반 보통 카카오 네이버 동탄 식당 식사 식사 ",
+          "capability": {
+            "with_kids": true,
+            "group_seating": true,
+            "solo_friendly": false,
+            "private_room": false,
+            "alcohol_available": false,
+            "formal_atmosphere": false,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        },
+        {
+          "id": "21cb500d-d39d-4101-88c1-cc747388a88f",
+          "name": "데일리 오아시",
+          "category": "cafe",
+          "score": 44.85,
+          "reason": "데이트 상황에 어울리는 곳이에요, 주요 매력은 조용함·대화하기좋음 쪽이에요, 거리는 조금 있는 편이에요, 영업 정보는 방문 전 확인해 주세요.",
+          "blob": "데일리 오아시 cafe 경기도 오산시 수청동 628-13 조용한 혼밥 보통 카카오 오산 카페 커피 데이트 ",
+          "capability": {
+            "with_kids": false,
+            "group_seating": false,
+            "solo_friendly": true,
+            "private_room": true,
+            "alcohol_available": false,
+            "formal_atmosphere": true,
+            "fast_food": false,
+            "vegan_available": false,
+            "for_work": false
+          }
+        }
+      ],
+      "suspicious": false
+    },
+    {
+      "id": 10,
+      "name": "가족 + 미용실 + beauty (오산)",
+      "pass": false,
+      "checks": [
+        {
+          "label": "top1 카테고리 미용",
+          "pass": false
+        }
+      ],
+      "top1": null,
+      "top23": [],
+      "suspicious": true
+    }
+  ]
+}

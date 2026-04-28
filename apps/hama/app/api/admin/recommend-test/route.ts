@@ -19,6 +19,7 @@ function getSupabase() {
 type ReqBody = {
   companions?: "가족" | "혼자" | "친구" | "연인" | "동료";
   dietary?: "채식" | "할랄" | "없음";
+  young_child?: "있음" | "없음";
   interests?: Array<"액티비티" | "만화카페/보드게임카페" | "영화/공연" | "전시/박물관">;
   gender?: "남성" | "여성" | "선택 안 함";
   category?: "food" | "cafe" | "beauty" | "activity" | "course";
@@ -138,6 +139,7 @@ export async function POST(req: NextRequest) {
     companions: mapCompanionToProfile(input.companions),
     gender: input.gender ?? "선택 안 함",
     dietary_restrictions: input.dietary && input.dietary !== "없음" ? [input.dietary] : ["없음"],
+    young_child: input.young_child === "있음" ? "있음" : "없음",
     interests: (input.interests ?? []) as UserProfile["interests"],
     onboarding_completed_at: new Date().toISOString(),
   };

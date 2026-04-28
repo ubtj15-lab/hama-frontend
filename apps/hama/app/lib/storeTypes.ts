@@ -30,6 +30,7 @@ export type StoreRow = {
   food_sub_category?: string | null;
 
   with_kids: boolean | null;
+  hama_pay_enabled?: boolean | null;
   for_work: boolean | null;
   reservation_required: boolean | null;
   vegetarian_available?: boolean | null;
@@ -95,6 +96,7 @@ export type HomeCard = {
   distanceKm?: number;
 
   with_kids?: boolean | null;
+  hama_pay_enabled?: boolean | null;
   for_work?: boolean | null;
   reservation_required?: boolean | null;
   vegetarian_available?: boolean | null;

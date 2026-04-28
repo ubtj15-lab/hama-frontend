@@ -18,6 +18,8 @@
     "select:priority-stores": "npx tsx scripts/selectPriorityStores.ts",
     "map:classifications-to-capability": "npx tsx scripts/mapClassificationsToCapability.ts",
     "test:recommend-scenarios": "npx tsx scripts/testRecommendScenarios.ts",
+    "audit:kid-stores": "npx tsx scripts/auditKidStores.ts",
+    "audit:persona-stores": "npx tsx scripts/auditKidStores.ts",
     "test:vitest": "vitest run",
     "test:vitest:watch": "vitest",
     "test:recommend": "vitest run app/lib/recommend",

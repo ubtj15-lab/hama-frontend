@@ -109,6 +109,9 @@ export type BuildRecommendationReasonOptions = {
   usedSublines?: Set<string>;
   /** 온보딩 companions — 상단 라벨(복수 가능) */
   profileCompanions?: string[];
+  /** strict intent category 보조 */
+  intentCategory?: "FOOD" | "CAFE" | "ACTIVITY" | "BEAUTY";
+  beautySubCategory?: "hair" | "nail" | "eyelash" | "waxing";
 };
 
 function scenarioLabelLineFromCompanions(companions: string[] | undefined): string | null {
@@ -205,6 +208,10 @@ export function buildRecommendationReason(
   const role = opts?.deckRole ?? (slot === 0 ? "main" : slot === 1 ? "near" : "alt");
   const voice = resolveEffectiveRecommendationVoice(card, opts);
   const serving = opts?.servingType ?? inferServingTypeForRecommendation(card);
+  const minuteOfDay = (() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  })();
 
   let headline = "도보 이동 부담이 적은 후보예요";
   let subline = "지금 시간대 기준으로 방문 동선이 단순해요";
@@ -229,6 +236,20 @@ export function buildRecommendationReason(
 
   if (biz === "CLOSED") {
     /* noop */
+  } else if (opts?.intentCategory === "BEAUTY" && opts?.beautySubCategory) {
+    if (opts.beautySubCategory === "nail") {
+      headline = "네일 관리 목적에 맞는 매장이에요";
+      subline = "오늘 동선 안에서 네일 일정 잡기 부담이 적어요";
+    } else if (opts.beautySubCategory === "hair") {
+      headline = "헤어 관리 목적에 맞는 매장이에요";
+      subline = "커트·펌·염색 같은 헤어 방문 흐름으로 붙이기 좋아요";
+    } else if (opts.beautySubCategory === "eyelash") {
+      headline = "속눈썹 관리 목적에 맞는 매장이에요";
+      subline = "속눈썹 시술 일정으로 연결하기 무난한 위치예요";
+    } else if (opts.beautySubCategory === "waxing") {
+      headline = "제모 관리 목적에 맞는 매장이에요";
+      subline = "왁싱/제모 방문 흐름으로 이어가기 쉬워요";
+    }
   } else if (!skipVoiceCopy && voice === "family") {
     const cfs = childFriendlyScore(card);
     if (shouldBlockKidFriendlyMessaging(card)) {
@@ -261,12 +282,18 @@ export function buildRecommendationReason(
   } else if (!skipVoiceCopy && !voice) {
     /** 시나리오 미지정 — 태그로 date/solo/family를 덮어쓰지 않고 light·시간·거리만 보조 */
     const tod = opts?.timeOfDay;
-    if (tod === "lunch" && biz === "OPEN") {
-      headline = "점심 한 끼 정하기 좋아요";
-      subline = "한 끼 부담 없이 들르기 좋은 편이에요";
+    if (minuteOfDay >= 420 && minuteOfDay < 630) {
+      headline = "오전 시간대 방문하기 무난해요";
+      subline = "브런치 흐름으로 이어가기 좋아요";
+    } else if (tod === "lunch" && biz === "OPEN") {
+      headline = "점심 시간대 방문하기 무난해요";
+      subline = "브런치·점심 흐름에 붙이기 쉬워요";
+    } else if (minuteOfDay >= 840 && minuteOfDay < 1020) {
+      headline = "오후 시간대 잠깐 쉬기 좋아요";
+      subline = "카페·디저트 흐름으로 이어가기 쉬워요";
     } else if (tod === "evening" && biz === "OPEN" && /식당|restaurant|한식|양식|고기/.test(b)) {
-      headline = "저녁 식사로 괜찮아요";
-      subline = "부담 없이 자리 잡기 좋은 편이에요";
+      headline = "저녁 식사 흐름에 잘 맞아요";
+      subline = "여럿이 가기 좋은 좌석 구성인지 확인하기 쉬워요";
     } else if (km != null && km <= 1.2) {
       headline = "도보 이동 부담이 적은 후보예요";
       subline = dist ?? "지금 출발해도 이동 부담이 큰 편은 아니에요";

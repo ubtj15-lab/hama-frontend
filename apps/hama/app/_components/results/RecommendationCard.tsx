@@ -17,6 +17,12 @@ import { Chip } from "@ui/Chip";
 import { Touchable } from "@ui/Touchable";
 import type { LogRecommendationEventInput } from "@/lib/analytics/types";
 
+const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
+const SHOW_HAMA_PAY_MOCK =
+  ENABLE_HAMA_PAY_UI &&
+  (process.env.NODE_ENV === "development" ||
+    process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY_MOCK === "true");
+
 function bizLabel(s: BusinessState): string {
   switch (s) {
     case "OPEN":
@@ -73,8 +79,24 @@ type Props = {
   showSoftFallbackCopy?: boolean;
   analyticsV2Click?: LogRecommendationEventInput["analytics_v2"];
   onCardClick: () => void;
+  onChooseHere?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onNavigate: () => void;
   onCall: () => void;
+  selected?: boolean;
+  hamaPayEnabled?: boolean;
+  onMockPayment?: () => void;
+  mockPaymentBusy?: boolean;
+  showVerificationEntry?: boolean;
+  showVisitVerification?: boolean;
+  verificationExpanded?: boolean;
+  verificationSubmitted?: boolean;
+  receiptInput?: string;
+  receiptVerifying?: boolean;
+  receiptResult?: string | null;
+  onReceiptInputChange?: (value: string) => void;
+  onToggleVerification?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onSubmitVerification?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onResetSelection?: (e: React.MouseEvent<HTMLButtonElement>) => void;
 };
 
 export function RecommendationCard({
@@ -84,7 +106,23 @@ export function RecommendationCard({
   reason: reasonOverride,
   analyticsV2Click,
   onCardClick,
+  onChooseHere,
   onNavigate,
+  selected = false,
+  hamaPayEnabled,
+  onMockPayment,
+  mockPaymentBusy = false,
+  showVerificationEntry = true,
+  showVisitVerification = false,
+  verificationExpanded = false,
+  verificationSubmitted = false,
+  receiptInput = "",
+  receiptVerifying = false,
+  receiptResult = null,
+  onReceiptInputChange,
+  onToggleVerification,
+  onSubmitVerification,
+  onResetSelection,
 }: Props) {
   const cardEl = useRef<HTMLDivElement>(null);
   const impressOnce = useRef(false);
@@ -141,6 +179,7 @@ export function RecommendationCard({
       .find(Boolean);
     return first || "지금 가기 편해요";
   }, [reason.scenarioLabel]);
+  const isHamaPayEnabled = ENABLE_HAMA_PAY_UI && (hamaPayEnabled ?? (card.hama_pay_enabled === true));
 
   return (
     <Touchable>
@@ -218,6 +257,22 @@ export function RecommendationCard({
               <span>🕒 {openStatus}</span>
               <span style={{ color: crowdColor(crowdStatus) }}>👥 {crowdStatus}</span>
             </div>
+            {isHamaPayEnabled ? (
+              <div
+                style={{
+                  marginBottom: 10,
+                  display: "inline-flex",
+                  borderRadius: 999,
+                  background: "#DCFCE7",
+                  color: "#166534",
+                  fontSize: 12,
+                  fontWeight: 900,
+                  padding: "6px 10px",
+                }}
+              >
+                HAMA Pay 가능
+              </div>
+            ) : null}
 
             <div style={{ marginBottom: 12, borderRadius: 16, background: "rgba(255,237,213,0.6)", padding: "10px 12px" }}>
               <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 900, color: "#F97316" }}>✨ 추천 이유</div>
@@ -306,25 +361,301 @@ export function RecommendationCard({
               <button
                 type="button"
                 onClick={(e) => {
+                  e.preventDefault();
                   e.stopPropagation();
-                  onCardClick();
+                  if (onChooseHere) onChooseHere(e);
+                  else onCardClick();
                 }}
                 style={{
                   height: 46,
                   borderRadius: 14,
                   border: "none",
-                  background: "#111827",
+                  background: selected ? "#16A34A" : "#111827",
                   color: "#fff",
                   fontSize: 14,
                   fontWeight: 900,
                   cursor: "pointer",
                 }}
               >
-                여기로 결정
+                {selected ? "선택 완료" : "여기로 결정"}
               </button>
             </div>
+            {selected && isHamaPayEnabled ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  borderRadius: 12,
+                  border: "1px solid #BBF7D0",
+                  background: "#F0FDF4",
+                  padding: "10px 12px",
+                  display: "grid",
+                  gap: 8,
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>
+                  방문 후 HAMA Pay로 결제하면 자동으로 참여 기록돼요
+                </div>
+                {SHOW_HAMA_PAY_MOCK ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMockPayment?.();
+                    }}
+                    disabled={mockPaymentBusy}
+                    style={{
+                      height: 40,
+                      borderRadius: 10,
+                      border: "none",
+                      background: mockPaymentBusy ? "#86EFAC" : "#16A34A",
+                      color: "#fff",
+                      fontSize: 13,
+                      fontWeight: 900,
+                      cursor: mockPaymentBusy ? "wait" : "pointer",
+                    }}
+                  >
+                    {mockPaymentBusy ? "처리 중..." : "결제 완료 테스트"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
+        {showVerificationEntry ? (
+          <div
+            style={{
+              marginTop: 16,
+              width: "100%",
+              borderRadius: 16,
+              border: "1px solid #E5E7EB",
+              background: "#F8FAFC",
+              padding: "14px 16px",
+              display: "grid",
+              gap: 10,
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            {!showVisitVerification ? (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>방문 인증</div>
+                <div style={{ fontSize: 12, color: "#475569" }}>
+                  방문 후 인증하면 베타 참여가 기록돼요.
+                </div>
+                <div style={{ fontSize: 12, color: "#475569" }}>
+                  이 매장을 먼저 선택하면 인증할 수 있어요.
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onToggleVerification?.(e);
+                    }}
+                    style={{
+                      height: 38,
+                      borderRadius: 10,
+                      border: "none",
+                      background: "#1D4ED8",
+                      color: "#fff",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      padding: "0 12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    이 매장으로 결정 후 인증
+                  </button>
+                </div>
+              </>
+            ) : null}
+            {showVisitVerification && !verificationExpanded && !verificationSubmitted ? (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>방문 인증</div>
+                <div style={{ fontSize: 12, color: "#475569" }}>
+                  방문한 매장명을 입력하면 관리자 확인 후 참여 횟수에 반영돼요.
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onToggleVerification?.(e);
+                    }}
+                    style={{
+                      height: 38,
+                      borderRadius: 10,
+                      border: "none",
+                      background: "#1D4ED8",
+                      color: "#fff",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      padding: "0 12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    방문 인증하기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onResetSelection?.(e);
+                    }}
+                    style={{
+                      height: 38,
+                      borderRadius: 10,
+                      border: "1px solid #CBD5E1",
+                      background: "#fff",
+                      color: "#334155",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      padding: "0 12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    다시 고르기
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {showVisitVerification && verificationExpanded && !verificationSubmitted ? (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>방문 인증</div>
+                <div style={{ fontSize: 12, color: "#475569" }}>
+                  방문한 매장명을 입력해 주세요. 관리자가 확인 후 참여 횟수에 반영돼요.
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    value={receiptInput}
+                    onChange={(e) => onReceiptInputChange?.(e.target.value)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onFocus={(e) => {
+                      e.stopPropagation();
+                    }}
+                    placeholder="방문한 매장명 입력"
+                    style={{
+                      flex: 1,
+                      minWidth: 170,
+                      height: 38,
+                      borderRadius: 10,
+                      border: "1px solid #CBD5E1",
+                      padding: "0 10px",
+                      fontSize: 13,
+                      background: "#fff",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSubmitVerification?.(e);
+                    }}
+                    disabled={receiptVerifying}
+                    style={{
+                      height: 38,
+                      borderRadius: 10,
+                      border: "none",
+                      background: "#1D4ED8",
+                      color: "#fff",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      padding: "0 12px",
+                      cursor: receiptVerifying ? "wait" : "pointer",
+                    }}
+                  >
+                    {receiptVerifying ? "제출 중..." : "인증 제출하기"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onResetSelection?.(e);
+                    }}
+                    style={{
+                      height: 38,
+                      borderRadius: 10,
+                      border: "1px solid #CBD5E1",
+                      background: "#fff",
+                      color: "#334155",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      padding: "0 12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    다시 고르기
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: "#64748B" }}>
+                  ※ 영수증 사진 인증은 후속 버전에서 지원 예정이에요.
+                </div>
+              </>
+            ) : null}
+
+            {showVisitVerification && verificationSubmitted ? (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>인증 제출 완료</div>
+                <div style={{ fontSize: 12, color: "#475569" }}>
+                  관리자가 확인 후 참여 횟수에 반영돼요.
+                </div>
+                <div
+                  style={{
+                    width: "fit-content",
+                    borderRadius: 999,
+                    border: "1px solid #BFDBFE",
+                    background: "#EFF6FF",
+                    color: "#1D4ED8",
+                    fontSize: 11,
+                    fontWeight: 900,
+                    padding: "4px 9px",
+                  }}
+                >
+                  확인 대기
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onResetSelection?.(e);
+                    }}
+                    style={{
+                      height: 38,
+                      borderRadius: 10,
+                      border: "1px solid #CBD5E1",
+                      background: "#fff",
+                      color: "#334155",
+                      fontWeight: 800,
+                      fontSize: 12,
+                      padding: "0 12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    다시 고르기
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {showVisitVerification && receiptResult && verificationExpanded ? (
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>{receiptResult}</div>
+            ) : null}
+          </div>
+        ) : null}
       </article>
     </Touchable>
   );

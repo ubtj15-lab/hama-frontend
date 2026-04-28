@@ -8,6 +8,7 @@ import {
   DIETARY_OPTIONS,
   GENDER_OPTIONS,
   INTEREST_OPTIONS,
+  YOUNG_CHILD_OPTIONS,
   type CompanionOption,
   type DietaryOption,
   type InterestOption,
@@ -33,11 +34,12 @@ function OnboardingPageContent() {
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
 
-  const total = 4;
+  const total = 5;
   const canNext = useMemo(() => {
     if (step === 0) return profile.companions.length > 0;
-    if (step === 1) return true;
-    if (step === 2) return profile.dietary_restrictions.length > 0;
+    if (step === 1) return profile.young_child === "있음" || profile.young_child === "없음";
+    if (step === 2) return true;
+    if (step === 3) return profile.dietary_restrictions.length > 0;
     return true;
   }, [step, profile]);
 
@@ -162,6 +164,27 @@ function OnboardingPageContent() {
 
           {step === 1 && (
             <>
+              <h1 style={{ margin: "0 0 8px", fontSize: 20 }}>영유아 자녀가 있으신가요?</h1>
+              <p style={{ margin: "0 0 12px", color: "#64748b", fontSize: 13 }}>
+                키즈카페·자녀 친화 매장 추천에만 반영돼요. 해당 없으면 없음을 골라 주세요.
+              </p>
+              <div style={{ display: "grid", gap: 10 }}>
+                {YOUNG_CHILD_OPTIONS.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setProfile((p) => ({ ...p, young_child: v }))}
+                    style={pickStyle(profile.young_child === v)}
+                  >
+                    {v === "있음" ? "있음 (자주 나감)" : "없음"}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
               <h1 style={{ margin: "0 0 12px", fontSize: 20 }}>성별</h1>
               <div style={{ display: "grid", gap: 10 }}>
                 {GENDER_OPTIONS.map((v) => (
@@ -173,7 +196,7 @@ function OnboardingPageContent() {
             </>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
             <>
               <h1 style={{ margin: "0 0 12px", fontSize: 20 }}>못 먹는 거 있어요?</h1>
               <div style={{ display: "grid", gap: 10 }}>
@@ -193,7 +216,7 @@ function OnboardingPageContent() {
             </>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <>
               <h1 style={{ margin: "0 0 8px", fontSize: 20 }}>평소 좋아하는 곳?</h1>
               <p style={{ margin: "0 0 12px", color: "#64748b", fontSize: 13 }}>
@@ -214,18 +237,18 @@ function OnboardingPageContent() {
           <button type="button" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0} style={ghostButton(step === 0)}>
             이전
           </button>
-          {step === 3 && (
+          {step === 4 && (
             <button type="button" onClick={submit} disabled={saving} style={ghostButton(false)}>
               건너뛰기
             </button>
           )}
           <button
             type="button"
-            onClick={() => (step === 3 ? submit() : setStep((s) => Math.min(total - 1, s + 1)))}
+            onClick={() => (step === 4 ? submit() : setStep((s) => Math.min(total - 1, s + 1)))}
             disabled={!canNext || saving}
             style={primaryButton(!canNext || saving)}
           >
-            {step === 3 ? (saving ? "저장 중..." : "완료") : "다음"}
+            {step === 4 ? (saving ? "저장 중..." : "완료") : "다음"}
           </button>
         </div>
       </div>

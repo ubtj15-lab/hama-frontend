@@ -15,6 +15,12 @@ const SLOT_POOLS = [
   ["11:30", "12:00", "18:00", "18:30", "20:00"],
 ];
 
+function hmToMinutes(s: string): number {
+  const [hh, mm] = s.split(":").map((x) => Number(x));
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return -1;
+  return hh * 60 + mm;
+}
+
 /**
  * 매장별 결정적 더미 예약 미리보기.
  * storeId + category로 슬롯·예약금 패턴이 달라짐.
@@ -23,7 +29,11 @@ export function getReservationPreviewForStore(storeId: string, category: string 
   const h = hash32(`${storeId}:${category ?? ""}`);
   const pool = SLOT_POOLS[h % SLOT_POOLS.length]!;
   const start = h % Math.max(1, pool.length - 2);
-  const slotLabels = pool.slice(start, start + 3);
+  const rawSlots = pool.slice(start, start + 3);
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const slotLabels = rawSlots.filter((t) => hmToMinutes(t) > currentMinutes);
+  const tomorrowSlotLabels = rawSlots;
 
   const depositRoll = h % 10;
   const hasDeposit = depositRoll >= 4;
@@ -42,8 +52,9 @@ export function getReservationPreviewForStore(storeId: string, category: string 
       : "일정이 바뀌면 전화로 미리 알려주면 돼요.";
 
   return {
-    availableToday: true,
+    availableToday: slotLabels.length > 0,
     slotLabels,
+    tomorrowSlotLabels,
     depositWon,
     policy,
     depositCaption,

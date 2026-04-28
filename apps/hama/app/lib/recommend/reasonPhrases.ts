@@ -132,7 +132,7 @@ function scenarioClause(params: {
         ? "회식·모임에 맞는 편이에요"
         : "여럿이 함께 쓰기 좋아요";
     default:
-      return "상황에 맞는 추천이에요";
+      return "이동 동선이 과하지 않은 후보예요";
   }
 }
 

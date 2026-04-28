@@ -10,6 +10,8 @@ export type ReservationPreview = {
   availableToday: boolean;
   /** 노출할 시간 슬롯 라벨 (예: 18:00) */
   slotLabels: string[];
+  /** 오늘 슬롯이 없을 때 대체 노출 */
+  tomorrowSlotLabels?: string[];
   /** 원 단위. null이면 예약금 없음 */
   depositWon: number | null;
   policy: DepositPolicyKind;

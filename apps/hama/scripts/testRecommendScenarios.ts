@@ -4,6 +4,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import { buildTopRecommendations, type BuildRecommendationsContext } from "../app/lib/recommend/scoring";
+import {
+  isKidFocusedVenueFields,
+  isKidVenueExcludedWhenNoYoungChildFromParts,
+} from "../app/lib/recommend/kidVenueSignals";
+import { isBoardGameVenueFields } from "../app/lib/recommend/boardVenueSignals";
 import type { HomeCard } from "../app/lib/storeTypes";
 import type { IntentionType } from "../app/lib/intention";
 import type { UserProfile } from "../app/lib/onboardingProfile";
@@ -11,6 +16,8 @@ import type { UserProfile } from "../app/lib/onboardingProfile";
 type ScenarioInput = {
   companions: "가족" | "혼자" | "친구" | "연인" | "동료";
   dietary: "채식" | "할랄" | "없음";
+  /** 미지정 시 '없음' (구 시나리오 회귀) */
+  young_child?: "있음" | "없음";
   interests: UserProfile["interests"];
   gender: UserProfile["gender"];
   category: "food" | "cafe" | "beauty" | "activity" | "course";
@@ -45,7 +52,17 @@ const SCENARIOS: Scenario[] = [
   {
     id: 1,
     name: "가족 + 저녁 + food (오산)",
-    input: { companions: "가족", dietary: "없음", interests: [], gender: "선택 안 함", category: "food", time: "저녁", locationName: "오산시청", ...OSAN },
+    input: {
+      companions: "가족",
+      dietary: "없음",
+      young_child: "있음",
+      interests: [],
+      gender: "선택 안 함",
+      category: "food",
+      time: "저녁",
+      locationName: "오산시청",
+      ...OSAN,
+    },
     checks: [
       { label: "top1 kids/group 친화", pass: (top) => top[0]?.capability.with_kids === true || top[0]?.capability.group_seating === true },
     ],
@@ -80,7 +97,17 @@ const SCENARIOS: Scenario[] = [
   {
     id: 6,
     name: "가족 + 채식 + 저녁 + food (동탄)",
-    input: { companions: "가족", dietary: "채식", interests: [], gender: "선택 안 함", category: "food", time: "저녁", locationName: "동탄역", ...DONGTAN },
+    input: {
+      companions: "가족",
+      dietary: "채식",
+      young_child: "있음",
+      interests: [],
+      gender: "선택 안 함",
+      category: "food",
+      time: "저녁",
+      locationName: "동탄역",
+      ...DONGTAN,
+    },
     checks: [
       { label: "top3 존재", pass: (top) => top.length >= 1 },
       {
@@ -100,7 +127,17 @@ const SCENARIOS: Scenario[] = [
   {
     id: 8,
     name: "가족 + 액티비티 + activity (오산)",
-    input: { companions: "가족", dietary: "없음", interests: ["액티비티"], gender: "선택 안 함", category: "activity", time: "오후", locationName: "오산시청", ...OSAN },
+    input: {
+      companions: "가족",
+      dietary: "없음",
+      young_child: "있음",
+      interests: ["액티비티"],
+      gender: "선택 안 함",
+      category: "activity",
+      time: "오후",
+      locationName: "오산시청",
+      ...OSAN,
+    },
     checks: [{ label: "top3 중 kids 신호 1개 이상", pass: (top) => top.some((x) => x.capability.with_kids === true || /키즈|가족|체험/.test(x.blob)) }],
   },
   {
@@ -114,6 +151,131 @@ const SCENARIOS: Scenario[] = [
     name: "가족 + 미용실 + beauty (오산)",
     input: { companions: "가족", dietary: "없음", interests: [], gender: "선택 안 함", category: "beauty", time: "오후", locationName: "오산시청", ...OSAN },
     checks: [{ label: "top1 카테고리 미용", pass: (top) => ["salon", "beauty"].includes(String(top[0]?.category ?? "").toLowerCase()) }],
+  },
+  {
+    id: 11,
+    name: "혼자 + 액티비티 + 영유아 자녀 X (오산) → 키즈·보드카페 제외",
+    input: {
+      companions: "혼자",
+      dietary: "없음",
+      young_child: "없음",
+      interests: ["액티비티"],
+      gender: "선택 안 함",
+      category: "activity",
+      time: "오후",
+      locationName: "오산시청",
+      ...OSAN,
+    },
+    checks: [
+      {
+        label: "top3 모두 영유아 없음 필터(키즈) + 보드카페 아님",
+        pass: (top) =>
+          top.length > 0 &&
+          top.every((x) => {
+            const kid = !isKidVenueExcludedWhenNoYoungChildFromParts({
+              name: x.name,
+              category: x.category,
+              tags: x.tags,
+              mood: x.mood,
+              description: x.description,
+              with_kids: x.capability.with_kids,
+            });
+            const board = !isBoardGameVenueFields({ name: x.name, category: x.category, tags: x.tags });
+            return kid && board;
+          }),
+      },
+    ],
+  },
+  {
+    id: 12,
+    name: "친구 + 액티비티 + 영유아 자녀 X (오산) → 키즈 제외·보드 OK",
+    input: {
+      companions: "친구",
+      dietary: "없음",
+      young_child: "없음",
+      interests: ["액티비티"],
+      gender: "선택 안 함",
+      category: "activity",
+      time: "오후",
+      locationName: "오산시청",
+      ...OSAN,
+    },
+    checks: [
+      {
+        label: "top3 모두 영유아 없음 키즈 필터 통과",
+        pass: (top) =>
+          top.length > 0 &&
+          top.every((x) =>
+            !isKidVenueExcludedWhenNoYoungChildFromParts({
+              name: x.name,
+              category: x.category,
+              tags: x.tags,
+              mood: x.mood,
+              description: x.description,
+              with_kids: x.capability.with_kids,
+            })
+          ),
+      },
+    ],
+  },
+  {
+    id: 13,
+    name: "가족 + 액티비티 + 영유아 자녀 O (오산) → 자녀 친화 신호 OK",
+    input: {
+      companions: "가족",
+      dietary: "없음",
+      young_child: "있음",
+      interests: ["액티비티"],
+      gender: "선택 안 함",
+      category: "activity",
+      time: "오후",
+      locationName: "오산시청",
+      ...OSAN,
+    },
+    checks: [
+      {
+        label: "top3 중 with_kids 또는 키즈/체험 신호",
+        pass: (top) =>
+          top.some(
+            (x) =>
+              x.capability.with_kids === true ||
+              isKidFocusedVenueFields({ name: x.name, category: x.category, tags: x.tags }) ||
+              /키즈|가족|체험|어린이/.test(x.blob)
+          ),
+      },
+    ],
+  },
+  {
+    id: 14,
+    name: "가족 + 액티비티 + 영유아 자녀 X (오산) → 키즈 전용 매장 제외",
+    input: {
+      companions: "가족",
+      dietary: "없음",
+      young_child: "없음",
+      interests: ["액티비티"],
+      gender: "선택 안 함",
+      category: "activity",
+      time: "오후",
+      locationName: "오산시청",
+      ...OSAN,
+    },
+    checks: [
+      {
+        label: "top3 모두 영유아 없음 키즈 필터 통과",
+        pass: (top) =>
+          top.length > 0 &&
+          top.every((x) =>
+            !isKidVenueExcludedWhenNoYoungChildFromParts({
+              name: x.name,
+              category: x.category,
+              tags: x.tags,
+              mood: x.mood,
+              description: x.description,
+              with_kids: x.capability.with_kids,
+            })
+          ),
+      },
+    ],
   },
 ];
 
@@ -197,6 +359,7 @@ async function main() {
       companions: mapCompanionProfile(scenario.input.companions),
       gender: scenario.input.gender,
       dietary_restrictions: scenario.input.dietary === "없음" ? ["없음"] : [scenario.input.dietary],
+      young_child: scenario.input.young_child === "있음" ? "있음" : "없음",
       interests: scenario.input.interests,
       onboarding_completed_at: new Date().toISOString(),
     };
@@ -213,6 +376,9 @@ async function main() {
         id: r.card.id,
         name: r.card.name,
         category: r.card.category,
+        tags: Array.isArray(r.card.tags) ? r.card.tags : [],
+        mood: Array.isArray(r.card.mood) ? r.card.mood : [],
+        description: typeof r.card.description === "string" ? r.card.description : null,
         score: Number(r.breakdown.finalScore.toFixed(2)),
         reason: r.reasonText,
         blob: blobOf(r.card),
