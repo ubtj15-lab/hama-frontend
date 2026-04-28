@@ -60,6 +60,12 @@ export default function PlaceDetailPage() {
   const [payMockSaving, setPayMockSaving] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
+  const [betaSelectedLogId, setBetaSelectedLogId] = useState<string | null>(null);
+  const [betaVerifyOpen, setBetaVerifyOpen] = useState(false);
+  const [betaSubmitted, setBetaSubmitted] = useState(false);
+  const [betaInput, setBetaInput] = useState("");
+  const [betaSubmitting, setBetaSubmitting] = useState(false);
+  const [betaMessage, setBetaMessage] = useState<string | null>(null);
   const { isSaved, toggleSaved } = useSaved();
 
   useEffect(() => {
@@ -200,6 +206,80 @@ export default function PlaceDetailPage() {
       alert("결제 완료 테스트 처리 중 오류가 발생했어요.");
     } finally {
       setPayMockSaving(false);
+    }
+  };
+
+  const ensureBetaDecisionLog = async (): Promise<string | null> => {
+    if (betaSelectedLogId) return betaSelectedLogId;
+    const loggedIn = typeof window !== "undefined" && window.localStorage.getItem("hamaLoggedIn") === "1";
+    if (!loggedIn) {
+      alert("로그인 후 참여 기록을 남길 수 있어요.");
+      return null;
+    }
+    try {
+      const res = await fetch("/api/beta/decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          place_id: card.id,
+          place_name: card.name,
+          recommendation_id: "place_detail",
+          context_json: { source_page: "place_detail", page_id: card.id },
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        selected_place_log_id?: string | null;
+        selectedPlaceLogId?: string | null;
+      };
+      if (!res.ok || !json.ok) {
+        alert("선택 기록 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return null;
+      }
+      const logId = (json.selected_place_log_id ?? json.selectedPlaceLogId ?? null) as string | null;
+      setBetaSelectedLogId(logId);
+      return logId;
+    } catch (e) {
+      console.error("[place detail beta decision] failed", e);
+      alert("선택 기록 저장 중 오류가 발생했어요.");
+      return null;
+    }
+  };
+
+  const submitPlaceBetaVerification = async () => {
+    if (betaSubmitting) return;
+    if (!betaInput.trim()) {
+      alert("방문한 매장명을 입력해 주세요.");
+      return;
+    }
+    const logId = await ensureBetaDecisionLog();
+    if (!logId) return;
+    setBetaSubmitting(true);
+    setBetaMessage(null);
+    try {
+      logEvent("receipt_verification_started", { source: "place_detail", selected_place_id: card.id });
+      const res = await fetch("/api/beta/receipt-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          selected_place_log_id: logId,
+          receipt_place_name: betaInput.trim(),
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+      if (!res.ok || !json.ok) {
+        setBetaMessage("인증 제출에 실패했어요. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      logEvent("receipt_verification_submitted", { source: "place_detail", selected_place_id: card.id });
+      setBetaSubmitted(true);
+      setBetaVerifyOpen(false);
+      setBetaMessage(json.message ?? "인증이 제출됐어요. 관리자가 확인 후 참여 횟수에 반영돼요.");
+    } catch (e) {
+      console.error("[place detail beta verify] failed", e);
+      setBetaMessage("인증 제출 중 오류가 발생했어요.");
+    } finally {
+      setBetaSubmitting(false);
     }
   };
 
@@ -533,6 +613,127 @@ export default function PlaceDetailPage() {
           >
             카카오맵에서 보기
           </button>
+        </div>
+
+        <div
+          style={{
+            marginTop: 14,
+            borderRadius: 16,
+            border: "1px solid #E5E7EB",
+            background: "#F8FAFC",
+            padding: "14px 16px",
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          {!betaVerifyOpen && !betaSubmitted ? (
+            <>
+              <div style={{ ...typo.cardTitle, fontSize: 15, margin: 0, fontWeight: 900 }}>방문 인증</div>
+              <div style={{ ...typo.caption, color: colors.textSecondary }}>
+                방문 후 인증하면 베타 참여가 기록돼요.
+              </div>
+              <div style={{ ...typo.caption, color: colors.textSecondary }}>
+                이 매장을 먼저 선택하면 인증할 수 있어요.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const logId = await ensureBetaDecisionLog();
+                    if (!logId) return;
+                    setBetaVerifyOpen(true);
+                    setBetaSubmitted(false);
+                    setBetaMessage(null);
+                  }}
+                  style={{
+                    height: 38,
+                    borderRadius: 10,
+                    border: "none",
+                    background: "#1D4ED8",
+                    color: "#fff",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    padding: "0 12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  이 매장으로 결정 후 인증
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          {betaVerifyOpen && !betaSubmitted ? (
+            <>
+              <div style={{ ...typo.cardTitle, fontSize: 15, margin: 0, fontWeight: 900 }}>방문 인증</div>
+              <div style={{ ...typo.caption, color: colors.textSecondary }}>
+                방문한 매장명을 입력하면 관리자 확인 후 참여 횟수에 반영돼요.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  value={betaInput}
+                  onChange={(e) => setBetaInput(e.target.value)}
+                  placeholder="방문한 매장명 입력"
+                  style={{
+                    flex: 1,
+                    minWidth: 170,
+                    height: 38,
+                    borderRadius: 10,
+                    border: "1px solid #CBD5E1",
+                    padding: "0 10px",
+                    fontSize: 13,
+                    background: "#fff",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={submitPlaceBetaVerification}
+                  disabled={betaSubmitting}
+                  style={{
+                    height: 38,
+                    borderRadius: 10,
+                    border: "none",
+                    background: "#1D4ED8",
+                    color: "#fff",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    padding: "0 12px",
+                    cursor: betaSubmitting ? "wait" : "pointer",
+                  }}
+                >
+                  {betaSubmitting ? "제출 중..." : "인증 제출하기"}
+                </button>
+              </div>
+              <div style={{ ...typo.caption, color: colors.textMuted }}>
+                ※ 영수증 사진 인증은 후속 버전에서 지원 예정이에요.
+              </div>
+            </>
+          ) : null}
+
+          {betaSubmitted ? (
+            <>
+              <div style={{ ...typo.cardTitle, fontSize: 15, margin: 0, fontWeight: 900 }}>인증 제출 완료</div>
+              <div style={{ ...typo.caption, color: colors.textSecondary }}>
+                관리자가 확인 후 참여 횟수에 반영돼요.
+              </div>
+              <div
+                style={{
+                  width: "fit-content",
+                  borderRadius: 999,
+                  border: "1px solid #BFDBFE",
+                  background: "#EFF6FF",
+                  color: "#1D4ED8",
+                  fontSize: 11,
+                  fontWeight: 900,
+                  padding: "4px 9px",
+                }}
+              >
+                확인 대기
+              </div>
+            </>
+          ) : null}
+
+          {betaMessage ? <div style={{ ...typo.caption, color: colors.textPrimary }}>{betaMessage}</div> : null}
         </div>
 
         <h2 style={{ ...typo.sectionTitle, fontSize: 17, marginTop: 28 }}>이런 이유로 추천했어요</h2>
