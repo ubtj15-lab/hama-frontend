@@ -91,9 +91,12 @@ type Props = {
   verificationExpanded?: boolean;
   verificationSubmitted?: boolean;
   receiptInput?: string;
+  receiptFileName?: string | null;
+  receiptPreviewUrl?: string | null;
   receiptVerifying?: boolean;
   receiptResult?: string | null;
   onReceiptInputChange?: (value: string) => void;
+  onReceiptFileChange?: (file: File | null) => void;
   onToggleVerification?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onSubmitVerification?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onResetSelection?: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -117,9 +120,12 @@ export function RecommendationCard({
   verificationExpanded = false,
   verificationSubmitted = false,
   receiptInput = "",
+  receiptFileName = null,
+  receiptPreviewUrl = null,
   receiptVerifying = false,
   receiptResult = null,
   onReceiptInputChange,
+  onReceiptFileChange,
   onToggleVerification,
   onSubmitVerification,
   onResetSelection,
@@ -555,6 +561,18 @@ export function RecommendationCard({
                       background: "#fff",
                     }}
                   />
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => {
+                      const file = e.currentTarget.files?.[0] ?? null;
+                      onReceiptFileChange?.(file);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    style={{ maxWidth: 220 }}
+                  />
                   <button
                     type="button"
                     onClick={(e) => {
@@ -562,12 +580,12 @@ export function RecommendationCard({
                       e.stopPropagation();
                       onSubmitVerification?.(e);
                     }}
-                    disabled={receiptVerifying}
+                    disabled={receiptVerifying || !receiptInput.trim() || !receiptFileName}
                     style={{
                       height: 38,
                       borderRadius: 10,
                       border: "none",
-                      background: "#1D4ED8",
+                      background: receiptVerifying || !receiptInput.trim() || !receiptFileName ? "#93C5FD" : "#1D4ED8",
                       color: "#fff",
                       fontWeight: 800,
                       fontSize: 12,
@@ -599,8 +617,27 @@ export function RecommendationCard({
                     다시 고르기
                   </button>
                 </div>
+                {receiptFileName ? (
+                  <div style={{ fontSize: 12, color: "#334155", fontWeight: 700 }}>
+                    첨부 파일: {receiptFileName}
+                  </div>
+                ) : null}
+                {receiptPreviewUrl ? (
+                  <img
+                    src={receiptPreviewUrl}
+                    alt="영수증 미리보기"
+                    style={{
+                      width: 120,
+                      height: 120,
+                      objectFit: "cover",
+                      borderRadius: 10,
+                      border: "1px solid #CBD5E1",
+                      background: "#fff",
+                    }}
+                  />
+                ) : null}
                 <div style={{ fontSize: 11, color: "#64748B" }}>
-                  ※ 영수증 사진 인증은 후속 버전에서 지원 예정이에요.
+                  개인정보가 보이지 않게 카드번호 일부나 전화번호는 가리고 올려주세요.
                 </div>
               </>
             ) : null}

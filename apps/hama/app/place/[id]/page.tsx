@@ -64,6 +64,8 @@ export default function PlaceDetailPage() {
   const [betaVerifyOpen, setBetaVerifyOpen] = useState(false);
   const [betaSubmitted, setBetaSubmitted] = useState(false);
   const [betaInput, setBetaInput] = useState("");
+  const [betaReceiptFile, setBetaReceiptFile] = useState<File | null>(null);
+  const [betaReceiptPreviewUrl, setBetaReceiptPreviewUrl] = useState<string | null>(null);
   const [betaSubmitting, setBetaSubmitting] = useState(false);
   const [betaMessage, setBetaMessage] = useState<string | null>(null);
   const { isSaved, toggleSaved } = useSaved();
@@ -125,6 +127,12 @@ export default function PlaceDetailPage() {
     if (!card) return;
     logEvent(HamaEvents.place_detail_view, { place_id: card.id, page: "place_detail" });
   }, [card]);
+
+  useEffect(() => {
+    return () => {
+      if (betaReceiptPreviewUrl) URL.revokeObjectURL(betaReceiptPreviewUrl);
+    };
+  }, [betaReceiptPreviewUrl]);
 
   if (!card) {
     return (
@@ -252,6 +260,18 @@ export default function PlaceDetailPage() {
       alert("방문한 매장명을 입력해 주세요.");
       return;
     }
+    if (!betaReceiptFile) {
+      alert("영수증 사진을 첨부해 주세요.");
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(betaReceiptFile.type)) {
+      alert("jpg/png/webp 파일만 업로드할 수 있어요.");
+      return;
+    }
+    if (betaReceiptFile.size > 5 * 1024 * 1024) {
+      alert("5MB 이하 파일만 업로드할 수 있어요.");
+      return;
+    }
     const logId = await ensureBetaDecisionLog();
     if (!logId) return;
     setBetaSubmitting(true);
@@ -260,11 +280,13 @@ export default function PlaceDetailPage() {
       logEvent("receipt_verification_started", { source: "place_detail", selected_place_id: card.id });
       const res = await fetch("/api/beta/receipt-verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selected_place_log_id: logId,
-          receipt_place_name: betaInput.trim(),
-        }),
+        body: (() => {
+          const fd = new FormData();
+          fd.set("selected_place_log_id", logId);
+          fd.set("receipt_place_name", betaInput.trim());
+          fd.set("receipt_image", betaReceiptFile);
+          return fd;
+        })(),
       });
       const json = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
       if (!res.ok || !json.ok) {
@@ -669,6 +691,9 @@ export default function PlaceDetailPage() {
               <div style={{ ...typo.caption, color: colors.textSecondary }}>
                 방문한 매장명을 입력하면 관리자 확인 후 참여 횟수에 반영돼요.
               </div>
+              <div style={{ ...typo.caption, color: colors.textSecondary }}>
+                개인정보가 보이지 않게 카드번호 일부나 전화번호는 가리고 올려주세요.
+              </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <input
                   value={betaInput}
@@ -685,15 +710,28 @@ export default function PlaceDetailPage() {
                     background: "#fff",
                   }}
                 />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.currentTarget.files?.[0] ?? null;
+                    setBetaReceiptFile(file);
+                    setBetaReceiptPreviewUrl((prev) => {
+                      if (prev) URL.revokeObjectURL(prev);
+                      return file ? URL.createObjectURL(file) : null;
+                    });
+                  }}
+                  style={{ maxWidth: 220 }}
+                />
                 <button
                   type="button"
                   onClick={submitPlaceBetaVerification}
-                  disabled={betaSubmitting}
+                  disabled={betaSubmitting || !betaInput.trim() || !betaReceiptFile}
                   style={{
                     height: 38,
                     borderRadius: 10,
                     border: "none",
-                    background: "#1D4ED8",
+                    background: betaSubmitting || !betaInput.trim() || !betaReceiptFile ? "#93C5FD" : "#1D4ED8",
                     color: "#fff",
                     fontWeight: 800,
                     fontSize: 12,
@@ -704,9 +742,25 @@ export default function PlaceDetailPage() {
                   {betaSubmitting ? "제출 중..." : "인증 제출하기"}
                 </button>
               </div>
-              <div style={{ ...typo.caption, color: colors.textMuted }}>
-                ※ 영수증 사진 인증은 후속 버전에서 지원 예정이에요.
-              </div>
+              {betaReceiptFile ? (
+                <div style={{ ...typo.caption, color: colors.textPrimary, fontWeight: 700 }}>
+                  첨부 파일: {betaReceiptFile.name}
+                </div>
+              ) : null}
+              {betaReceiptPreviewUrl ? (
+                <img
+                  src={betaReceiptPreviewUrl}
+                  alt="영수증 미리보기"
+                  style={{
+                    width: 120,
+                    height: 120,
+                    objectFit: "cover",
+                    borderRadius: 10,
+                    border: "1px solid #CBD5E1",
+                    background: "#fff",
+                  }}
+                />
+              ) : null}
             </>
           ) : null}
 

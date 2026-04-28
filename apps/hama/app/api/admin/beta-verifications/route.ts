@@ -6,6 +6,7 @@ type PendingRow = {
   user_id: string;
   selected_place_id: string;
   receipt_place_name: string | null;
+  receipt_image_url: string | null;
   created_at: string;
   status: "pending" | "approved" | "rejected";
   matched: boolean;
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   try {
     const pendingQ = supabase
       .from("receipt_verifications")
-      .select("id,user_id,selected_place_id,receipt_place_name,created_at,status,matched")
+      .select("id,user_id,selected_place_id,receipt_place_name,receipt_image_url,created_at,status,matched")
       .eq("status", "pending")
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -81,19 +82,33 @@ export async function GET(req: NextRequest) {
       selectedNameMap.set(p.id, matchedLogs[0]?.place_name ?? null);
     }
 
+    const pendingWithSigned = await Promise.all(
+      pending.map(async (p) => {
+        let receiptImageSignedUrl: string | null = null;
+        const receiptImagePath = p.receipt_image_url ?? null;
+        if (receiptImagePath) {
+          const signed = await supabase.storage.from("receipt-images").createSignedUrl(receiptImagePath, 60 * 60);
+          if (!signed.error) receiptImageSignedUrl = signed.data?.signedUrl ?? null;
+        }
+        return {
+          id: p.id,
+          user_id: p.user_id,
+          selected_place_id: p.selected_place_id,
+          selected_place_name: selectedNameMap.get(p.id) ?? null,
+          receipt_place_name: p.receipt_place_name ?? null,
+          receipt_image_url: receiptImagePath,
+          receipt_image_signed_url: receiptImageSignedUrl,
+          created_at: p.created_at,
+          matched: p.matched === true,
+          status: p.status,
+          visit_count: stateMap.get(p.user_id)?.visit_count ?? 0,
+        };
+      })
+    );
+
     return NextResponse.json({
       ok: true,
-      pending: pending.map((p) => ({
-        id: p.id,
-        user_id: p.user_id,
-        selected_place_id: p.selected_place_id,
-        selected_place_name: selectedNameMap.get(p.id) ?? null,
-        receipt_place_name: p.receipt_place_name ?? null,
-        created_at: p.created_at,
-        matched: p.matched === true,
-        status: p.status,
-        visit_count: stateMap.get(p.user_id)?.visit_count ?? 0,
-      })),
+      pending: pendingWithSigned,
       reward_targets: (rewardsRes.data ?? []).map((r: any) => ({
         user_id: String(r.user_id),
         visit_count: Number(r.visit_count ?? 0),

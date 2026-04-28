@@ -9,6 +9,8 @@ type PendingItem = {
   selected_place_id: string;
   selected_place_name: string | null;
   receipt_place_name: string | null;
+  receipt_image_url: string | null;
+  receipt_image_signed_url: string | null;
   created_at: string;
   status: "pending" | "approved" | "rejected";
   matched: boolean;
@@ -30,6 +32,20 @@ type Res = {
   error?: string;
   detail?: string;
 };
+
+function formatKstDateTime(value: string | null | undefined): string {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default function AdminBetaVerificationsPage() {
   const [loading, setLoading] = React.useState(false);
@@ -122,7 +138,7 @@ export default function AdminBetaVerificationsPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {pending.map((p) => (
               <article key={p.id} style={{ border: "1px solid #E2E8F0", borderRadius: 10, padding: 10, background: "#fff" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr 2fr 1fr", gap: 8, fontSize: 12, color: "#334155" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 2fr 2fr 1fr 1.3fr", gap: 8, fontSize: 12, color: "#334155" }}>
                   <div>
                     <div style={{ fontWeight: 800, color: "#0F172A" }}>user_id</div>
                     <div>{p.user_id}</div>
@@ -137,11 +153,33 @@ export default function AdminBetaVerificationsPage() {
                   </div>
                   <div>
                     <div style={{ fontWeight: 800, color: "#0F172A" }}>created_at</div>
-                    <div>{new Date(p.created_at).toLocaleString("ko-KR")}</div>
+                    <div>{formatKstDateTime(p.created_at)}</div>
                   </div>
                   <div>
                     <div style={{ fontWeight: 800, color: "#0F172A" }}>visit_count</div>
                     <div>{p.visit_count}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#0F172A", marginBottom: 4 }}>영수증 이미지</div>
+                    {p.receipt_image_signed_url ? (
+                      <a href={p.receipt_image_signed_url} target="_blank" rel="noreferrer">
+                        <img
+                          src={p.receipt_image_signed_url}
+                          alt="receipt"
+                          style={{
+                            width: 72,
+                            height: 72,
+                            borderRadius: 8,
+                            objectFit: "cover",
+                            border: "1px solid #E2E8F0",
+                            background: "#fff",
+                            cursor: "zoom-in",
+                          }}
+                        />
+                      </a>
+                    ) : (
+                      <div style={{ color: "#94A3B8" }}>이미지 없음</div>
+                    )}
                   </div>
                 </div>
 
@@ -209,11 +247,11 @@ export default function AdminBetaVerificationsPage() {
                   </div>
                   <div>
                     <div style={{ fontWeight: 800, color: "#0F172A" }}>last_visit_at</div>
-                    <div>{r.last_visit_at ? new Date(r.last_visit_at).toLocaleString("ko-KR") : "-"}</div>
+                    <div>{formatKstDateTime(r.last_visit_at)}</div>
                   </div>
                   <div>
                     <div style={{ fontWeight: 800, color: "#0F172A" }}>updated_at</div>
-                    <div>{r.updated_at ? new Date(r.updated_at).toLocaleString("ko-KR") : "-"}</div>
+                    <div>{formatKstDateTime(r.updated_at)}</div>
                   </div>
                 </div>
               </div>

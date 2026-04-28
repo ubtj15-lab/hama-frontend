@@ -66,6 +66,8 @@ export function RecommendationList({
   const [visitFeedbackSaving, setVisitFeedbackSaving] = React.useState(false);
   const [decisionSavingPlaceId, setDecisionSavingPlaceId] = React.useState<string | null>(null);
   const [receiptInput, setReceiptInput] = React.useState("");
+  const [receiptFile, setReceiptFile] = React.useState<File | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = React.useState<string | null>(null);
   const [receiptVerifying, setReceiptVerifying] = React.useState(false);
   const [receiptResult, setReceiptResult] = React.useState<string | null>(null);
   const [verificationOpenPlaceId, setVerificationOpenPlaceId] = React.useState<string | null>(null);
@@ -75,12 +77,23 @@ export function RecommendationList({
   const deckReasons = useDeckRecommendationReasons(visibleRecommendations, scenarioObject);
 
   React.useEffect(() => {
+    return () => {
+      if (receiptPreviewUrl) URL.revokeObjectURL(receiptPreviewUrl);
+    };
+  }, [receiptPreviewUrl]);
+
+  React.useEffect(() => {
     const prev = previousContextKeyRef.current;
     const contextChanged = prev !== null && prev !== contextKey;
     if (contextChanged) {
       setSelectedPlaceId(null);
       setSelectedPlaceLogId(null);
       setReceiptInput("");
+      setReceiptFile(null);
+      setReceiptPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
       setReceiptResult(null);
       setVerificationOpenPlaceId(null);
       setVerificationSubmittedPlaceId(null);
@@ -233,6 +246,11 @@ export function RecommendationList({
       setDecisionSavingPlaceId(null);
       setReceiptResult(null);
       setReceiptInput("");
+      setReceiptFile(null);
+      setReceiptPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
     }
     if (ENABLE_HAMA_PAY_UI && card.hama_pay_enabled === true) {
       logEvent("hama_pay_available_viewed", {
@@ -255,6 +273,18 @@ export function RecommendationList({
       alert("영수증 매장명을 입력해 주세요.");
       return;
     }
+    if (!receiptFile) {
+      alert("영수증 사진을 첨부해 주세요.");
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(receiptFile.type)) {
+      alert("jpg/png/webp 파일만 업로드할 수 있어요.");
+      return;
+    }
+    if (receiptFile.size > 5 * 1024 * 1024) {
+      alert("5MB 이하 파일만 업로드할 수 있어요.");
+      return;
+    }
     if (!selectedPlaceLogId) {
       alert("선택 기록 저장 중이에요. 잠시 후 다시 눌러주세요.");
       return;
@@ -265,8 +295,13 @@ export function RecommendationList({
       logEvent("receipt_verification_started", { source: "results", selected_place_id: selectedPlaceId });
       const res = await fetch("/api/beta/receipt-verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selected_place_log_id: selectedPlaceLogId, receipt_place_name: receiptInput.trim() }),
+        body: (() => {
+          const fd = new FormData();
+          fd.set("selected_place_log_id", selectedPlaceLogId);
+          fd.set("receipt_place_name", receiptInput.trim());
+          fd.set("receipt_image", receiptFile);
+          return fd;
+        })(),
       });
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
@@ -294,6 +329,11 @@ export function RecommendationList({
     setSelectedPlaceId(null);
     setSelectedPlaceLogId(null);
     setReceiptInput("");
+    setReceiptFile(null);
+    setReceiptPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setReceiptResult(null);
     setVerificationOpenPlaceId(null);
     setVerificationSubmittedPlaceId(null);
@@ -451,9 +491,18 @@ export function RecommendationList({
             verificationExpanded={isVerificationExpanded}
             verificationSubmitted={isVerificationSubmitted}
             receiptInput={shouldShowReceiptVerify ? receiptInput : ""}
+            receiptFileName={shouldShowReceiptVerify && receiptFile ? receiptFile.name : null}
+            receiptPreviewUrl={shouldShowReceiptVerify ? receiptPreviewUrl : null}
             receiptVerifying={shouldShowReceiptVerify ? receiptVerifying : false}
             receiptResult={shouldShowReceiptVerify ? receiptResult : null}
             onReceiptInputChange={(value) => setReceiptInput(value)}
+            onReceiptFileChange={(file) => {
+              setReceiptFile(file);
+              setReceiptPreviewUrl((prev) => {
+                if (prev) URL.revokeObjectURL(prev);
+                return file ? URL.createObjectURL(file) : null;
+              });
+            }}
             onToggleVerification={(e) => {
               e.preventDefault();
               e.stopPropagation();
