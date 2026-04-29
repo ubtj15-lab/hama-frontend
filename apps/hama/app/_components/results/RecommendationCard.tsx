@@ -90,13 +90,15 @@ type Props = {
   showVisitVerification?: boolean;
   verificationExpanded?: boolean;
   verificationSubmitted?: boolean;
-  receiptInput?: string;
   receiptFileName?: string | null;
   receiptPreviewUrl?: string | null;
+  visitFeedbackTags?: string[];
+  visitFeedbackText?: string;
   receiptVerifying?: boolean;
   receiptResult?: string | null;
-  onReceiptInputChange?: (value: string) => void;
   onReceiptFileChange?: (file: File | null) => void;
+  onToggleVisitFeedbackTag?: (tag: string) => void;
+  onVisitFeedbackTextChange?: (value: string) => void;
   onToggleVerification?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onSubmitVerification?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   onResetSelection?: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -119,17 +121,26 @@ export function RecommendationCard({
   showVisitVerification = false,
   verificationExpanded = false,
   verificationSubmitted = false,
-  receiptInput = "",
   receiptFileName = null,
   receiptPreviewUrl = null,
+  visitFeedbackTags = [],
+  visitFeedbackText = "",
   receiptVerifying = false,
   receiptResult = null,
-  onReceiptInputChange,
   onReceiptFileChange,
+  onToggleVisitFeedbackTag,
+  onVisitFeedbackTextChange,
   onToggleVerification,
   onSubmitVerification,
   onResetSelection,
 }: Props) {
+  const feedbackTagOptions = [
+    "추천이 잘 맞았어요",
+    "분위기가 생각과 달랐어요",
+    "가족/아이와 가기 좋았어요",
+    "조용하고 편했어요",
+    "다시 방문하고 싶어요",
+  ] as const;
   const cardEl = useRef<HTMLDivElement>(null);
   const impressOnce = useRef(false);
   const rankOrder = rank + 1;
@@ -447,9 +458,9 @@ export function RecommendationCard({
           >
             {!showVisitVerification ? (
               <>
-                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>방문 인증</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>영수증 인증</div>
                 <div style={{ fontSize: 12, color: "#475569" }}>
-                  방문 후 인증하면 베타 참여가 기록돼요.
+                  하마 추천으로 방문했다면 영수증 사진을 올려주세요. 관리자가 확인 후 참여 횟수에 반영돼요.
                 </div>
                 <div style={{ fontSize: 12, color: "#475569" }}>
                   이 매장을 먼저 선택하면 인증할 수 있어요.
@@ -481,9 +492,9 @@ export function RecommendationCard({
             ) : null}
             {showVisitVerification && !verificationExpanded && !verificationSubmitted ? (
               <>
-                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>방문 인증</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>영수증 인증</div>
                 <div style={{ fontSize: 12, color: "#475569" }}>
-                  방문한 매장명을 입력하면 관리자 확인 후 참여 횟수에 반영돼요.
+                  하마 추천으로 방문했다면 영수증 사진을 올려주세요. 관리자가 확인 후 참여 횟수에 반영돼요.
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
@@ -505,7 +516,7 @@ export function RecommendationCard({
                       cursor: "pointer",
                     }}
                   >
-                    방문 인증하기
+                    영수증 인증하기
                   </button>
                   <button
                     type="button"
@@ -534,33 +545,11 @@ export function RecommendationCard({
 
             {showVisitVerification && verificationExpanded && !verificationSubmitted ? (
               <>
-                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>방문 인증</div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>영수증 인증</div>
                 <div style={{ fontSize: 12, color: "#475569" }}>
-                  방문한 매장명을 입력해 주세요. 관리자가 확인 후 참여 횟수에 반영돼요.
+                  하마 추천으로 방문했다면 영수증 사진을 올려주세요. 관리자가 확인 후 참여 횟수에 반영돼요.
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <input
-                    value={receiptInput}
-                    onChange={(e) => onReceiptInputChange?.(e.target.value)}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onFocus={(e) => {
-                      e.stopPropagation();
-                    }}
-                    placeholder="방문한 매장명 입력"
-                    style={{
-                      flex: 1,
-                      minWidth: 170,
-                      height: 38,
-                      borderRadius: 10,
-                      border: "1px solid #CBD5E1",
-                      padding: "0 10px",
-                      fontSize: 13,
-                      background: "#fff",
-                    }}
-                  />
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
@@ -571,8 +560,63 @@ export function RecommendationCard({
                     onClick={(e) => {
                       e.stopPropagation();
                     }}
-                    style={{ maxWidth: 220 }}
+                    style={{ width: "100%", maxWidth: 360 }}
                   />
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>
+                    방문 후 어땠나요? (선택)
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {feedbackTagOptions.map((tag) => {
+                      const active = visitFeedbackTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onToggleVisitFeedbackTag?.(tag);
+                          }}
+                          style={{
+                            height: 32,
+                            borderRadius: 999,
+                            border: active ? "1px solid #2563EB" : "1px solid #CBD5E1",
+                            background: active ? "#EFF6FF" : "#fff",
+                            color: active ? "#1D4ED8" : "#334155",
+                            fontSize: 12,
+                            fontWeight: 800,
+                            padding: "0 10px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <textarea
+                    value={visitFeedbackText}
+                    onChange={(e) => onVisitFeedbackTextChange?.(e.target.value)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    placeholder="실제 방문해보니 어땠는지 간단히 남겨주세요 (선택)"
+                    style={{
+                      width: "100%",
+                      minHeight: 72,
+                      borderRadius: 10,
+                      border: "1px solid #CBD5E1",
+                      padding: "10px",
+                      fontSize: 13,
+                      background: "#fff",
+                      resize: "vertical",
+                    }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
                     type="button"
                     onClick={(e) => {
@@ -580,12 +624,12 @@ export function RecommendationCard({
                       e.stopPropagation();
                       onSubmitVerification?.(e);
                     }}
-                    disabled={receiptVerifying || !receiptInput.trim() || !receiptFileName}
+                    disabled={receiptVerifying || !receiptFileName}
                     style={{
                       height: 38,
                       borderRadius: 10,
                       border: "none",
-                      background: receiptVerifying || !receiptInput.trim() || !receiptFileName ? "#93C5FD" : "#1D4ED8",
+                      background: receiptVerifying || !receiptFileName ? "#93C5FD" : "#1D4ED8",
                       color: "#fff",
                       fontWeight: 800,
                       fontSize: 12,
@@ -593,7 +637,7 @@ export function RecommendationCard({
                       cursor: receiptVerifying ? "wait" : "pointer",
                     }}
                   >
-                    {receiptVerifying ? "제출 중..." : "인증 제출하기"}
+                    {receiptVerifying ? "제출 중..." : "영수증 인증 제출하기"}
                   </button>
                   <button
                     type="button"

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
 import { resolveUserIdFromRequest } from "@/lib/server/userResolver";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -17,6 +20,20 @@ function namesMatched(selectedName: string | null | undefined, receiptName: stri
   const b = normalizeName(receiptName);
   if (!a || !b) return false;
   return a.includes(b) || b.includes(a);
+}
+
+function parseFeedbackTags(raw: FormDataEntryValue | null): string[] {
+  if (typeof raw !== "string" || raw.trim().length === 0) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 5);
+  } catch {
+    return [];
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -40,6 +57,12 @@ export async function POST(req: NextRequest) {
   const selectedPlaceLogId = String(form.get("selected_place_log_id") ?? "").trim();
   const receiptPlaceName = String(form.get("receipt_place_name") ?? "").trim();
   const receiptImage = form.get("receipt_image");
+  const feedbackTags = parseFeedbackTags(form.get("feedback_tags"));
+  const feedbackTextRaw = form.get("feedback_text");
+  const feedbackText =
+    typeof feedbackTextRaw === "string" && feedbackTextRaw.trim().length > 0
+      ? feedbackTextRaw.trim().slice(0, 500)
+      : null;
 
   if (!selectedPlaceLogId) {
     return NextResponse.json({ ok: false, error: "selected_place_log_id_required" }, { status: 400 });
@@ -108,6 +131,8 @@ export async function POST(req: NextRequest) {
       selected_place_id: selected.place_id,
       receipt_image_url: storagePath,
       receipt_place_name: receiptPlaceName,
+      feedback_tags: feedbackTags,
+      feedback_text: feedbackText,
       matched,
       status,
     });
@@ -123,6 +148,8 @@ export async function POST(req: NextRequest) {
       selected_place_log_id: selectedPlaceLogId,
       selected_place_name: selected.place_name,
       receipt_place_name: receiptPlaceName,
+      feedback_tags: feedbackTags,
+      feedback_text: feedbackText,
       matched,
       status,
       receipt_image_path: storagePath,

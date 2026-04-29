@@ -63,9 +63,10 @@ export default function PlaceDetailPage() {
   const [betaSelectedLogId, setBetaSelectedLogId] = useState<string | null>(null);
   const [betaVerifyOpen, setBetaVerifyOpen] = useState(false);
   const [betaSubmitted, setBetaSubmitted] = useState(false);
-  const [betaInput, setBetaInput] = useState("");
   const [betaReceiptFile, setBetaReceiptFile] = useState<File | null>(null);
   const [betaReceiptPreviewUrl, setBetaReceiptPreviewUrl] = useState<string | null>(null);
+  const [betaFeedbackTags, setBetaFeedbackTags] = useState<string[]>([]);
+  const [betaFeedbackText, setBetaFeedbackText] = useState("");
   const [betaSubmitting, setBetaSubmitting] = useState(false);
   const [betaMessage, setBetaMessage] = useState<string | null>(null);
   const { isSaved, toggleSaved } = useSaved();
@@ -256,10 +257,6 @@ export default function PlaceDetailPage() {
 
   const submitPlaceBetaVerification = async () => {
     if (betaSubmitting) return;
-    if (!betaInput.trim()) {
-      alert("방문한 매장명을 입력해 주세요.");
-      return;
-    }
     if (!betaReceiptFile) {
       alert("영수증 사진을 첨부해 주세요.");
       return;
@@ -283,8 +280,10 @@ export default function PlaceDetailPage() {
         body: (() => {
           const fd = new FormData();
           fd.set("selected_place_log_id", logId);
-          fd.set("receipt_place_name", betaInput.trim());
+          fd.set("receipt_place_name", card.name);
           fd.set("receipt_image", betaReceiptFile);
+          fd.set("feedback_tags", JSON.stringify(betaFeedbackTags));
+          fd.set("feedback_text", betaFeedbackText.trim());
           return fd;
         })(),
       });
@@ -650,9 +649,9 @@ export default function PlaceDetailPage() {
         >
           {!betaVerifyOpen && !betaSubmitted ? (
             <>
-              <div style={{ ...typo.cardTitle, fontSize: 15, margin: 0, fontWeight: 900 }}>방문 인증</div>
+              <div style={{ ...typo.cardTitle, fontSize: 15, margin: 0, fontWeight: 900 }}>영수증 인증</div>
               <div style={{ ...typo.caption, color: colors.textSecondary }}>
-                방문 후 인증하면 베타 참여가 기록돼요.
+                하마 추천으로 방문했다면 영수증 사진을 올려주세요. 관리자가 확인 후 참여 횟수에 반영돼요.
               </div>
               <div style={{ ...typo.caption, color: colors.textSecondary }}>
                 이 매장을 먼저 선택하면 인증할 수 있어요.
@@ -687,29 +686,14 @@ export default function PlaceDetailPage() {
 
           {betaVerifyOpen && !betaSubmitted ? (
             <>
-              <div style={{ ...typo.cardTitle, fontSize: 15, margin: 0, fontWeight: 900 }}>방문 인증</div>
+              <div style={{ ...typo.cardTitle, fontSize: 15, margin: 0, fontWeight: 900 }}>영수증 인증</div>
               <div style={{ ...typo.caption, color: colors.textSecondary }}>
-                방문한 매장명을 입력하면 관리자 확인 후 참여 횟수에 반영돼요.
+                하마 추천으로 방문했다면 영수증 사진을 올려주세요. 관리자가 확인 후 참여 횟수에 반영돼요.
               </div>
               <div style={{ ...typo.caption, color: colors.textSecondary }}>
                 개인정보가 보이지 않게 카드번호 일부나 전화번호는 가리고 올려주세요.
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <input
-                  value={betaInput}
-                  onChange={(e) => setBetaInput(e.target.value)}
-                  placeholder="방문한 매장명 입력"
-                  style={{
-                    flex: 1,
-                    minWidth: 170,
-                    height: 38,
-                    borderRadius: 10,
-                    border: "1px solid #CBD5E1",
-                    padding: "0 10px",
-                    fontSize: 13,
-                    background: "#fff",
-                  }}
-                />
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -721,17 +705,74 @@ export default function PlaceDetailPage() {
                       return file ? URL.createObjectURL(file) : null;
                     });
                   }}
-                  style={{ maxWidth: 220 }}
+                  style={{ width: "100%", maxWidth: 360 }}
                 />
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ ...typo.caption, color: colors.textPrimary, fontWeight: 900 }}>
+                  방문 후 어땠나요? (선택)
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {[
+                    "추천이 잘 맞았어요",
+                    "분위기가 생각과 달랐어요",
+                    "가족/아이와 가기 좋았어요",
+                    "조용하고 편했어요",
+                    "다시 방문하고 싶어요",
+                  ].map((tag) => {
+                    const active = betaFeedbackTags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() =>
+                          setBetaFeedbackTags((prev) =>
+                            prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
+                          )
+                        }
+                        style={{
+                          height: 32,
+                          borderRadius: 999,
+                          border: active ? "1px solid #2563EB" : "1px solid #CBD5E1",
+                          background: active ? "#EFF6FF" : "#fff",
+                          color: active ? "#1D4ED8" : "#334155",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          padding: "0 10px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+                <textarea
+                  value={betaFeedbackText}
+                  onChange={(e) => setBetaFeedbackText(e.target.value)}
+                  placeholder="실제 방문해보니 어땠는지 간단히 남겨주세요 (선택)"
+                  style={{
+                    width: "100%",
+                    minHeight: 72,
+                    borderRadius: 10,
+                    border: "1px solid #CBD5E1",
+                    padding: "10px",
+                    fontSize: 13,
+                    background: "#fff",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   type="button"
                   onClick={submitPlaceBetaVerification}
-                  disabled={betaSubmitting || !betaInput.trim() || !betaReceiptFile}
+                  disabled={betaSubmitting || !betaReceiptFile}
                   style={{
                     height: 38,
                     borderRadius: 10,
                     border: "none",
-                    background: betaSubmitting || !betaInput.trim() || !betaReceiptFile ? "#93C5FD" : "#1D4ED8",
+                    background: betaSubmitting || !betaReceiptFile ? "#93C5FD" : "#1D4ED8",
                     color: "#fff",
                     fontWeight: 800,
                     fontSize: 12,
@@ -739,7 +780,7 @@ export default function PlaceDetailPage() {
                     cursor: betaSubmitting ? "wait" : "pointer",
                   }}
                 >
-                  {betaSubmitting ? "제출 중..." : "인증 제출하기"}
+                  {betaSubmitting ? "제출 중..." : "영수증 인증 제출하기"}
                 </button>
               </div>
               {betaReceiptFile ? (

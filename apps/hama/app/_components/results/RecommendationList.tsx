@@ -65,9 +65,10 @@ export function RecommendationList({
   const [paymentSnapshot, setPaymentSnapshot] = React.useState<{ placeId: string; placeName: string } | null>(null);
   const [visitFeedbackSaving, setVisitFeedbackSaving] = React.useState(false);
   const [decisionSavingPlaceId, setDecisionSavingPlaceId] = React.useState<string | null>(null);
-  const [receiptInput, setReceiptInput] = React.useState("");
   const [receiptFile, setReceiptFile] = React.useState<File | null>(null);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = React.useState<string | null>(null);
+  const [visitFeedbackTags, setVisitFeedbackTags] = React.useState<string[]>([]);
+  const [visitFeedbackText, setVisitFeedbackText] = React.useState("");
   const [receiptVerifying, setReceiptVerifying] = React.useState(false);
   const [receiptResult, setReceiptResult] = React.useState<string | null>(null);
   const [verificationOpenPlaceId, setVerificationOpenPlaceId] = React.useState<string | null>(null);
@@ -88,8 +89,9 @@ export function RecommendationList({
     if (contextChanged) {
       setSelectedPlaceId(null);
       setSelectedPlaceLogId(null);
-      setReceiptInput("");
       setReceiptFile(null);
+      setVisitFeedbackTags([]);
+      setVisitFeedbackText("");
       setReceiptPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return null;
@@ -245,8 +247,9 @@ export function RecommendationList({
     } finally {
       setDecisionSavingPlaceId(null);
       setReceiptResult(null);
-      setReceiptInput("");
       setReceiptFile(null);
+      setVisitFeedbackTags([]);
+      setVisitFeedbackText("");
       setReceiptPreviewUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);
         return null;
@@ -269,10 +272,6 @@ export function RecommendationList({
       alert("로그인 후 참여 기록을 남길 수 있어요.");
       return;
     }
-    if (!receiptInput.trim()) {
-      alert("영수증 매장명을 입력해 주세요.");
-      return;
-    }
     if (!receiptFile) {
       alert("영수증 사진을 첨부해 주세요.");
       return;
@@ -289,6 +288,12 @@ export function RecommendationList({
       alert("선택 기록 저장 중이에요. 잠시 후 다시 눌러주세요.");
       return;
     }
+    const selectedCard = visibleRecommendations.find((card) => getCardPlaceId(card) === selectedPlaceId);
+    const selectedPlaceName = selectedCard?.name?.trim() ?? "";
+    if (!selectedPlaceName) {
+      alert("선택한 매장 정보를 찾을 수 없어요. 다시 선택해 주세요.");
+      return;
+    }
     try {
       setReceiptVerifying(true);
       setReceiptResult(null);
@@ -298,8 +303,10 @@ export function RecommendationList({
         body: (() => {
           const fd = new FormData();
           fd.set("selected_place_log_id", selectedPlaceLogId);
-          fd.set("receipt_place_name", receiptInput.trim());
+          fd.set("receipt_place_name", selectedPlaceName);
           fd.set("receipt_image", receiptFile);
+          fd.set("feedback_tags", JSON.stringify(visitFeedbackTags));
+          fd.set("feedback_text", visitFeedbackText.trim());
           return fd;
         })(),
       });
@@ -328,8 +335,9 @@ export function RecommendationList({
   const resetSelection = () => {
     setSelectedPlaceId(null);
     setSelectedPlaceLogId(null);
-    setReceiptInput("");
     setReceiptFile(null);
+    setVisitFeedbackTags([]);
+    setVisitFeedbackText("");
     setReceiptPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
       return null;
@@ -490,12 +498,12 @@ export function RecommendationList({
             showVisitVerification={shouldShowReceiptVerify}
             verificationExpanded={isVerificationExpanded}
             verificationSubmitted={isVerificationSubmitted}
-            receiptInput={shouldShowReceiptVerify ? receiptInput : ""}
             receiptFileName={shouldShowReceiptVerify && receiptFile ? receiptFile.name : null}
             receiptPreviewUrl={shouldShowReceiptVerify ? receiptPreviewUrl : null}
+            visitFeedbackTags={shouldShowReceiptVerify ? visitFeedbackTags : []}
+            visitFeedbackText={shouldShowReceiptVerify ? visitFeedbackText : ""}
             receiptVerifying={shouldShowReceiptVerify ? receiptVerifying : false}
             receiptResult={shouldShowReceiptVerify ? receiptResult : null}
-            onReceiptInputChange={(value) => setReceiptInput(value)}
             onReceiptFileChange={(file) => {
               setReceiptFile(file);
               setReceiptPreviewUrl((prev) => {
@@ -503,6 +511,12 @@ export function RecommendationList({
                 return file ? URL.createObjectURL(file) : null;
               });
             }}
+            onToggleVisitFeedbackTag={(tag) => {
+              setVisitFeedbackTags((prev) =>
+                prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
+              );
+            }}
+            onVisitFeedbackTextChange={(value) => setVisitFeedbackText(value)}
             onToggleVerification={(e) => {
               e.preventDefault();
               e.stopPropagation();

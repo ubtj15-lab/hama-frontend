@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type PendingItem = {
   id: string;
@@ -11,6 +12,8 @@ type PendingItem = {
   receipt_place_name: string | null;
   receipt_image_url: string | null;
   receipt_image_signed_url: string | null;
+  feedback_tags?: string[];
+  feedback_text?: string | null;
   created_at: string;
   status: "pending" | "approved" | "rejected";
   matched: boolean;
@@ -28,10 +31,12 @@ type RewardTarget = {
 type Res = {
   ok: boolean;
   pending: PendingItem[];
+  rewards?: RewardTarget[];
   reward_targets: RewardTarget[];
   error?: string;
   detail?: string;
 };
+type AdminAction = "approve" | "reject";
 
 function formatKstDateTime(value: string | null | undefined): string {
   if (!value) return "-";
@@ -48,25 +53,43 @@ function formatKstDateTime(value: string | null | undefined): string {
 }
 
 export default function AdminBetaVerificationsPage() {
+  const router = useRouter();
   const [loading, setLoading] = React.useState(false);
   const [savingId, setSavingId] = React.useState<string | null>(null);
   const [msg, setMsg] = React.useState("");
+  const [debugMessage, setDebugMessage] = React.useState("");
   const [pending, setPending] = React.useState<PendingItem[]>([]);
   const [rewardTargets, setRewardTargets] = React.useState<RewardTarget[]>([]);
+  const [lastLoadStatus, setLastLoadStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
+  const [lastLoadInfo, setLastLoadInfo] = React.useState<{ ok: boolean; error?: string; detail?: string } | null>(null);
 
   const load = React.useCallback(async () => {
+    setLastLoadStatus("loading");
     setLoading(true);
     setMsg("");
     try {
       const res = await fetch("/api/admin/beta-verifications?limit=120", { cache: "no-store" });
       const json = (await res.json()) as Res;
       if (!res.ok || !json.ok) {
+        setLastLoadStatus("error");
+        setLastLoadInfo({ ok: false, error: json.error, detail: json.detail });
         setMsg(json.error ?? "로드 실패");
         return;
       }
-      setPending(json.pending ?? []);
-      setRewardTargets(json.reward_targets ?? []);
+      const nextPending = Array.isArray(json.pending) ? json.pending : [];
+      const rewardSource = json.rewards ?? json.reward_targets ?? [];
+      const nextRewards = Array.isArray(rewardSource) ? rewardSource : [];
+      setPending(nextPending);
+      setRewardTargets(nextRewards);
+      setLastLoadStatus("success");
+      setLastLoadInfo({ ok: true });
+      console.log("[admin beta verifications loaded]", {
+        pendingCount: nextPending.length,
+        rewardCount: nextRewards.length,
+      });
     } catch {
+      setLastLoadStatus("error");
+      setLastLoadInfo({ ok: false, error: "fetch_failed" });
       setMsg("로드 중 오류");
     } finally {
       setLoading(false);
@@ -77,7 +100,13 @@ export default function AdminBetaVerificationsPage() {
     void load();
   }, [load]);
 
-  const act = async (verificationId: string, action: "approve" | "reject") => {
+  const act = async (verificationId: string, action: AdminAction) => {
+    console.log("[admin verification action clicked]", { verificationId, action });
+    if (action !== "approve" && action !== "reject") {
+      setDebugMessage(`invalid action: ${String(action)}`);
+      return;
+    }
+    if (savingId) return;
     setSavingId(verificationId);
     setMsg("");
     try {
@@ -90,16 +119,29 @@ export default function AdminBetaVerificationsPage() {
         ok?: boolean;
         error?: string;
         detail?: string;
-        visit_count?: number;
+        newVisitCount?: number;
+        counted?: boolean;
+        updatedVerification?: { id: string; status: string; matched: boolean };
       };
       if (!res.ok || !json.ok) {
+        console.error("[admin verification action response failed]", {
+          status: res.status,
+          data: json,
+        });
         setMsg(`${action === "approve" ? "승인" : "거절"} 실패: ${json.error ?? "unknown"}`);
+        alert(`${action === "approve" ? "승인" : "거절"} 실패: ${json.error ?? "unknown"}`);
         return;
       }
-      setMsg(`${action === "approve" ? "승인" : "거절"} 완료 (visit_count: ${json.visit_count ?? "-"})`);
+      setPending((prev) => prev.filter((item) => item.id !== verificationId));
+      setMsg(
+        `${action} 성공: pending 목록에서 제거됨 · visit_count: ${json.newVisitCount ?? "-"}`
+      );
       await load();
+      router.refresh();
     } catch {
       setMsg(`${action === "approve" ? "승인" : "거절"} 중 오류`);
+      console.error("[admin verification action request failed]", { verificationId, action });
+      alert(`${action === "approve" ? "승인" : "거절"} 중 오류`);
     } finally {
       setSavingId(null);
     }
@@ -128,6 +170,27 @@ export default function AdminBetaVerificationsPage() {
           {msg}
         </div>
       ) : null}
+      <div
+        style={{
+          marginBottom: 12,
+          borderRadius: 10,
+          border: "1px solid #E2E8F0",
+          background: "#fff",
+          padding: "10px 12px",
+          fontSize: 12,
+          color: "#334155",
+        }}
+      >
+        lastLoadStatus: <b>{lastLoadStatus}</b> · pendingCount: <b>{pending.length}</b> · rewardCount: <b>{rewardTargets.length}</b>
+        <br />
+        lastApi: <b>{lastLoadInfo ? (lastLoadInfo.ok ? "ok:true" : `ok:false (${lastLoadInfo.error ?? "unknown"})`) : "n/a"}</b>
+        {debugMessage ? (
+          <>
+            <br />
+            debugMessage: <b>{debugMessage}</b>
+          </>
+        ) : null}
+      </div>
 
       <section style={{ border: "1px solid #E2E8F0", borderRadius: 12, background: "#fff", padding: 12, marginBottom: 14 }}>
         <div style={{ fontWeight: 900, marginBottom: 6 }}>승인 대기 목록</div>
@@ -180,6 +243,32 @@ export default function AdminBetaVerificationsPage() {
                     ) : (
                       <div style={{ color: "#94A3B8" }}>이미지 없음</div>
                     )}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    borderRadius: 8,
+                    border: "1px solid #E2E8F0",
+                    background: "#F8FAFC",
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    color: "#334155",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: 800, color: "#0F172A" }}>후기 태그: </span>
+                    {Array.isArray(p.feedback_tags) && p.feedback_tags.length > 0
+                      ? p.feedback_tags.join(", ")
+                      : "후기 없음"}
+                  </div>
+                  <div>
+                    <span style={{ fontWeight: 800, color: "#0F172A" }}>한줄 후기: </span>
+                    {typeof p.feedback_text === "string" && p.feedback_text.trim().length > 0
+                      ? p.feedback_text
+                      : "후기 없음"}
                   </div>
                 </div>
 
