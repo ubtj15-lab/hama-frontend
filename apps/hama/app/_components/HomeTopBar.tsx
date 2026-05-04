@@ -28,7 +28,7 @@ export default function HomeTopBar({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        marginBottom: 18,
+        marginBottom: 8,
         position: "relative",
         zIndex: 50,
       }}

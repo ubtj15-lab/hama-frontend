@@ -12,6 +12,11 @@ import { mergeLogPayload, type AnalyticsContext } from "@/lib/analytics/buildLog
 import { openDirections } from "@/lib/openDirections";
 import { stashPlaceForSession } from "@/lib/session/placeSession";
 import { RECOMMEND_DECK_SIZE } from "@/lib/recommend/recommendConstants";
+import {
+  getCardExposureId,
+  saveRecentExposedStoreIds,
+  saveRecentExposedStoreNames,
+} from "@/lib/recommend/recentExposure";
 
 /** 카드 대신 짧은 리스트만 — `NEXT_PUBLIC_DEBUG_MINIMAL_SEARCH=1` */
 const MINIMAL_SEARCH_UI = process.env.NEXT_PUBLIC_DEBUG_MINIMAL_SEARCH === "1";
@@ -63,6 +68,21 @@ export function SearchResultSection({ results: resultsProp, scenarioObject, logB
   );
   const slice = cardsForUi.slice(0, RECOMMEND_DECK_SIZE);
   const deckReasons = useDeckRecommendationReasons(cardsForUi, scenarioObject ?? null);
+
+  useEffect(() => {
+    const exposed = slice.slice(0, 3);
+    if (exposed.length === 0) return;
+    const exposedIds = exposed.map((card) => getCardExposureId(card)).filter(Boolean);
+    if (exposedIds.length === 0) return;
+    const exposedNames = exposed.map((card) => displayNameForPlace(card)).filter(Boolean);
+    const storageAfterSave = saveRecentExposedStoreIds(exposedIds);
+    saveRecentExposedStoreNames(exposedNames);
+    console.log("[search result recent exposure saved]", {
+      exposedIds,
+      exposedNames,
+      storageAfterSave,
+    });
+  }, [slice]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "development") {

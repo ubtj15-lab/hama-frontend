@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useLayoutEffect, useMemo, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { logRecommendationPlace } from "@/lib/analytics/recommendationPlaceLog";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
@@ -145,6 +145,13 @@ export function RecommendationCard({
   const impressOnce = useRef(false);
   const rankOrder = rank + 1;
   const isTop = rankOrder === 1;
+  const [postVisitOpen, setPostVisitOpen] = useState(false);
+
+  useEffect(() => {
+    if (selected && showVisitVerification) {
+      setPostVisitOpen(true);
+    }
+  }, [selected, showVisitVerification]);
 
   useLayoutEffect(() => {
     if (impressOnce.current || !cardEl.current) return;
@@ -397,49 +404,75 @@ export function RecommendationCard({
                 {selected ? "선택 완료" : "여기로 결정"}
               </button>
             </div>
-            {selected && isHamaPayEnabled ? (
-              <div
-                style={{
-                  marginTop: 8,
-                  borderRadius: 12,
-                  border: "1px solid #BBF7D0",
-                  background: "#F0FDF4",
-                  padding: "10px 12px",
-                  display: "grid",
-                  gap: 8,
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>
-                  방문 후 HAMA Pay로 결제하면 자동으로 참여 기록돼요
-                </div>
-                {SHOW_HAMA_PAY_MOCK ? (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onMockPayment?.();
-                    }}
-                    disabled={mockPaymentBusy}
-                    style={{
-                      height: 40,
-                      borderRadius: 10,
-                      border: "none",
-                      background: mockPaymentBusy ? "#86EFAC" : "#16A34A",
-                      color: "#fff",
-                      fontSize: 13,
-                      fontWeight: 900,
-                      cursor: mockPaymentBusy ? "wait" : "pointer",
-                    }}
-                  >
-                    {mockPaymentBusy ? "처리 중..." : "결제 완료 테스트"}
-                  </button>
-                ) : null}
+            {(showVerificationEntry || isHamaPayEnabled) ? (
+              <div onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPostVisitOpen((prev) => !prev);
+                  }}
+                  style={{
+                    marginTop: 8,
+                    width: "100%",
+                    height: 36,
+                    borderRadius: 10,
+                    border: "1px solid #E2E8F0",
+                    background: "#fff",
+                    color: "#475569",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  방문 후 인증/피드백 남기기 {postVisitOpen ? "▴" : "▾"}
+                </button>
               </div>
             ) : null}
           </div>
         </div>
-        {showVerificationEntry ? (
+        {postVisitOpen && selected && isHamaPayEnabled ? (
+          <div
+            style={{
+              marginTop: 12,
+              borderRadius: 12,
+              border: "1px solid #BBF7D0",
+              background: "#F0FDF4",
+              padding: "10px 12px",
+              display: "grid",
+              gap: 8,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#166534" }}>
+              방문 후 HAMA Pay로 결제하면 자동으로 참여 기록돼요
+            </div>
+            {SHOW_HAMA_PAY_MOCK ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMockPayment?.();
+                }}
+                disabled={mockPaymentBusy}
+                style={{
+                  height: 40,
+                  borderRadius: 10,
+                  border: "none",
+                  background: mockPaymentBusy ? "#86EFAC" : "#16A34A",
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  cursor: mockPaymentBusy ? "wait" : "pointer",
+                }}
+              >
+                {mockPaymentBusy ? "처리 중..." : "결제 완료 테스트"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {postVisitOpen && showVerificationEntry ? (
           <div
             style={{
               marginTop: 16,

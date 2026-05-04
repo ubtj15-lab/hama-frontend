@@ -1,27 +1,258 @@
 "use client";
 
 import React, { useState } from "react";
-import { colors, radius, shadow, space } from "@/lib/designTokens";
+import { colors, radius, shadow } from "@/lib/designTokens";
+import type { HomeResultsNavParams } from "@/lib/homeResultsNavParams";
 import { Touchable } from "@ui/Touchable";
 
-export const QUICK_CATEGORY_CANDIDATES: {
+const CATEGORY_SPRITE_SRC = "/home/home-category-icons-grid.png";
+
+/** 코스 카드 — 배경 없는 SVG 3종 (A안) */
+const COURSE_ICON_SRCS = [
+  "/home/course-icon-restaurant.svg",
+  "/home/course-icon-cafe.svg",
+  "/home/course-icon-camera.svg",
+] as const;
+
+const SPRITE_COLS = 4;
+const SPRITE_ROWS = 2;
+
+export type QuickCategoryItem = {
   label: string;
   subtitle: string;
   query: string;
-  icon: string;
   bg: string;
-}[] = [
-  { label: "푸드", subtitle: "식당 중심", query: "식당 추천해줘", icon: "🍴", bg: "#FFF3E7" },
-  { label: "카페", subtitle: "커피·디저트·베이커리", query: "카페 추천해줘 디저트 베이커리", icon: "☕", bg: "#EEF6FF" },
-  { label: "미용실", subtitle: "헤어·네일·속눈썹·제모", query: "미용실 추천해줘", icon: "💇", bg: "#F3EFFF" },
-  { label: "액티비티", subtitle: "체험·게임·전시", query: "액티비티 추천해줘 체험 게임 박물관", icon: "🎨", bg: "#EDFAF3" },
-  { label: "코스", subtitle: "식당+카페+액티비티", query: "코스 추천해줘 식당 카페 액티비티", icon: "🗺️", bg: colors.category.course },
+  /** 0..7 — `home-category-icons-grid.png` (4×2, 행: 푸드~문화 / 뷰티~키즈·가족) */
+  spriteIndex: number;
+  expandsBeauty?: boolean;
+  /** /results? 에 intent·category·mode 명시 (퀵 그리드 전용) */
+  nav?: HomeResultsNavParams;
+};
+
+/** 홈 1차 카테고리 (스프라이트 순서와 동일) — 배경은 목업 파스텔에 맞춤 */
+export const QUICK_CATEGORY_CANDIDATES: QuickCategoryItem[] = [
+  {
+    label: "푸드",
+    subtitle: "식당·맛집",
+    query: "식당",
+    spriteIndex: 0,
+    bg: "#FFF5EB",
+    nav: { intent: "food_general", category: "restaurant" },
+  },
+  {
+    label: "카페",
+    subtitle: "커피·디저트·베이커리",
+    query: "카페 커피 디저트 베이커리 추천해줘",
+    spriteIndex: 1,
+    bg: "#FFE4CC",
+    nav: { intent: "cafe_general", category: "cafe" },
+  },
+  {
+    label: "액티비티",
+    subtitle: "체험·놀이·전시",
+    query: "액티비티 추천해줘 체험 놀이 전시",
+    spriteIndex: 2,
+    bg: "#E6F7ED",
+    nav: { intent: "activity_general", category: "activity" },
+  },
+  {
+    label: "문화",
+    subtitle: "전시·공연·영화·책",
+    query: "박물관",
+    spriteIndex: 3,
+    bg: "#EDE7F6",
+  },
+  { label: "뷰티", subtitle: "헤어·네일·관리", query: "미용실 추천해줘", spriteIndex: 4, bg: "#FCE7EF", expandsBeauty: true },
+  {
+    label: "운동",
+    subtitle: "헬스·필라테스·수영",
+    query: "운동 추천해줘 헬스 필라테스 수영",
+    spriteIndex: 5,
+    bg: "#E0F0FA",
+    nav: { intent: "fitness_general", category: "fitness" },
+  },
+  {
+    label: "생활",
+    subtitle: "병원·약국·세탁·편의",
+    query: "생활 편의 병원 약국 세탁 추천해줘",
+    spriteIndex: 6,
+    bg: "#E9F5EA",
+    nav: { intent: "life_general", category: "life" },
+  },
+  {
+    label: "키즈/가족",
+    subtitle: "아이와 함께·주말 나들이",
+    query: "가족 나들이 아이랑 추천해줘",
+    spriteIndex: 7,
+    bg: "#FFF8DC",
+    nav: { intent: "family_outing", category: "activity" },
+  },
 ];
 
-const HOME_GRID_ITEMS = QUICK_CATEGORY_CANDIDATES.slice(0, 4);
-const HOME_COURSE_ITEM = QUICK_CATEGORY_CANDIDATES[4];
+const HOME_COURSE = {
+  label: "코스 추천",
+  subtitle: "식당+카페+산책+체험",
+  query: "코스 추천해줘 식당 카페 산책 체험",
+  bg: "#F3ECD4",
+  nav: { intent: "course_general", category: "mixed", mode: "course" } satisfies HomeResultsNavParams,
+} as const;
 
-type Props = { onPick: (query: string) => void };
+/** 카테고리 타일 — 스프라이트 PNG는 48px 그리드, 표시 셀(클립) 크기 */
+const ICON_SPRITE_CELL = 54;
+
+/** 둥근 네모 없음 — 클립 영역 배경을 카드와 동일하게 두고 multiply로 PNG 흰 테두리 제거 */
+
+function CoursePin() {
+  return (
+    <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden style={{ display: "block", flexShrink: 0 }}>
+      <path
+        d="M6 13C6 13 1 8.5 1 5C1 2.8 2.8 1 5 1C7.2 1 9 2.8 9 5C9 8.5 6 13 6 13Z"
+        fill="#EA580C"
+        stroke="#C2410C"
+        strokeWidth="0.6"
+      />
+      <circle cx="5" cy="5" r="1.4" fill="#FFF7ED" />
+    </svg>
+  );
+}
+
+const COURSE_ICON_BOX = 58;
+const COURSE_ICON_GAP = 10;
+
+/** 투명 SVG 3개 + 점선 + 핀 — 아이콘 행 / 핀 행 분리로 같은 열 폭·수직선 맞춤 */
+function CourseIconsRow() {
+  const slotW = COURSE_ICON_BOX;
+  const gapW = COURSE_ICON_GAP;
+
+  const iconCell = (src: (typeof COURSE_ICON_SRCS)[number]) => (
+    <div
+      key={src}
+      style={{
+        width: slotW,
+        height: slotW,
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- 정적 로컬 SVG */}
+      <img
+        src={src}
+        alt=""
+        width={54}
+        height={54}
+        decoding="async"
+        style={{ display: "block", width: 54, height: 54, objectFit: "contain" }}
+      />
+    </div>
+  );
+
+  const dashCell = (i: number) => (
+    <div
+      key={`dash-${i}`}
+      aria-hidden
+      style={{
+        width: gapW,
+        height: slotW,
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div style={{ width: "100%", borderTop: "2px dashed rgba(90, 78, 58, 0.42)" }} />
+    </div>
+  );
+
+  const pinCell = (i: number) => (
+    <div
+      key={`pin-${i}`}
+      style={{
+        width: slotW,
+        flexShrink: 0,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-start",
+      }}
+    >
+      <CoursePin />
+    </div>
+  );
+
+  const spacerCell = (i: number) => (
+    <div key={`sp-${i}`} aria-hidden style={{ width: gapW, flexShrink: 0 }} />
+  );
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: 2,
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "flex-start" }}>
+        {iconCell(COURSE_ICON_SRCS[0])}
+        {dashCell(0)}
+        {iconCell(COURSE_ICON_SRCS[1])}
+        {dashCell(1)}
+        {iconCell(COURSE_ICON_SRCS[2])}
+      </div>
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", justifyContent: "flex-start" }}>
+        {pinCell(0)}
+        {spacerCell(0)}
+        {pinCell(1)}
+        {spacerCell(1)}
+        {pinCell(2)}
+      </div>
+    </div>
+  );
+}
+
+function CategorySpriteOnly({ spriteIndex, cardBg }: { spriteIndex: number; cardBg: string }) {
+  const col = spriteIndex % SPRITE_COLS;
+  const row = Math.floor(spriteIndex / SPRITE_COLS);
+  const w = ICON_SPRITE_CELL * SPRITE_COLS;
+  const h = ICON_SPRITE_CELL * SPRITE_ROWS;
+  return (
+    <div
+      aria-hidden
+      style={{
+        width: ICON_SPRITE_CELL,
+        height: ICON_SPRITE_CELL,
+        position: "relative",
+        overflow: "hidden",
+        flexShrink: 0,
+        background: cardBg,
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- 스프라이트 클리핑용 정적 에셋 */}
+      <img
+        src={CATEGORY_SPRITE_SRC}
+        alt=""
+        width={w}
+        height={h}
+        style={{
+          position: "absolute",
+          left: -col * ICON_SPRITE_CELL,
+          top: -row * ICON_SPRITE_CELL,
+          width: w,
+          height: h,
+          objectFit: "fill",
+          display: "block",
+          pointerEvents: "none",
+          mixBlendMode: "multiply",
+        }}
+      />
+    </div>
+  );
+}
+
+type Props = { onPick: (query: string, nav?: HomeResultsNavParams) => void };
 
 export function QuickScenarioGrid({ onPick }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
@@ -29,44 +260,74 @@ export function QuickScenarioGrid({ onPick }: Props) {
   const [beautySubCategory, setBeautySubCategory] = useState<"hair" | "nail" | "eyelash" | "waxing" | null>(null);
 
   const beautyQueryMap: Record<"hair" | "nail" | "eyelash" | "waxing", string> = {
-    hair: "미용실 추천해줘 헤어 커트 펌 염색",
+    hair: "미용실 헤어 헤어샵 살롱 커트 컷 펌 염색 두피 클리닉 추천해줘",
     nail: "미용실 추천해줘 네일 네일아트",
     eyelash: "미용실 추천해줘 속눈썹 래쉬",
     waxing: "미용실 추천해줘 제모 왁싱",
   };
 
+  const beautyNavMap: Record<"hair" | "nail" | "eyelash" | "waxing", HomeResultsNavParams> = {
+    hair: { intent: "beauty_hair", category: "beauty" },
+    nail: { intent: "beauty_nail", category: "beauty" },
+    eyelash: { intent: "beauty_lash", category: "beauty" },
+    waxing: { intent: "beauty_waxing", category: "beauty" },
+  };
+
   return (
-    <div
-      style={{
-        marginBottom: space.section,
-      }}
-    >
+    <div style={{ marginBottom: 12 }}>
+      <p
+        style={{
+          margin: "0 0 6px",
+          fontSize: 12,
+          fontWeight: 800,
+          color: colors.textSecondary,
+          textAlign: "center",
+          letterSpacing: "-0.02em",
+        }}
+      >
+        ✨ 카테고리에서 바로 시작해도 좋아요
+      </p>
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
-          gap: 12,
+          gap: 8,
         }}
       >
-        {HOME_GRID_ITEMS.map((it) => {
+        {QUICK_CATEGORY_CANDIDATES.map((it) => {
           const on = selected === it.label;
           return (
             <Touchable key={it.label}>
               <button
                 type="button"
+                aria-label={`${it.label}, ${it.subtitle}`}
                 onClick={() => {
                   setSelected(it.label);
-                  if (it.label === "미용실") {
+                  if (it.expandsBeauty) {
                     setBeautyExpanded(true);
                     return;
                   }
                   setBeautyExpanded(false);
                   setBeautySubCategory(null);
-                  onPick(it.query);
+                  /** 문화만: goResults/onPick 우회 → URL q-only와 브라우저 풀 네비로 직접 검색과 동일 */
+                  if (it.label === "문화" && typeof window !== "undefined") {
+                    const targetUrl = "/results?q=%EB%B0%95%EB%AC%BC%EA%B4%80";
+                    console.log("[culture actual button clicked]", {
+                      file: "QuickScenarioGrid.tsx",
+                      component: "QuickScenarioGrid",
+                      label: it.label,
+                      query: it.query,
+                      nav: it.nav ?? null,
+                      targetUrl,
+                    });
+                    window.location.assign(targetUrl);
+                    return;
+                  }
+                  onPick(it.query, it.nav);
                 }}
                 className="hama-press"
                 style={{
-                  minHeight: 106,
+                  minHeight: 82,
                   width: "100%",
                   borderRadius: radius.card,
                   border: on ? `2px solid ${colors.accentPrimary}` : `1px solid ${colors.borderSubtle}`,
@@ -77,15 +338,23 @@ export function QuickScenarioGrid({ onPick }: Props) {
                   boxSizing: "border-box",
                   transition: "border-color 150ms ease",
                   textAlign: "left",
-                  padding: "14px 14px 12px",
+                  padding: "8px 10px 8px 8px",
                 }}
               >
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <span aria-hidden style={{ display: "inline-flex", lineHeight: 1, fontSize: 21 }}>
-                    {it.icon}
-                  </span>
-                  <strong style={{ fontSize: 18, letterSpacing: "-0.03em" }}>{it.label}</strong>
-                  <span style={{ fontSize: 13, color: colors.textSecondary, fontWeight: 700 }}>{it.subtitle}</span>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                    minWidth: 0,
+                  }}
+                >
+                  <CategorySpriteOnly spriteIndex={it.spriteIndex} cardBg={it.bg} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0, justifyContent: "center" }}>
+                    <strong style={{ fontSize: 15, letterSpacing: "-0.03em" }}>{it.label}</strong>
+                    <span style={{ fontSize: 11, color: colors.textSecondary, fontWeight: 700, lineHeight: 1.25 }}>{it.subtitle}</span>
+                  </div>
                 </div>
               </button>
             </Touchable>
@@ -95,14 +364,14 @@ export function QuickScenarioGrid({ onPick }: Props) {
       {beautyExpanded ? (
         <div
           style={{
-            marginTop: 12,
+            marginTop: 8,
             borderRadius: radius.card,
             border: `1px solid ${colors.borderSubtle}`,
             background: "#fff",
-            padding: "12px 12px 10px",
+            padding: "10px 10px 8px",
           }}
         >
-          <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 900, color: colors.textPrimary }}>
+          <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 900, color: colors.textPrimary }}>
             어떤 관리를 찾고 있어요?
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -120,7 +389,7 @@ export function QuickScenarioGrid({ onPick }: Props) {
                   onClick={() => {
                     const next = opt.id as "hair" | "nail" | "eyelash" | "waxing";
                     setBeautySubCategory(next);
-                    onPick(beautyQueryMap[next]);
+                    onPick(beautyQueryMap[next], beautyNavMap[next]);
                   }}
                   style={{
                     height: 42,
@@ -140,61 +409,80 @@ export function QuickScenarioGrid({ onPick }: Props) {
           </div>
         </div>
       ) : null}
-      {HOME_COURSE_ITEM ? (
-        <div style={{ marginTop: 12 }}>
-          <Touchable>
-            <button
-              type="button"
-              onClick={() => {
-                setSelected(HOME_COURSE_ITEM.label);
-                onPick(HOME_COURSE_ITEM.query);
-              }}
-              className="hama-press"
+      <div style={{ marginTop: 8 }}>
+        <Touchable>
+          <button
+            type="button"
+            aria-label={`${HOME_COURSE.label}, ${HOME_COURSE.subtitle}`}
+            onClick={() => {
+              setSelected(HOME_COURSE.label);
+              setBeautyExpanded(false);
+              setBeautySubCategory(null);
+              onPick(HOME_COURSE.query, HOME_COURSE.nav);
+            }}
+            className="hama-press"
+            style={{
+              minHeight: 94,
+              width: "100%",
+              borderRadius: radius.card,
+              border:
+                selected === HOME_COURSE.label
+                  ? `2px solid ${colors.accentPrimary}`
+                  : `1px solid ${colors.borderSubtle}`,
+              background: HOME_COURSE.bg,
+              color: colors.textPrimary,
+              cursor: "pointer",
+              boxShadow: selected === HOME_COURSE.label ? shadow.card : "none",
+              boxSizing: "border-box",
+              textAlign: "left",
+              padding: "6px 12px 6px 6px",
+            }}
+          >
+            <div
               style={{
-                minHeight: 112,
-                width: "100%",
-                borderRadius: radius.card,
-                border:
-                  selected === HOME_COURSE_ITEM.label
-                    ? `2px solid ${colors.accentPrimary}`
-                    : `1px solid ${colors.borderSubtle}`,
-                background: HOME_COURSE_ITEM.bg,
-                color: colors.textPrimary,
-                cursor: "pointer",
-                boxShadow: selected === HOME_COURSE_ITEM.label ? shadow.card : "none",
-                boxSizing: "border-box",
-                textAlign: "left",
-                padding: "15px 14px 13px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "flex-start",
+                gap: 18,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <span style={{ display: "inline-flex", lineHeight: 1, fontSize: 21 }} aria-hidden>
-                    {HOME_COURSE_ITEM.icon}
-                  </span>
-                  <strong style={{ fontSize: 19, letterSpacing: "-0.03em" }}>{HOME_COURSE_ITEM.label}</strong>
-                  <span style={{ fontSize: 13, color: colors.textSecondary, fontWeight: 700 }}>
-                    {HOME_COURSE_ITEM.subtitle}
+              <CourseIconsRow />
+              <div
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 3,
+                  flex: 1,
+                  minWidth: 0,
+                  textAlign: "left",
+                  marginLeft: 6,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <strong style={{ fontSize: 16, letterSpacing: "-0.03em" }}>{HOME_COURSE.label}</strong>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 900,
+                      letterSpacing: "0.01em",
+                      color: "#C41E3A",
+                      background: "rgba(254, 226, 226, 0.95)",
+                      border: "1px solid rgba(220, 38, 38, 0.22)",
+                      borderRadius: 999,
+                      padding: "3px 8px",
+                    }}
+                  >
+                    인기
                   </span>
                 </div>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 900,
-                    letterSpacing: "0.01em",
-                    color: colors.accentPrimary,
-                    background: "rgba(255,255,255,0.9)",
-                    borderRadius: 999,
-                    padding: "6px 10px",
-                  }}
-                >
-                  묶음 추천
-                </span>
+                <span style={{ fontSize: 11, color: colors.textSecondary, fontWeight: 700, lineHeight: 1.25 }}>{HOME_COURSE.subtitle}</span>
               </div>
-            </button>
-          </Touchable>
-        </div>
-      ) : null}
+            </div>
+          </button>
+        </Touchable>
+      </div>
     </div>
   );
 }

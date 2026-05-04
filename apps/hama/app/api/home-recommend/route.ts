@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { filterRowsByServiceRegion } from "@/lib/serviceRegion";
+import { categoriesForHomeTab } from "@/lib/storeCategoryFilters";
+import type { HomeTabKey } from "@/lib/storeTypes";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -74,15 +76,19 @@ export async function GET(req: Request) {
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-    // ✅ 카테고리 탭: 해당 카테고리에서 count개 (새로고침마다 랜덤)
+    // ✅ 카테고리 탭: FD6/CE7 등 DB 코드까지 `.in`으로 매칭 (단일 .eq(tab)은 0건 방지)
     if (tab !== "all") {
-      const { data, error } = await supabase
+      const catList = categoriesForHomeTab(tab as HomeTabKey);
+      let q = supabase
         .from("stores")
         .select("*")
-        .eq("category", tab)
         .not("name", "is", null)
         .neq("name", "")
         .order("id", { ascending: false }); // ✅ deterministic 제거 목적: 아래에서 랜덤 셔플
+      if (catList && catList.length > 0) {
+        q = q.in("category", catList);
+      }
+      const { data, error } = await q;
 
       if (error) {
         console.error("[home-recommend] supabase error:", error);
@@ -109,15 +115,19 @@ export async function GET(req: Request) {
     // (DB random()을 못 쓰는 상황에서도 랜덤 체감 확보)
     const oversample = (n: number) => Math.min(Math.max(n * 6, 60), 400);
 
-    const queries = plan.map((p) =>
-      supabase
+    const queries = plan.map((p) => {
+      const catList = categoriesForHomeTab(p.category as HomeTabKey);
+      let q = supabase
         .from("stores")
         .select("*")
-        .eq("category", p.category)
         .not("name", "is", null)
         .neq("name", "")
-        .limit(oversample(p.n))
-    );
+        .limit(oversample(p.n));
+      if (catList && catList.length > 0) {
+        q = q.in("category", catList);
+      }
+      return q;
+    });
 
     const results = await Promise.all(queries);
 

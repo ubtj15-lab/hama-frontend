@@ -5,7 +5,11 @@
 import type { HomeCard } from "@/lib/storeTypes";
 import type { RecommendScenarioKey } from "@/lib/recommend/scenarioWeights";
 import { businessStateFromCard, type BusinessState } from "@/lib/recommend/scoreParts";
-import { childFriendlyScore, shouldBlockKidFriendlyMessaging } from "@/lib/recommend/childFriendlyScore";
+import {
+  childFriendlyScore,
+  isAlcoholNightlifeVenue,
+  shouldBlockKidFriendlyMessaging,
+} from "@/lib/recommend/childFriendlyScore";
 import {
   inferServingTypeForRecommendation,
   pickRecommendationPair,
@@ -314,7 +318,7 @@ export function buildRecommendationReason(
     subline = subline.includes("영업 정보") ? subline : `${subline} · 영업 정보는 방문 전 확인해 주세요`;
   }
 
-  if (card.category === "museum" || /박물관|museum|전시/.test(b)) {
+  if (!isAlcoholNightlifeVenue(card) && (card.category === "museum" || /박물관|museum|전시/.test(b))) {
     headline = "오늘 비 와서 실내 체험 좋아";
     if (/아이|키즈|체험/.test(b)) {
       subline = "아이가 좋아할 만한 전시 진행 중";
@@ -353,7 +357,7 @@ export function buildRecommendationReason(
 
   const regionTrust = regionTrustLine(card);
 
-  const scenarioLabel =
+  let scenarioLabel =
     scenarioLabelLineFromCompanions(opts?.profileCompanions) ??
     (voice === "family"
       ? "🔥 아이랑 가기 좋아"
@@ -364,6 +368,19 @@ export function buildRecommendationReason(
           : voice === "group"
             ? "🔥 친구랑 가기 좋아"
             : "🔥 지금 가기 좋아");
+
+  if (isAlcoholNightlifeVenue(card)) {
+    scenarioLabel = "🔥 저녁·모임";
+    if (biz !== "CLOSED") {
+      headline = "저녁 모임·술자리 분위기로 무난해요";
+      subline = "가볍게 한 잔 이어가기 좋은 편이에요 · 매장 연령·영업은 방문 전 확인해 주세요";
+    }
+    const kidFamRe = /아이랑|가족이랑|아이동반|어린이|키즈|가족\s*외식|아이와\s*함께|유아/;
+    badges = badges.filter((t) => !kidFamRe.test(t)).slice(0, 3);
+    if (badges.length < 2) {
+      badges = ["저녁·모임 동선이 단순해요", "술자리 전 분위기는 리뷰로 한 번 더 확인해 주세요"];
+    }
+  }
 
   return {
     scenarioLabel,
@@ -388,7 +405,11 @@ export function buildRecommendationBullets(
   const bullets: string[] = [];
   const v = resolveEffectiveRecommendationVoice(card, opts);
   const serving = opts?.servingType ?? inferServingTypeForRecommendation(card);
-  if ((v === "family" || /아이|가족/.test(reason.headline)) && !shouldBlockKidFriendlyMessaging(card)) {
+  if (
+    (v === "family" || /아이|가족/.test(reason.headline)) &&
+    !shouldBlockKidFriendlyMessaging(card) &&
+    !isAlcoholNightlifeVenue(card)
+  ) {
     bullets.push("지금 가면 대기가 길지 않을 가능성이 있어요");
     bullets.push("아이 데리고 앉기 편한 구조예요");
   } else if (v === "family" && shouldBlockKidFriendlyMessaging(card)) {

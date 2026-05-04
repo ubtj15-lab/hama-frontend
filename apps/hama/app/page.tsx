@@ -4,7 +4,7 @@
  * 홈에서 숨긴 것(기능 삭제 아님, 복구 가능):
  * - RecentIntentChips → 컴포넌트 유지, `/` 에서만 마운트 안 함. 필요 시 아래처럼 다시 추가.
  * - 최근 본 가로 스크롤 → 마이(`/my`)의「최근 본 카드」+ `?open=` 딥링크 로 유지.
- * - 빠른 추가 3종(카페/미용/놀거리) → `QuickScenarioGrid` 의 `QUICK_SCENARIO_CANDIDATES` 후반에 보관.
+ * - 홈 퀵 카테고리 → `QuickScenarioGrid` 의 `QUICK_CATEGORY_CANDIDATES` + `public/home` 일러스트.
  * - HomeTrustPickSection: 신뢰 보조 카드 최대 3개(/api/home-recommend + 시나리오 시드). 최근 검색/최근 본 아님.
  * 결과 화면 NextSuggestions 등에서 탐색·후속 추천은 그대로.
  */
@@ -19,6 +19,7 @@ import { QuickScenarioGrid } from "./_components/home/QuickScenarioGrid";
 import { HomeBottomNav } from "./_components/home/HomeBottomNav";
 import { useRecent } from "./_hooks/useRecent";
 import { HamaEvents } from "@/lib/analytics/events";
+import type { HomeResultsNavParams } from "@/lib/homeResultsNavParams";
 import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { recordRecentIntent } from "@/lib/recentIntents";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
@@ -163,14 +164,21 @@ function HomePageContent() {
     });
   };
 
-  const goResults = (q: string, source: string) => {
+  const goResults = (q: string, source: string, nav?: HomeResultsNavParams) => {
     const t = q.trim();
     if (!t) return;
     recordRecentIntent(t);
     const parsed = parseScenarioIntent(t);
     logEvent(
       HamaEvents.home_scenario_submit,
-      mergeLogPayload(analyticsFromScenario(parsed), { query: t, source, page: "home" })
+      mergeLogPayload(analyticsFromScenario(parsed), {
+        query: t,
+        source,
+        page: "home",
+        explicit_intent: nav?.intent ?? null,
+        explicit_category: nav?.category ?? null,
+        explicit_mode: nav?.mode ?? null,
+      })
     );
     if (isNearbyIntent(t)) {
       addPoints(5, "근처 추천 요청");
@@ -178,7 +186,12 @@ function HomePageContent() {
     } else {
       addPoints(3, "상황 검색");
     }
-    router.push(`/results?q=${encodeURIComponent(t)}`);
+    const usp = new URLSearchParams();
+    usp.set("q", t);
+    if (nav?.intent) usp.set("intent", nav.intent);
+    if (nav?.category) usp.set("category", nav.category);
+    if (nav?.mode) usp.set("mode", nav.mode);
+    router.push(`/results?${usp.toString()}`);
   };
 
   const handleLoginClick = () => {
@@ -200,7 +213,7 @@ function HomePageContent() {
     <main
       style={{
         minHeight: "100vh",
-        paddingBottom: "calc(110px + env(safe-area-inset-bottom, 0px))",
+        paddingBottom: "calc(102px + env(safe-area-inset-bottom, 0px))",
         overflowX: "visible",
         background: `linear-gradient(180deg, ${colors.bgDefault} 0%, ${colors.bgMuted} 100%)`,
       }}
@@ -219,8 +232,8 @@ function HomePageContent() {
         style={{
           maxWidth: 430,
           margin: "0 auto",
-          padding: `12px ${space.pageX}px 0`,
-          paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+          padding: `4px ${space.pageX}px 0`,
+          paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
           overflowX: "visible",
         }}
       >
@@ -246,9 +259,15 @@ function HomePageContent() {
         </div>
         <div style={{ animation: "hamaFadeUp 360ms ease 240ms both", position: "relative", zIndex: 10 }}>
           <QuickScenarioGrid
-            onPick={(q) => {
-              logEvent(HamaEvents.home_quick_scenario, { query: q, page: "home" });
-              goResults(q, "quick_grid");
+            onPick={(q, nav) => {
+              logEvent(HamaEvents.home_quick_scenario, {
+                query: q,
+                page: "home",
+                explicit_intent: nav?.intent ?? null,
+                explicit_category: nav?.category ?? null,
+                explicit_mode: nav?.mode ?? null,
+              });
+              goResults(q, "quick_grid", nav);
             }}
           />
         </div>
@@ -420,7 +439,7 @@ function HomeEntryGate() {
           style={{
             position: "fixed",
             right: 16,
-            bottom: "calc(84px + env(safe-area-inset-bottom, 0px))",
+            bottom: "calc(94px + env(safe-area-inset-bottom, 0px))",
             zIndex: 1000,
             border: "none",
             borderRadius: 999,

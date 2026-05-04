@@ -6,7 +6,7 @@ import { useHomeCards } from "@/_hooks/useHomeCards";
 import { useHomeMode } from "@/_hooks/useHomeMode";
 import { useRecent } from "@/_hooks/useRecent";
 import { usePlaceNameSearchResults } from "@/_hooks/usePlaceNameSearchResults";
-import { explainPlaceNameSearchGate } from "@/lib/results/placeNameSearchIntent";
+import { explainPlaceNameSearchGate, normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
 import {
   parseScenarioIntent,
   explainCourseGenerationMatch,
@@ -68,6 +68,14 @@ import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 /** 결과 페이지만: 고정 더미로 SearchResultSection/분기 검증 — `.env.local` 에 `NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION=1` */
 const DEBUG_FORCE_SEARCH_SECTION = process.env.NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION === "1";
 const LOGIN_FLAG_KEY = "hamaLoggedIn";
+const FAMILY_DINING_ALIAS_QUERIES = new Set([
+  "가족 외식",
+  "가족외식",
+  "가족 식사",
+  "가족이랑 외식",
+  "가족이랑 밥",
+  "가족이랑 식사",
+]);
 
 function intentCategoryToCategoryClicked(intentCategory: string | null | undefined): string | null {
   if (!intentCategory) return null;
@@ -84,6 +92,9 @@ function ResultsContent() {
   const courseIdFromSearch = searchParams.get("courseId")?.trim() ?? "";
   const courseSnapFromSearch = searchParams.get("courseSnap")?.trim() ?? "";
   const qRaw = searchParams.get("q")?.trim() ?? "";
+  const explicitIntent = searchParams.get("intent")?.trim() || null;
+  const explicitCategory = searchParams.get("category")?.trim() || null;
+  const explicitMode = searchParams.get("mode")?.trim() || null;
   /** Chrome 등 첫 프레임에서 searchParams와 window.location 불일치 방지 */
   const [courseIdSynced, setCourseIdSynced] = useState(courseIdFromSearch);
   const [hashCourseSnap, setHashCourseSnap] = useState<string | null>(null);
@@ -108,6 +119,16 @@ function ResultsContent() {
     recordPwaEngagement();
   }, []);
 
+  useEffect(() => {
+    if (!qRaw && !courseIdFromSearch) return;
+    console.log("[results explicit params]", {
+      q: qRaw,
+      explicitIntent,
+      explicitCategory,
+      mode: explicitMode,
+    });
+  }, [qRaw, courseIdFromSearch, explicitIntent, explicitCategory, explicitMode]);
+
   const courseIdParam = courseIdSynced || courseIdFromSearch;
 
   const queryForScenario = useMemo(
@@ -130,15 +151,20 @@ function ResultsContent() {
   const [relaxPersonalRules, setRelaxPersonalRules] = useState(false);
   const recommendSessionIdRef = useRef<string | null>(null);
   const [recommendSessionId, setRecommendSessionId] = useState<string | null>(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     try {
-      const loggedIn = window.localStorage.getItem(LOGIN_FLAG_KEY) === "1";
-      if (!loggedIn) {
-        const returnTo = `${window.location.pathname}${window.location.search}`;
-        window.location.href = `/api/auth/kakao/login?return_to=${encodeURIComponent(returnTo)}`;
-      }
+      setIsLoggedIn(window.localStorage.getItem(LOGIN_FLAG_KEY) === "1");
     } catch {}
+  }, []);
+
+  const requireKakaoLogin = React.useCallback(() => {
+    const message = "추천 결과는 볼 수 있어요. 이 기능은 카카오 로그인 후 사용할 수 있어요.";
+    const proceed = window.confirm(`${message}\n\n카카오 로그인 하시겠어요?`);
+    if (!proceed) return;
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    window.location.href = `/api/auth/kakao/login?return_to=${encodeURIComponent(returnTo)}`;
   }, []);
 
   useEffect(() => {
@@ -266,9 +292,17 @@ function ResultsContent() {
 
   const scenarioObject = useMemo(() => {
     const base = mergeResultsScenario(queryForScenario, convCtx);
-    if (!base || !scenarioPatch) return base;
-    return { ...base, ...scenarioPatch };
-  }, [queryForScenario, convCtx, scenarioPatch]);
+    if (!base) return null;
+    let out: ScenarioObject = scenarioPatch ? { ...base, ...scenarioPatch } : base;
+    if (explicitMode === "course") {
+      out = {
+        ...out,
+        recommendationMode: "course",
+        intentType: "course_generation",
+      };
+    }
+    return out;
+  }, [queryForScenario, convCtx, scenarioPatch, explicitMode]);
 
   const effectiveMode: RecommendationMode = useMemo(() => {
     const inferred = scenarioObject?.recommendationMode ?? "single";
@@ -346,6 +380,79 @@ function ResultsContent() {
 
   const rankingBootstrapReady = !isLocLoading && !recentLoading;
 
+  /** URL q가 단독 "박물관"일 때는 누적 대화(convCtx)가 searchQuery를 덮어쓰지 않음 — 홈 문화 타일과 히어로 직접 입력 경로 일치 */
+  const searchQueryForHomeCards = useMemo(() => {
+    const qTrim = qRaw.trim();
+    if (qTrim === "박물관") return qTrim;
+    if ((explicitCategory ?? "").trim().toLowerCase() === "culture") return qRaw || null;
+    const qNorm = normalizeBrandQuery(qRaw).trim();
+    if (FAMILY_DINING_ALIAS_QUERIES.has(qTrim) || FAMILY_DINING_ALIAS_QUERIES.has(qNorm)) return "식당";
+    /** 푸드는 곧 URL이 식당으로 치환되며, 그 전 한 프레임용으로도 식당 토큰과 동일 랭킹 입력을 씀 */
+    if (qNorm === "푸드") return "식당";
+    if (qNorm === "식당" || qNorm === "맛집") return qNorm;
+    return (convCtx?.cumulativeText ?? qRaw) || null;
+  }, [qRaw, explicitCategory, convCtx?.cumulativeText]);
+
+  const qNormalizedForIntent = useMemo(() => normalizeBrandQuery(qRaw).trim(), [qRaw]);
+  const isFamilyDiningAliasQuery = useMemo(
+    () => FAMILY_DINING_ALIAS_QUERIES.has(qRaw.trim()) || FAMILY_DINING_ALIAS_QUERIES.has(qNormalizedForIntent),
+    [qRaw, qNormalizedForIntent]
+  );
+  const isGenericFoodResultsQuery = useMemo(
+    () => qNormalizedForIntent === "푸드" || qNormalizedForIntent === "식당" || qNormalizedForIntent === "맛집",
+    [qNormalizedForIntent]
+  );
+  const resolvedExplicitIntentForHome =
+    isFamilyDiningAliasQuery || isGenericFoodResultsQuery ? "food_general" : explicitIntent;
+  const resolvedExplicitCategoryForHome =
+    isFamilyDiningAliasQuery || isGenericFoodResultsQuery ? "restaurant" : explicitCategory;
+  const resolvedModeForHome = isFamilyDiningAliasQuery ? "single" : explicitMode;
+
+  useEffect(() => {
+    if (!isFamilyDiningAliasQuery) return;
+    console.log("[family dining alias route]", {
+      qRaw,
+      normalizedQuery: qNormalizedForIntent,
+      aliasedSearchQuery: "식당",
+      explicitIntent: resolvedExplicitIntentForHome,
+      explicitCategory: resolvedExplicitCategoryForHome,
+      modeOverride: resolvedModeForHome,
+    });
+  }, [
+    isFamilyDiningAliasQuery,
+    qRaw,
+    qNormalizedForIntent,
+    resolvedExplicitIntentForHome,
+    resolvedExplicitCategoryForHome,
+    resolvedModeForHome,
+  ]);
+
+  /** q=푸드 → q=식당 으로 완전 동일 경로(시나리오·렌더·추천). intent/category 없으면 식당 직접 진입과 맞춤 */
+  useEffect(() => {
+    if (qNormalizedForIntent !== "푸드") return;
+    const usp = new URLSearchParams(searchParams.toString());
+    usp.set("q", "식당");
+    const nextQs = usp.toString();
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    const path = `/results?${nextQs}${hash}`;
+    console.log("[food alias query]", {
+      qRaw,
+      normalizedQuery: qNormalizedForIntent,
+      aliasedSearchQuery: "식당",
+      explicitIntent: searchParams.get("intent")?.trim() || "food_general",
+      explicitCategory: searchParams.get("category")?.trim() || "restaurant",
+      replaceTo: path,
+    });
+    router.replace(path);
+  }, [qRaw, qNormalizedForIntent, router, searchParams]);
+
+  /** 푸드/식당/맛집: 시나리오가 코스로 잡히면 showRecommendationList가 false가 되어 카드가 숨겨짐 → 단일 모드 고정 */
+  useEffect(() => {
+    if (courseIdParam) return;
+    if (!isGenericFoodResultsQuery && !isFamilyDiningAliasQuery) return;
+    setModeOverride("single");
+  }, [courseIdParam, isGenericFoodResultsQuery, isFamilyDiningAliasQuery, qRaw]);
+
   const placeNameGate = useMemo(() => explainPlaceNameSearchGate(qRaw), [qRaw]);
   const placeSearchEnabled = placeNameGate.enabled;
   const { items: placeHits, loading: placeSearchLoading, meta: placeSearchMeta } = usePlaceNameSearchResults(
@@ -361,6 +468,42 @@ function ResultsContent() {
   const placeSearchDominant = placeSearchEnabled && placeLookupDoneEarly && placeHits.length > 0;
   const resultsFlowMode = placeSearchDominant ? "place_search" : "recommendation";
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    console.log("[results entry compare]", {
+      href: window.location.href,
+      qRaw,
+      explicitIntent,
+      explicitCategory,
+      explicitMode,
+      searchQueryPassedToUseHomeCards: searchQueryForHomeCards,
+    });
+  }, [qRaw, explicitIntent, explicitCategory, explicitMode, searchQueryForHomeCards]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    console.log("[generic food results route]", {
+      qRaw,
+      normalizedQuery: qNormalizedForIntent,
+      placeSearchEnabled: placeNameGate.enabled,
+      explicitIntentFromUrl: explicitIntent,
+      explicitCategoryFromUrl: explicitCategory,
+      forcedIntent: isGenericFoodResultsQuery ? "food_general" : null,
+      forcedCategory: isGenericFoodResultsQuery ? "restaurant" : null,
+      intentPassedToUseHomeCards: resolvedExplicitIntentForHome,
+      categoryPassedToUseHomeCards: resolvedExplicitCategoryForHome,
+    });
+  }, [
+    qRaw,
+    qNormalizedForIntent,
+    placeNameGate.enabled,
+    explicitIntent,
+    explicitCategory,
+    isGenericFoodResultsQuery,
+    resolvedExplicitIntentForHome,
+    resolvedExplicitCategoryForHome,
+  ]);
+
   const { cards, candidatePool, courseCandidatePool, isLoading, deckIncomplete } = useHomeCards(
     "all",
     shuffleKey,
@@ -372,7 +515,7 @@ function ResultsContent() {
       rejectedMainPickIds,
       profileOverride,
       relaxPersonalRules,
-      searchQuery: (convCtx?.cumulativeText ?? qRaw) || null,
+      searchQuery: searchQueryForHomeCards,
       scenarioObject: effectiveScenario ?? undefined,
       /** 매장명 검색이 끝날 때까지 추천 페치·랭킹 지연 — 첫 프레임 레이스 방지 */
       deferRanking: !rankingBootstrapReady || deferRecForPlaceLookup,
@@ -382,14 +525,63 @@ function ResultsContent() {
        * 매장명 매칭 후에도 추천 풀은 가져온다. 메인 리스트는 `!showNameSearch`일 때만 그려서
        * 검색 카드가 덮어쓰이지 않고, `secondaryRecommendCards`로 "이런 곳도 있어"만 채운다.
        */
+      explicitIntent: resolvedExplicitIntentForHome,
+      explicitCategory: resolvedExplicitCategoryForHome,
+      explicitMode: resolvedModeForHome,
     }
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isGenericFoodResultsQuery) return;
+    console.log("[generic food useHomeCards result]", {
+      qRaw,
+      searchQuery: searchQueryForHomeCards,
+      explicitIntent: resolvedExplicitIntentForHome,
+      explicitCategory: resolvedExplicitCategoryForHome,
+      loading: isLoading,
+      cardsCount: cards?.length ?? 0,
+      topNames: cards?.slice(0, 5).map((c) => c.name) ?? [],
+    });
+  }, [
+    isGenericFoodResultsQuery,
+    qRaw,
+    searchQueryForHomeCards,
+    resolvedExplicitIntentForHome,
+    resolvedExplicitCategoryForHome,
+    isLoading,
+    cards,
+  ]);
 
   const bootstrapBusy = !rankingBootstrapReady;
   const pageBusy = !rankingBootstrapReady || isLoading;
   const placeLookupBusy = placeSearchEnabled && placeSearchLoading;
   const placeLookupDone = !placeSearchEnabled || !placeSearchLoading;
   const showNameSearch = placeSearchEnabled && placeLookupDone && placeHits.length > 0;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (qRaw.trim() !== "박물관") return;
+    console.log("[results museum compare]", {
+      href: window.location.href,
+      qRaw,
+      explicitIntent,
+      explicitCategory,
+      explicitMode,
+      searchQueryPassedToUseHomeCards: searchQueryForHomeCards,
+      placeSearchEnabled,
+      placeSearchQuery: qRaw,
+      placeSearchResultsCount: placeHits.length,
+    });
+  }, [
+    qRaw,
+    explicitIntent,
+    explicitCategory,
+    explicitMode,
+    searchQueryForHomeCards,
+    placeSearchEnabled,
+    placeHits.length,
+  ]);
 
   const placeHitIds = useMemo(() => new Set(placeHits.map((c) => c.id)), [placeHits]);
   const secondaryRecommendCards = useMemo(
@@ -514,6 +706,83 @@ function ResultsContent() {
       !courseRestoreFailed &&
       (!isCourseMode || courseFallbackActive || isCourseFixedResults)
   );
+  const showEmptyState = Boolean(
+    !bootstrapBusy &&
+      !showNameSearch &&
+      !pageBusy &&
+      !showCourseDeck &&
+      primaryRecommendationCards.length === 0 &&
+      placeLookupDone
+  );
+
+  useEffect(() => {
+    console.log("[empty state conflict check]", {
+      qRaw,
+      cardsCount: primaryRecommendationCards.length,
+      placeSearchEnabled,
+      showEmptyState,
+      recommendationListVisible: showRecommendationList && primaryRecommendationCards.length > 0,
+    });
+  }, [
+    qRaw,
+    primaryRecommendationCards.length,
+    placeSearchEnabled,
+    showEmptyState,
+    showRecommendationList,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isGenericFoodResultsQuery) return;
+    const showEmptyState =
+      !pageBusy &&
+      !showNameSearch &&
+      !showCourseDeck &&
+      primaryRecommendationCards.length === 0 &&
+      placeLookupDone;
+    let renderedMode = "other";
+    if (showCourseDeck) renderedMode = "course_deck";
+    else if (showRecommendationList && primaryRecommendationCards.length > 0) renderedMode = "recommendation_list";
+    else if (showEmptyState) renderedMode = "empty_message";
+    console.log("[generic food results render]", {
+      qRaw,
+      placeSearchEnabled,
+      effectiveMode,
+      isCourseMode,
+      primaryRecommendationCardsCount: primaryRecommendationCards.length,
+      recommendationCardsCount: cards.length,
+      showRecommendationList,
+      showNameSearch,
+      showEmptyState,
+      renderedMode,
+    });
+  }, [
+    isGenericFoodResultsQuery,
+    qRaw,
+    placeSearchEnabled,
+    effectiveMode,
+    isCourseMode,
+    primaryRecommendationCards.length,
+    cards.length,
+    showRecommendationList,
+    showNameSearch,
+    showCourseDeck,
+    pageBusy,
+    placeLookupDone,
+  ]);
+
+  useEffect(() => {
+    const renderedSource = showNameSearch
+      ? (cards.length > 0 ? "mixed" : "search-by-name")
+      : "homecards";
+    console.log("[recommend path diagnosis]", {
+      query: qRaw,
+      placeSearchEnabled,
+      placeSearchResultsCount: placeHits.length,
+      homeCardsCount: cards.length,
+      renderedSource,
+    });
+  }, [qRaw, placeSearchEnabled, placeHits.length, cards.length, showNameSearch]);
 
   const filteredCoursePlans = useMemo(() => {
     if (courseFilter === "all") return coursePlans;
@@ -941,6 +1210,8 @@ function ResultsContent() {
                 scenarioObject={effectiveScenario}
                 analyticsV2Click={analyticsV2Base ?? undefined}
                 showSoftFallbackCopy={false}
+                isLoggedIn={isLoggedIn}
+                onRequireLogin={requireKakaoLogin}
                 onPlaceClick={(card, rank) => {
                   logEvent(
                     "place_click",
@@ -975,12 +1246,7 @@ function ResultsContent() {
             </p>
           )}
 
-        {!bootstrapBusy &&
-          !showNameSearch &&
-          !pageBusy &&
-          !showCourseDeck &&
-          primaryRecommendationCards.length === 0 &&
-          placeLookupDone && (
+        {showEmptyState && (
             <p style={{ color: colors.textSecondary }}>
               {strictBeautyEmpty
                 ? "이 지역에 매장이 적어요"
@@ -1010,6 +1276,8 @@ function ResultsContent() {
             scenarioObject={effectiveScenario}
             analyticsV2Click={analyticsV2Base ?? undefined}
             showSoftFallbackCopy={showSoftFallbackCopy}
+            isLoggedIn={isLoggedIn}
+            onRequireLogin={requireKakaoLogin}
             onPlaceClick={(card, rank) => {
               logEvent("place_click", mergeLogPayload(logBase, { place_id: card.id, name: card.name, card_rank: rank }));
               stashPlaceForSession(card);

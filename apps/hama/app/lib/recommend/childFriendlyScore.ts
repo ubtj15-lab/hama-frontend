@@ -35,6 +35,21 @@ const HARD_EXCLUDE_RE: RegExp[] = [
 
 const FISH_RAW_HARD_EXCLUDE_INDEX = new Set([0, 1, 12]);
 
+/** 술집·야간업소 — 이름/태그/메뉴 blob 공통 (검색 API·랭킹·추천문구 공유) */
+export function isAlcoholNightlifeHaystack(haystack: string): boolean {
+  const h = haystack.toLowerCase();
+  if (
+    /이자카야|술집|주점|포차|호프|펍\b|\bpub\b|\bbar\b|와인바|맥주바|스시바|스낵바|칵테일|라운지|감성주점|야식주점|노래주점|노래방|코인노래방|룸주점|룸살롱|야경\s*술집|와인\s*바|맥주\s*집|소주\s*방/.test(
+      h
+    )
+  ) {
+    return true;
+  }
+  if (/19금|성인\s*전용|미성년\s*입장|연령\s*제한|adults\s*only/i.test(h)) return true;
+  if (/(?:^|\s)성인(?:\s|$|전용)/.test(h)) return true;
+  return false;
+}
+
 export function haystackForKids(card: HomeCard): string {
   const parts = [
     card.name,
@@ -48,6 +63,10 @@ export function haystackForKids(card: HomeCard): string {
     .filter(Boolean)
     .join(" ");
   return parts.toLowerCase();
+}
+
+export function isAlcoholNightlifeVenue(card: HomeCard): boolean {
+  return isAlcoholNightlifeHaystack(haystackForKids(card));
 }
 
 /**
@@ -99,6 +118,7 @@ export function childFriendlyScore(card: HomeCard): number {
  * `rawQuery` 가 있으면 부모님·보양식·가족모임 맥락에서 횟집·회 중심 매장만 완화.
  */
 export function isHardExcludedForKidsScenario(card: HomeCard, opts?: { rawQuery?: string }): boolean {
+  if (isAlcoholNightlifeVenue(card)) return true;
   const raw = String(opts?.rawQuery ?? "");
   const allowParent = parentGatheringOrRestorativeQuery(raw);
   const h = haystackForKids(card);
@@ -136,5 +156,7 @@ export function isHardExcludedForKidsScenario(card: HomeCard, opts?: { rawQuery?
 
 /** UI 문구: "아이랑 가기 좋아요" 등 금지 여부 */
 export function shouldBlockKidFriendlyMessaging(card: HomeCard): boolean {
-  return isHardExcludedForKidsScenario(card) || childFriendlyScore(card) < 0.38;
+  return (
+    isAlcoholNightlifeVenue(card) || isHardExcludedForKidsScenario(card) || childFriendlyScore(card) < 0.38
+  );
 }

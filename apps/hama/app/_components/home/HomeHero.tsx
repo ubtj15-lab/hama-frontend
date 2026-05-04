@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { colors, space, typo } from "@/lib/designTokens";
+import { colors, typo } from "@/lib/designTokens";
 
 type Props = {
   onSubmitQuery: (q: string) => void;
@@ -19,21 +19,22 @@ export function HomeHero({ onSubmitQuery }: Props) {
   };
 
   return (
-    <header style={{ marginBottom: space.sectionTight, paddingTop: 4 }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minHeight: 130 }}>
+    <header style={{ marginBottom: 14, paddingTop: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minHeight: 0 }}>
         <div
           aria-hidden
           style={{
-            width: 80,
-            height: 80,
+            width: 100,
+            height: 100,
             borderRadius: "50%",
             background: "#FF6B35",
             display: "grid",
             placeItems: "center",
-            fontSize: 40,
-            boxShadow: "0 12px 24px rgba(255,107,53,0.25)",
+            fontSize: 58,
+            lineHeight: 1,
+            boxShadow: "0 14px 28px rgba(255,107,53,0.26)",
             animation: "hamaFloat 3s ease-in-out infinite",
-            marginBottom: 10,
+            marginBottom: 14,
           }}
         >
           🦛
@@ -43,9 +44,10 @@ export function HomeHero({ onSubmitQuery }: Props) {
             ...typo.heroTitle,
             color: colors.textPrimary,
             margin: 0,
-            lineHeight: 1.22,
-            fontSize: 22,
+            lineHeight: 1.18,
+            fontSize: 26,
             textAlign: "center",
+            padding: "0 8px",
           }}
         >
           오늘{" "}
@@ -62,15 +64,17 @@ export function HomeHero({ onSubmitQuery }: Props) {
         <p
           style={{
             ...typo.body,
-            margin: "8px 0 0",
-            lineHeight: 1.5,
+            margin: "10px 0 0",
+            lineHeight: 1.45,
             fontWeight: 600,
             color: "#888",
-            fontSize: 14,
+            fontSize: 15,
             textAlign: "center",
+            padding: "0 12px",
+            maxWidth: 360,
           }}
         >
-          하마가 딱 골라줄게요
+          하마가 상황에 맞게 골라줄게요
         </p>
       </div>
 
@@ -78,16 +82,16 @@ export function HomeHero({ onSubmitQuery }: Props) {
         style={{
           marginTop: 14,
           border: "1.5px solid #FFE0D0",
-          borderRadius: 18,
+          borderRadius: 16,
           background: "#fff",
-          padding: "14px 16px",
+          padding: "12px 14px",
           display: "flex",
           alignItems: "center",
           gap: 10,
-          minHeight: 60,
+          minHeight: 54,
         }}
       >
-        <span aria-hidden style={{ color: "#FF6B35", fontSize: 18, lineHeight: 1 }}>
+        <span aria-hidden style={{ color: "#FF6B35", fontSize: 20, lineHeight: 1 }}>
           🔍
         </span>
         <input
@@ -96,12 +100,12 @@ export function HomeHero({ onSubmitQuery }: Props) {
           onKeyDown={(e) => {
             if (e.key === "Enter") submit();
           }}
-          placeholder="회식할 곳, 데이트, 가족 외식..."
+          placeholder="데이트, 가족 나들이, 혼자 시간 보내기, 실내 활동..."
           style={{
             flex: 1,
             border: "none",
             outline: "none",
-            fontSize: 14,
+            fontSize: 15,
             background: "transparent",
             color: colors.textPrimary,
           }}
@@ -109,25 +113,26 @@ export function HomeHero({ onSubmitQuery }: Props) {
         <button
           type="button"
           onClick={() => {
-            setToast("마이크 기능은 준비 중이에요");
-            window.setTimeout(() => setToast(null), 1200);
+            setToast("추천 받기는 검색창에 입력해 주세요");
+            window.setTimeout(() => setToast(null), 1400);
           }}
-          aria-label="마이크 준비 중"
+          aria-label="추천 도우미"
           style={{
-            width: 32,
-            height: 32,
+            width: 38,
+            height: 38,
             borderRadius: "50%",
             border: "none",
             background: "#FF6B35",
             color: "#fff",
             cursor: "pointer",
-            fontSize: 14,
+            fontSize: 17,
             display: "grid",
             placeItems: "center",
             flexShrink: 0,
+            lineHeight: 1,
           }}
         >
-          🎤
+          🪄
         </button>
       </div>
       {!!toast && (
@@ -143,18 +148,6 @@ export function HomeHero({ onSubmitQuery }: Props) {
           {toast}
         </p>
       )}
-      <p
-        style={{
-          margin: "12px 0 0",
-          textAlign: "center",
-          fontSize: 12,
-          color: "#aaa",
-          fontWeight: 700,
-          letterSpacing: "0.01em",
-        }}
-      >
-        또는 카테고리에서 골라보세요
-      </p>
     </header>
   );
 }

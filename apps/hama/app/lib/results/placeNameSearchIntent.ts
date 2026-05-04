@@ -97,12 +97,29 @@ export type PlaceNameSearchGate = {
 };
 
 /**
- * 매장명 우선 검색 여부(게이트) — 개발 로그·테스트용 설명 포함
+ * 매장명 우선 검색 여부(게이트).
+ * 짧은 시설 단일 토큰(박물관 등)은 NOT_BRAND/형태 검사보다 먼저 허용.
  */
+const PLACE_NAME_SINGLE_TOKEN_ALLOW = new Set([
+  "박물관",
+  "미술관",
+  "전시관",
+  "도서관",
+  "과학관",
+  "기념관",
+  "문화원",
+  "갤러리",
+]);
+
+/** 매장명 검색이 아닌 일반 카테고리 탐색 — /results 추천(restaurant 풀)으로만 처리 */
+const GENERIC_FOOD_CATEGORY_PLACE_NAME_OFF = new Set(["푸드", "식당", "맛집"]);
+
 export function explainPlaceNameSearchGate(q: string): PlaceNameSearchGate {
   const raw = String(q ?? "").trim();
   if (!raw) return { enabled: false, reason: "empty" };
   const t = normalizeBrandQuery(raw);
+  if (GENERIC_FOOD_CATEGORY_PLACE_NAME_OFF.has(t)) return { enabled: false, reason: "context_keyword" };
+  if (PLACE_NAME_SINGLE_TOKEN_ALLOW.has(t)) return { enabled: true, reason: "store_like_query" };
   if (t.length < 2) return { enabled: false, reason: "too_short" };
   if (t.length > MAX_BRAND_CHARS) return { enabled: false, reason: "too_long" };
   if (NOT_BRAND_QUERY.test(t)) return { enabled: false, reason: "context_keyword" };

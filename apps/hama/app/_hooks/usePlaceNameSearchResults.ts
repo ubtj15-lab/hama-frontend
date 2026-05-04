@@ -4,6 +4,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import { toHomeCard, type StoreRow as RepoStoreRow } from "@/lib/storeRepository";
 import { attachDistanceToCard } from "@/lib/results/attachDistanceToCard";
+import {
+  getOrCreateHamaSearchSeed,
+  getRecentExposedIdsHeaderValue,
+  getRecentExposedNamesHeaderValue,
+} from "@/lib/searchDiversityClient";
 
 export type PlaceNameSearchMeta = {
   apiOk: boolean;
@@ -62,8 +67,17 @@ export function usePlaceNameSearchResults(
           // eslint-disable-next-line no-console
           console.log("[place-search] query:", searchQuery, "epoch:", epoch);
         }
+        const seed = getOrCreateHamaSearchSeed();
+        const headers: Record<string, string> = {};
+        if (seed) headers["x-hama-search-seed"] = seed;
+        const recentExposed = getRecentExposedIdsHeaderValue();
+        if (recentExposed) headers["x-hama-recent-exposed-ids"] = recentExposed;
+        const recentExposedNames = getRecentExposedNamesHeaderValue();
+        if (recentExposedNames) headers["x-hama-recent-exposed-names"] = recentExposedNames;
+
         const res = await fetch(`/api/stores/search-by-name?${params.toString()}`, {
           cache: "no-store",
+          headers: Object.keys(headers).length ? headers : undefined,
         });
         const json = (await res.json()) as { items?: RepoStoreRow[]; error?: string; debug?: unknown };
 

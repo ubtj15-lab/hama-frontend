@@ -216,9 +216,11 @@ function violatesDietaryProfile(
 function beautySubcategoryMatches(card: HomeCard, beautySubCategory: string | null | undefined): boolean {
   if (!beautySubCategory) return true;
   const blob = normBlob(card);
+  const rawCat = String((card as any).category ?? "").toLowerCase();
   switch (beautySubCategory) {
     case "hair":
-      return /hair|미용실|헤어|커트|컷|펌|염색/.test(blob);
+      if (rawCat === "salon" || rawCat === "bk9" || rawCat === "beauty" || /salon|bk9|beauty/.test(rawCat)) return true;
+      return /hair|미용실|헤어|헤어샵|살롱|샵|커트|컷|펌|염색|두피|클리닉|이발|스타일|드라이|스파/.test(blob);
     case "nail":
       return /nail|네일|네일아트/.test(blob);
     case "eyelash":

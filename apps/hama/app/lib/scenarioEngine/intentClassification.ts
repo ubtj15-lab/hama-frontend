@@ -235,13 +235,13 @@ export function storeCategoryMatchesIntentCategory(
   const c = String(card.category ?? "").toLowerCase();
   switch (cat) {
     case "FOOD":
-      return c === "restaurant";
+      return c === "restaurant" || c === "fd6" || c.includes("restaurant") || c.includes("food");
     case "CAFE":
-      return c === "cafe";
+      return c === "cafe" || c === "ce7" || c.includes("cafe") || c.includes("coffee");
     case "ACTIVITY":
-      return c === "activity";
+      return c === "activity" || c === "at4" || c.includes("activity");
     case "BEAUTY":
-      return c === "salon";
+      return c === "salon" || c === "bk9" || c === "beauty" || c.includes("salon") || c.includes("beauty");
     default:
       return false;
   }

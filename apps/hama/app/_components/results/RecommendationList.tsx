@@ -10,6 +10,7 @@ import type { LogRecommendationEventInput } from "@/lib/analytics/types";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
 import { logEvent } from "@/lib/logEvent";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
+import { getCardExposureId, saveRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
 
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
 
@@ -19,6 +20,8 @@ type Props = {
   onPlaceClick: (card: HomeCard, rank: number) => void;
   onNavigate: (card: HomeCard, rank: number) => void;
   onCall: (card: HomeCard, rank: number) => void;
+  isLoggedIn?: boolean;
+  onRequireLogin?: () => void;
   analyticsV2Click?: LogRecommendationEventInput["analytics_v2"];
   /** 메인 카드 아래 — 후보 부족·재추천 등 */
   showSoftFallbackCopy?: boolean;
@@ -30,6 +33,8 @@ export function RecommendationList({
   onPlaceClick,
   onNavigate,
   onCall,
+  isLoggedIn = false,
+  onRequireLogin,
   analyticsV2Click,
   showSoftFallbackCopy = false,
 }: Props) {
@@ -55,6 +60,8 @@ export function RecommendationList({
     [scenarioObject?.rawQuery, scenarioObject?.scenario, scenarioObject?.intentCategory, scenarioObject?.recommendationMode]
   );
   const previousContextKeyRef = React.useRef<string | null>(null);
+  /** 마지막으로 화면에 반영한 상위 덱 fingerprint (context 동일 시 cards만 바뀌어도 갱신) */
+  const syncedIncomingFingerprintRef = React.useRef<string | null>(null);
   const [stableRecommendations, setStableRecommendations] = React.useState<HomeCard[]>([]);
   const [feedbackDone, setFeedbackDone] = React.useState<"like" | "neutral" | "dislike" | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
@@ -73,9 +80,33 @@ export function RecommendationList({
   const [receiptResult, setReceiptResult] = React.useState<string | null>(null);
   const [verificationOpenPlaceId, setVerificationOpenPlaceId] = React.useState<string | null>(null);
   const [verificationSubmittedPlaceId, setVerificationSubmittedPlaceId] = React.useState<string | null>(null);
+  const [showQuickFeedback, setShowQuickFeedback] = React.useState(false);
   const visibleRecommendations =
     stableRecommendations.length > 0 ? stableRecommendations : cards.slice(0, 3);
   const deckReasons = useDeckRecommendationReasons(visibleRecommendations, scenarioObject);
+
+  const incomingTop3 = React.useMemo(() => cards.slice(0, 3), [cards]);
+  const incomingDeckFingerprint = React.useMemo(
+    () => incomingTop3.map((c) => `${getCardPlaceId(c)}:${String(c.name ?? "")}`).join("|"),
+    [incomingTop3, getCardPlaceId]
+  );
+
+  const stableDeckFingerprint = React.useMemo(
+    () =>
+      stableRecommendations
+        .slice(0, 3)
+        .map((c) => `${getCardPlaceId(c)}:${String(c.name ?? "")}`)
+        .join("|"),
+    [stableRecommendations, getCardPlaceId]
+  );
+
+  const recommendationVisibleLogKey = React.useMemo(
+    () =>
+      stableRecommendations.length > 0
+        ? `s:${stableDeckFingerprint}`
+        : `i:${incomingDeckFingerprint}`,
+    [stableRecommendations.length, stableDeckFingerprint, incomingDeckFingerprint]
+  );
 
   React.useEffect(() => {
     return () => {
@@ -84,33 +115,65 @@ export function RecommendationList({
   }, [receiptPreviewUrl]);
 
   React.useEffect(() => {
-    const prev = previousContextKeyRef.current;
-    const contextChanged = prev !== null && prev !== contextKey;
+    if (cards.length === 0) {
+      setStableRecommendations((prev) => (prev.length > 0 ? [] : prev));
+      syncedIncomingFingerprintRef.current = "";
+      return;
+    }
+
+    const next = cards.slice(0, 3);
+    const prevCtx = previousContextKeyRef.current;
+    const contextChanged = prevCtx !== null && prevCtx !== contextKey;
+
     if (contextChanged) {
       setSelectedPlaceId(null);
       setSelectedPlaceLogId(null);
       setReceiptFile(null);
       setVisitFeedbackTags([]);
       setVisitFeedbackText("");
-      setReceiptPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
+      setReceiptPreviewUrl((prevUrl) => {
+        if (prevUrl) URL.revokeObjectURL(prevUrl);
         return null;
       });
       setReceiptResult(null);
       setVerificationOpenPlaceId(null);
       setVerificationSubmittedPlaceId(null);
-      setStableRecommendations(cards.slice(0, 3));
+      setStableRecommendations(next);
       previousContextKeyRef.current = contextKey;
+      syncedIncomingFingerprintRef.current = incomingDeckFingerprint;
+      // eslint-disable-next-line no-console
+      console.log("[recommendation stable sync]", {
+        contextKey,
+        reason: "context_changed" as const,
+        nextNames: next.map((x) => x.name),
+      });
       return;
     }
+
     if (previousContextKeyRef.current == null) {
       previousContextKeyRef.current = contextKey;
     }
-    if (selectedPlaceId) return;
-    if (stableRecommendations.length === 0 && cards.length > 0) {
-      setStableRecommendations(cards.slice(0, 3));
+
+    if (incomingDeckFingerprint !== syncedIncomingFingerprintRef.current) {
+      if (selectedPlaceId) {
+        const stillInNext = next.some(
+          (c) => getCardPlaceId(c) === selectedPlaceId || c.id === selectedPlaceId
+        );
+        if (!stillInNext) {
+          setSelectedPlaceId(null);
+          setSelectedPlaceLogId(null);
+        }
+      }
+      setStableRecommendations(next);
+      syncedIncomingFingerprintRef.current = incomingDeckFingerprint;
+      // eslint-disable-next-line no-console
+      console.log("[recommendation stable sync]", {
+        contextKey,
+        reason: "cards_changed" as const,
+        nextNames: next.map((x) => x.name),
+      });
     }
-  }, [contextKey, cards, stableRecommendations.length, selectedPlaceId]);
+  }, [contextKey, incomingDeckFingerprint, cards, selectedPlaceId, getCardPlaceId]);
 
   React.useEffect(() => {
     console.log("[decision state]", { selectedPlaceId, selectedPlaceLogId });
@@ -129,12 +192,12 @@ export function RecommendationList({
 
   React.useEffect(() => {
     console.log("[parent cards changed]", {
-      incomingCount: cards.length,
-      stableCount: stableRecommendations.length,
       contextKey,
-      selectedPlaceId,
+      incomingNames: cards.slice(0, 3).map((x) => x.name),
+      incomingCount: cards.length,
+      incomingFingerprint: incomingDeckFingerprint,
     });
-  }, [cards.length, stableRecommendations.length, contextKey, selectedPlaceId]);
+  }, [contextKey, cards, incomingDeckFingerprint]);
 
   React.useEffect(() => {
     console.log("[recommendation context]", {
@@ -147,11 +210,28 @@ export function RecommendationList({
   }, [contextKey, selectedPlaceId, cards.length, stableRecommendations.length]);
 
   React.useEffect(() => {
+    const slice = stableRecommendations.length > 0 ? stableRecommendations : cards.slice(0, 3);
     console.log("[recommendation visible]", {
-      visibleCount: visibleRecommendations.length,
-      names: visibleRecommendations.map((c) => c.name),
+      contextKey,
+      names: slice.map((c) => c.name),
+      source: stableRecommendations.length > 0 ? "stable" : "incoming",
     });
-  }, [visibleRecommendations]);
+  }, [contextKey, recommendationVisibleLogKey, stableRecommendations, cards]);
+
+  React.useEffect(() => {
+    const exposed = visibleRecommendations.slice(0, 3);
+    if (exposed.length === 0) return;
+    const exposedIds = exposed
+      .map((card) => getCardExposureId(card))
+      .filter(Boolean);
+    if (exposedIds.length === 0) return;
+    const storageAfterSave = saveRecentExposedStoreIds(exposedIds);
+    console.log("[recent exposure saved]", {
+      exposedIds,
+      exposedNames: exposed.map((card) => card.name),
+      storageAfterSave,
+    });
+  }, [recommendationVisibleLogKey, visibleRecommendations]);
 
   React.useEffect(() => {
     console.log(
@@ -165,6 +245,10 @@ export function RecommendationList({
   }, [stableRecommendations]);
 
   const submitFeedback = (value: "like" | "neutral" | "dislike") => {
+    if (!isLoggedIn) {
+      onRequireLogin?.();
+      return;
+    }
     const top = visibleRecommendations[0];
     if (!top) return;
     setFeedbackDone(value);
@@ -191,19 +275,17 @@ export function RecommendationList({
     });
   };
 
-  const choosePlace = async (card: HomeCard, rank: number) => {
+  const choosePlace = async (card: HomeCard, rank: number): Promise<boolean> => {
     const cardPlaceId = getCardPlaceId(card);
     console.log("[choose here clicked]", { cardPlaceId, cardName: card.name });
+    if (!isLoggedIn) {
+      onRequireLogin?.();
+      return false;
+    }
     setSelectedPlaceId(cardPlaceId);
     setSelectedPlaceLogId(null);
     setVerificationOpenPlaceId(null);
     setVerificationSubmittedPlaceId(null);
-    const loggedIn = typeof window !== "undefined" && window.localStorage.getItem("hamaLoggedIn") === "1";
-    if (!loggedIn) {
-      alert("로그인 후 참여 기록을 남길 수 있어요.");
-      onPlaceClick(card, rank);
-      return;
-    }
     try {
       setDecisionSavingPlaceId(card.id);
       const res = await fetch("/api/beta/decision", {
@@ -263,13 +345,13 @@ export function RecommendationList({
         source: "results",
       });
     }
+    return true;
   };
 
   const verifyReceipt = async () => {
     if (!selectedPlaceId || receiptVerifying) return;
-    const loggedIn = typeof window !== "undefined" && window.localStorage.getItem("hamaLoggedIn") === "1";
-    if (!loggedIn) {
-      alert("로그인 후 참여 기록을 남길 수 있어요.");
+    if (!isLoggedIn) {
+      onRequireLogin?.();
       return;
     }
     if (!receiptFile) {
@@ -350,9 +432,8 @@ export function RecommendationList({
 
   const submitMockPayment = async (card: HomeCard, rank: number) => {
     try {
-      const loggedIn = typeof window !== "undefined" && window.localStorage.getItem("hamaLoggedIn") === "1";
-      if (!loggedIn) {
-        alert("로그인 후 이용해 주세요.");
+      if (!isLoggedIn) {
+        onRequireLogin?.();
         return;
       }
       setMockLoadingPlaceId(card.id);
@@ -392,6 +473,10 @@ export function RecommendationList({
   };
 
   const submitVisitFeedback = async (payload: VisitFeedbackPayload) => {
+    if (!isLoggedIn) {
+      onRequireLogin?.();
+      return;
+    }
     if (!paymentSnapshot || visitFeedbackSaving) return;
     setVisitFeedbackSaving(true);
     try {
@@ -522,7 +607,8 @@ export function RecommendationList({
               e.stopPropagation();
               if (selectedPlaceId !== cardPlaceId) {
                 void (async () => {
-                  await choosePlace(card, i);
+                  const picked = await choosePlace(card, i);
+                  if (!picked) return;
                   setVerificationOpenPlaceId(cardPlaceId);
                   setVerificationSubmittedPlaceId(null);
                   setReceiptResult(null);
@@ -552,45 +638,63 @@ export function RecommendationList({
                 border: "1px solid #E5E7EB",
                 background: "#fff",
                 padding: "10px 12px",
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
+                display: "grid",
                 gap: 8,
               }}
             >
-              <span style={{ fontSize: 13, fontWeight: 800, color: "#111827", marginRight: 6 }}>
-                이 추천 도움됐나요?
-              </span>
-              {[
-                { id: "like", label: "👍 좋아요" },
-                { id: "neutral", label: "😐 그냥" },
-                { id: "dislike", label: "👎 별로" },
-              ].map((b) => {
-                const active = feedbackDone === b.id;
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    onClick={() => submitFeedback(b.id as "like" | "neutral" | "dislike")}
-                    style={{
-                      border: active ? "1px solid #2563EB" : "1px solid #CBD5E1",
-                      background: active ? "#EFF6FF" : "#fff",
-                      color: active ? "#1D4ED8" : "#334155",
-                      borderRadius: 999,
-                      fontSize: 12,
-                      fontWeight: 800,
-                      padding: "6px 10px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {b.label}
-                  </button>
-                );
-              })}
-              {toast ? (
-                <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 800, color: "#16A34A" }}>
-                  {toast}
-                </span>
+              <button
+                type="button"
+                onClick={() => setShowQuickFeedback((prev) => !prev)}
+                style={{
+                  height: 34,
+                  borderRadius: 10,
+                  border: "1px solid #CBD5E1",
+                  background: "#fff",
+                  color: "#475569",
+                  fontSize: 12,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                방문 후 인증/피드백 남기기 {showQuickFeedback ? "▴" : "▾"}
+              </button>
+              {showQuickFeedback ? (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#111827", marginRight: 6 }}>
+                    이 추천 도움됐나요?
+                  </span>
+                  {[
+                    { id: "like", label: "👍 좋아요" },
+                    { id: "neutral", label: "😐 그냥" },
+                    { id: "dislike", label: "👎 별로" },
+                  ].map((b) => {
+                    const active = feedbackDone === b.id;
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => submitFeedback(b.id as "like" | "neutral" | "dislike")}
+                        style={{
+                          border: active ? "1px solid #2563EB" : "1px solid #CBD5E1",
+                          background: active ? "#EFF6FF" : "#fff",
+                          color: active ? "#1D4ED8" : "#334155",
+                          borderRadius: 999,
+                          fontSize: 12,
+                          fontWeight: 800,
+                          padding: "6px 10px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {b.label}
+                      </button>
+                    );
+                  })}
+                  {toast ? (
+                    <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 800, color: "#16A34A" }}>
+                      {toast}
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           ) : null}
