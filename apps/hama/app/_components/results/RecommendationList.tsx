@@ -8,11 +8,23 @@ import { RecommendationCard } from "./RecommendationCard";
 import { space } from "@/lib/designTokens";
 import type { LogRecommendationEventInput } from "@/lib/analytics/types";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
-import { logEvent } from "@/lib/logEvent";
+import { logEvent, logHamaEvent, getOrCreateSessionId } from "@/lib/logEvent";
+import { extractSituationTags } from "@/lib/extractSituationTags";
+import { HamaEventNames } from "@/lib/hamaEventNames";
+import { inferDirectionsProvider } from "@/lib/inferDirectionsProvider";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
 import { getCardExposureId, saveRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
 
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
+
+function hashDedupKey(s: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
 
 type Props = {
   cards: HomeCard[];
@@ -25,6 +37,8 @@ type Props = {
   analyticsV2Click?: LogRecommendationEventInput["analytics_v2"];
   /** 메인 카드 아래 — 후보 부족·재추천 등 */
   showSoftFallbackCopy?: boolean;
+  /** 추천 인상 메타: 주 추천 vs '이런 곳도 있어' */
+  resultsSurface?: "primary" | "secondary";
 };
 
 export function RecommendationList({
@@ -37,6 +51,7 @@ export function RecommendationList({
   onRequireLogin,
   analyticsV2Click,
   showSoftFallbackCopy = false,
+  resultsSurface = "primary",
 }: Props) {
   const getCardPlaceId = React.useCallback(
     (card: HomeCard): string =>
@@ -107,6 +122,60 @@ export function RecommendationList({
         : `i:${incomingDeckFingerprint}`,
     [stableRecommendations.length, stableDeckFingerprint, incomingDeckFingerprint]
   );
+
+  React.useEffect(() => {
+    const top = visibleRecommendations.slice(0, 3);
+    if (top.length === 0) return;
+    const query = scenarioObject?.rawQuery?.trim() ?? "";
+    const fp = top.map((c) => `${getCardPlaceId(c)}:${String(c.name ?? "")}`).join("|");
+    const sid = getOrCreateSessionId();
+    if (!sid) return;
+    const dedupKey = `hama_imp_${hashDedupKey(`${sid}::${query}::${fp}::${resultsSurface}`)}`;
+    try {
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(dedupKey)) return;
+      if (typeof sessionStorage !== "undefined") sessionStorage.setItem(dedupKey, "1");
+    } catch {
+      return;
+    }
+
+    const sitTags = extractSituationTags(query);
+    const deckNames = top.map((c) => c.name);
+    const intentStr = scenarioObject ? String(scenarioObject.intentType) : "";
+    const categoryStr = scenarioObject ? String(scenarioObject.intentCategory ?? "") : "";
+    const modeStr = scenarioObject ? String(scenarioObject.recommendationMode ?? "") : "";
+
+    top.forEach((card, idx) => {
+      const reason = deckReasons[idx];
+      const reasonMeta = reason
+        ? {
+            headline: reason.headline,
+            subline: reason.subline,
+            badges: reason.badges,
+            scenarioLabel: reason.scenarioLabel,
+          }
+        : {};
+      logHamaEvent({
+        event_name: HamaEventNames.recommendationImpression,
+        query: query || null,
+        intent: intentStr || null,
+        category: categoryStr || null,
+        mode: modeStr || null,
+        source: "results",
+        place_id: getCardPlaceId(card),
+        place_name: card.name,
+        place_category: (card.category ?? card.categoryLabel ?? null) as string | null,
+        rank_position: idx + 1,
+        situation_tags: sitTags,
+        metadata: {
+          reason: reasonMeta,
+          distanceKm: card.distanceKm ?? null,
+          tags: (card.tags ?? []).slice(0, 8),
+          renderedSource: resultsSurface,
+          deckNames,
+        },
+      });
+    });
+  }, [visibleRecommendations, scenarioObject, deckReasons, getCardPlaceId, resultsSurface]);
 
   React.useEffect(() => {
     return () => {
@@ -254,6 +323,19 @@ export function RecommendationList({
     setFeedbackDone(value);
     setToast("감사합니다");
     window.setTimeout(() => setToast(null), 1500);
+    logHamaEvent({
+      event_name: HamaEventNames.recommendationHelpfulFeedback,
+      query: scenarioObject?.rawQuery?.trim() ?? null,
+      intent: scenarioObject ? String(scenarioObject.intentType) : null,
+      category: scenarioObject ? String(scenarioObject.intentCategory ?? "") : null,
+      mode: scenarioObject ? String(scenarioObject.recommendationMode ?? "") : null,
+      source: "results",
+      place_id: top.id,
+      place_name: top.name,
+      rank_position: 1,
+      situation_tags: extractSituationTags(scenarioObject?.rawQuery ?? ""),
+      metadata: { feedback: value, message: "이 추천 도움됐나요?" },
+    });
     logRecommendationEvent({
       event_name: "place_feedback",
       entity_type: "place",
@@ -279,6 +361,21 @@ export function RecommendationList({
     const cardPlaceId = getCardPlaceId(card);
     console.log("[choose here clicked]", { cardPlaceId, cardName: card.name });
     if (!isLoggedIn) {
+      const q = scenarioObject?.rawQuery?.trim() ?? "";
+      logHamaEvent({
+        event_name: HamaEventNames.loginRequiredAction,
+        action: "choose_place",
+        query: q || null,
+        intent: scenarioObject ? String(scenarioObject.intentType) : null,
+        category: scenarioObject ? String(scenarioObject.intentCategory ?? "") : null,
+        mode: scenarioObject ? String(scenarioObject.recommendationMode ?? "") : null,
+        source: "results",
+        place_id: cardPlaceId,
+        place_name: card.name,
+        rank_position: rank + 1,
+        situation_tags: extractSituationTags(q),
+        metadata: { isLoggedIn: false, blockedByLogin: true },
+      });
       onRequireLogin?.();
       return false;
     }
@@ -316,6 +413,20 @@ export function RecommendationList({
         setSelectedPlaceLogId(logId);
         setSelectedPlaceId(cardPlaceId);
         logEvent("decision_confirmed", { place_id: card.id, place_name: card.name, source: "results", card_rank: rank + 1 });
+        const qOk = scenarioObject?.rawQuery?.trim() ?? "";
+        logHamaEvent({
+          event_name: HamaEventNames.choosePlace,
+          query: qOk || null,
+          intent: scenarioObject ? String(scenarioObject.intentType) : null,
+          category: scenarioObject ? String(scenarioObject.intentCategory ?? "") : null,
+          mode: scenarioObject ? String(scenarioObject.recommendationMode ?? "") : null,
+          source: "results",
+          place_id: cardPlaceId,
+          place_name: card.name,
+          rank_position: rank + 1,
+          situation_tags: extractSituationTags(qOk),
+          metadata: { isLoggedIn: true, blockedByLogin: false },
+        });
         console.log("[decision] selected place:", {
           place_id: cardPlaceId,
           place_name: card.name,
@@ -379,6 +490,14 @@ export function RecommendationList({
     try {
       setReceiptVerifying(true);
       setReceiptResult(null);
+      logHamaEvent({
+        event_name: HamaEventNames.receiptVerifyClick,
+        query: scenarioObject?.rawQuery?.trim() ?? null,
+        source: "results",
+        place_id: selectedPlaceId,
+        place_name: selectedPlaceName,
+        situation_tags: extractSituationTags(scenarioObject?.rawQuery ?? ""),
+      });
       logEvent("receipt_verification_started", { source: "results", selected_place_id: selectedPlaceId });
       const res = await fetch("/api/beta/receipt-verify", {
         method: "POST",
@@ -501,6 +620,18 @@ export function RecommendationList({
         alert(`피드백 저장에 실패했어요.\n${json.error ?? "unknown_error"}${json.detail ? `: ${json.detail}` : ""}`);
         return;
       }
+      logHamaEvent({
+        event_name: HamaEventNames.visitFeedbackSubmit,
+        query: scenarioObject?.rawQuery?.trim() ?? null,
+        source: "results",
+        place_id: paymentSnapshot.placeId,
+        place_name: paymentSnapshot.placeName,
+        situation_tags: extractSituationTags(scenarioObject?.rawQuery ?? ""),
+        metadata: {
+          satisfaction: payload.satisfaction,
+          feedback_tags: payload.feedback_tags,
+        },
+      });
       logEvent("visit_feedback_submitted", {
         place_id: paymentSnapshot.placeId,
         place_name: paymentSnapshot.placeName,
@@ -566,6 +697,19 @@ export function RecommendationList({
                 selectedPlaceId,
                 ignored: false,
               });
+              const qClick = scenarioObject?.rawQuery?.trim() ?? "";
+              logHamaEvent({
+                event_name: HamaEventNames.recommendationClick,
+                query: qClick || null,
+                intent: scenarioObject ? String(scenarioObject.intentType) : null,
+                category: scenarioObject ? String(scenarioObject.intentCategory ?? "") : null,
+                mode: scenarioObject ? String(scenarioObject.recommendationMode ?? "") : null,
+                source: "results",
+                place_id: cardPlaceId,
+                place_name: card.name,
+                rank_position: i + 1,
+                situation_tags: extractSituationTags(qClick),
+              });
               onPlaceClick(card, i);
             }}
             onChooseHere={(e) => {
@@ -573,7 +717,26 @@ export function RecommendationList({
               e.stopPropagation();
               void choosePlace(card, i);
             }}
-            onNavigate={() => onNavigate(card, i)}
+            onNavigate={() => {
+              const qNav = scenarioObject?.rawQuery?.trim() ?? "";
+              logHamaEvent({
+                event_name: HamaEventNames.directionsClick,
+                query: qNav || null,
+                intent: scenarioObject ? String(scenarioObject.intentType) : null,
+                category: scenarioObject ? String(scenarioObject.intentCategory ?? "") : null,
+                mode: scenarioObject ? String(scenarioObject.recommendationMode ?? "") : null,
+                source: "results",
+                place_id: cardPlaceId,
+                place_name: card.name,
+                rank_position: i + 1,
+                situation_tags: extractSituationTags(qNav),
+                metadata: {
+                  provider: inferDirectionsProvider(card),
+                  distanceKm: card.distanceKm ?? null,
+                },
+              });
+              onNavigate(card, i);
+            }}
             onCall={() => onCall(card, i)}
             selected={cardPlaceId === selectedPlaceId}
             hamaPayEnabled={card.hama_pay_enabled === true}

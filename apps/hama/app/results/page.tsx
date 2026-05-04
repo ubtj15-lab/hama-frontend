@@ -1210,6 +1210,7 @@ function ResultsContent() {
                 scenarioObject={effectiveScenario}
                 analyticsV2Click={analyticsV2Base ?? undefined}
                 showSoftFallbackCopy={false}
+                resultsSurface="secondary"
                 isLoggedIn={isLoggedIn}
                 onRequireLogin={requireKakaoLogin}
                 onPlaceClick={(card, rank) => {
