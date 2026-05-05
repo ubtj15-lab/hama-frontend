@@ -23,6 +23,12 @@ import { isAlcoholNightlifeVenue } from "@/lib/recommend/childFriendlyScore";
 import { getCardExposureId, readRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
 import { logEvent } from "@/lib/logEvent";
 import { getOrCreateHamaSearchSeed } from "@/lib/searchDiversityClient";
+import { categoriesForHomeTab } from "@/lib/storeCategoryFilters";
+import {
+  applyStoreSuppression,
+  fetchActiveStoreSuppressionRules,
+  inferStoreSuppressionScope,
+} from "@/lib/recommend/storeSuppression";
 
 const KIDS_FAMILY_QUERY_KEYWORDS = [
   "아이",
@@ -74,6 +80,19 @@ const FAST_FOOD_BRANDS = [
   "배스킨라빈스",
   "던킨",
 ] as const;
+
+const RESTAURANT_DIAG_TARGET_QUERIES = new Set([
+  "푸드",
+  "식당",
+  "맛집",
+  "가족 외식",
+  "아이랑 밥",
+]);
+
+function isRestaurantDiagTargetQuery(q: string | null | undefined): boolean {
+  const t = normalizeBrandQuery(String(q ?? "")).trim();
+  return RESTAURANT_DIAG_TARGET_QUERIES.has(t);
+}
 
 function normalizeBlob(card: HomeCard): string {
   const c = card as any;
@@ -1224,6 +1243,129 @@ function isGeneralMealRestaurantBrowseQuery(q: string | null | undefined): boole
   return ["푸드", "식당", "맛집", "밥", "점심", "저녁", "외식"].includes(t);
 }
 
+function isRestaurantFinalDiversityTarget(params: {
+  query: string | null | undefined;
+  explicitCategory: string | null | undefined;
+  explicitIntent: string | null | undefined;
+}): boolean {
+  if (isGeneralMealRestaurantBrowseQuery(params.query)) return true;
+  if (normalizeBrandQuery(String(params.query ?? "")).trim() === "가족 외식") return true;
+  if (normalizeBrandQuery(String(params.query ?? "")).trim() === "아이랑 밥") return true;
+  if (String(params.explicitCategory ?? "").trim().toLowerCase() === "restaurant") return true;
+  return String(params.explicitIntent ?? "").trim().toLowerCase() === "food_general";
+}
+
+function classifyRestaurantBucket(card: HomeCard): string {
+  const blob = normalizeBlob(card);
+  if (/김밥|분식|떡볶이|라면/.test(blob)) return "gimbap_snack";
+  if (/중식|짜장|짬뽕|마라|탕수육/.test(blob)) return "chinese";
+  if (/고기|갈비|삼겹|구이|불고기|정육/.test(blob)) return "meat_grill";
+  if (/국밥|순대국|찌개|탕|해장/.test(blob)) return "soup_stew";
+  if (/회|해산물|수산|어촌|초밥|스시/.test(blob)) return "seafood";
+  if (/샤브|칼국수/.test(blob)) return "shabu_noodle";
+  if (/양식|파스타|스테이크|피자|리조또/.test(blob)) return "western";
+  return "other";
+}
+
+const RESTAURANT_LAST_TOP3_IDS_KEY = "hama_restaurant_last_top3_ids";
+
+function readLastRestaurantTop3Ids(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(RESTAURANT_LAST_TOP3_IDS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.map((v) => String(v)).filter(Boolean).slice(0, 3) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLastRestaurantTop3Ids(ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(RESTAURANT_LAST_TOP3_IDS_KEY, JSON.stringify(ids.slice(0, 3)));
+  } catch {}
+}
+
+function applyRestaurantFinalDiversityRotation(params: {
+  selected: ScoredRecommendItem[];
+  candidates: ScoredRecommendItem[];
+  query: string | null | undefined;
+  explicitCategory: string | null | undefined;
+  explicitIntent: string | null | undefined;
+  recentIds: string[];
+}): { next: ScoredRecommendItem[]; replacedNames: string[] } {
+  const { selected, candidates, query, explicitCategory, explicitIntent, recentIds } = params;
+  if (!isRestaurantFinalDiversityTarget({ query, explicitCategory, explicitIntent })) {
+    return { next: selected, replacedNames: [] };
+  }
+  if (candidates.length < 10 || selected.length < 3) {
+    return { next: selected, replacedNames: [] };
+  }
+
+  const out = [...selected];
+  const beforeTop3 = out.slice(0, 3);
+  const topPool = candidates.slice(0, 20);
+  const recentSet = new Set(recentIds);
+  const prevTop3Ids = new Set(readLastRestaurantTop3Ids());
+  const used = new Set(out.map((x) => x.card.id));
+  const replacedNames: string[] = [];
+
+  const tryReplaceAt = (idx: number, predicate: (c: ScoredRecommendItem) => boolean) => {
+    const current = out[idx];
+    if (!current) return;
+    const replacement = topPool.find((cand) => !used.has(cand.card.id) && predicate(cand));
+    if (!replacement) return;
+    replacedNames.push(current.card.name);
+    used.delete(current.card.id);
+    out[idx] = replacement;
+    used.add(replacement.card.id);
+  };
+
+  for (const idx of [1, 2] as const) {
+    const current = out[idx];
+    if (!current) continue;
+    const currentExposureId = getCardExposureId(current.card);
+    const shouldRotate = recentSet.has(currentExposureId) || prevTop3Ids.has(currentExposureId);
+    if (!shouldRotate) continue;
+    tryReplaceAt(idx, (cand) => {
+      const exp = getCardExposureId(cand.card);
+      return !recentSet.has(exp) && !prevTop3Ids.has(exp);
+    });
+  }
+
+  const top3Now = out.slice(0, 3);
+  const bucketCounts = top3Now.reduce<Record<string, number>>((acc, item) => {
+    const b = classifyRestaurantBucket(item.card);
+    acc[b] = (acc[b] ?? 0) + 1;
+    return acc;
+  }, {});
+  const repeatedBucket = Object.entries(bucketCounts).find(([, cnt]) => cnt >= 2)?.[0] ?? null;
+  if (repeatedBucket) {
+    const candidateIdx = [2, 1].find((i) => classifyRestaurantBucket(out[i]!.card) === repeatedBucket);
+    if (typeof candidateIdx === "number") {
+      tryReplaceAt(candidateIdx, (cand) => classifyRestaurantBucket(cand.card) !== repeatedBucket);
+    }
+  }
+
+  const beforeBuckets = beforeTop3.map((x) => classifyRestaurantBucket(x.card));
+  const afterBuckets = out.slice(0, 3).map((x) => classifyRestaurantBucket(x.card));
+  console.log("[restaurant final diversity rotation]", {
+    query,
+    poolCount: candidates.length,
+    beforeTop3: beforeTop3.map((x) => x.card.name),
+    recentIds,
+    bucketsBefore: beforeBuckets,
+    replacedNames,
+    afterTop3: out.slice(0, 3).map((x) => x.card.name),
+    bucketsAfter: afterBuckets,
+  });
+
+  writeLastRestaurantTop3Ids(out.slice(0, 3).map((x) => getCardExposureId(x.card)));
+  return { next: out, replacedNames };
+}
+
 function applyFinalFastfoodGuardForGeneralMealBrowse(
   selected: ScoredRecommendItem[],
   orderedCandidates: ScoredRecommendItem[],
@@ -1738,6 +1880,22 @@ function applySafetyAndDiversity(
       replacedNames: recentExposure.replacedNames,
     });
   }
+  const diversityRotation = applyRestaurantFinalDiversityRotation({
+    selected,
+    candidates,
+    query,
+    explicitCategory,
+    explicitIntent: diagnostics?.explicitIntent ?? null,
+    recentIds: recentExposure.recentIds,
+  });
+  selected = diversityRotation.next;
+
+  // 다양성 교체 이후에도 안전 가드를 마지막에 한 번 더 적용한다.
+  const diningUnsafePostRotation = demoteAlcoholFromTopForGeneralMealBrowse(selected, candidates, query);
+  selected = diningUnsafePostRotation.next;
+  const finalFastfoodPostRotation = applyFinalFastfoodGuardForGeneralMealBrowse(selected, candidates, query);
+  selected = finalFastfoodPostRotation.next;
+
   console.log("[recommend fixed-result diagnosis]", {
     query,
     explicitIntent: diagnostics?.explicitIntent ?? null,
@@ -1771,6 +1929,18 @@ function applySafetyAndDiversity(
     afterRecentExposureTop10: selected.slice(0, 10).map((x) => x.card.name),
     finalTop3: selected.slice(0, 3).map((x) => x.card.name),
   });
+  if (isRestaurantDiagTargetQuery(query)) {
+    console.log("[restaurant safety pool diagnosis]", {
+      query,
+      beforeGateCount: pipelineSource.length,
+      afterGateCount: candidates.length,
+      afterSafetyCount: selected.length,
+      afterRecentExposureCount: selected.length,
+      finalCandidatePoolCount: candidates.length,
+      finalTop20: selected.slice(0, 20).map((x) => x.card.name),
+      finalTop3: selected.slice(0, 3).map((x) => x.card.name),
+    });
+  }
 
   console.log("[recommend final deck constraint]", {
     query,
@@ -2251,10 +2421,63 @@ export function useHomeCards(
           allFetchLastCount = allRowsFood.length;
           const foodSlurp = (c: HomeCard) =>
             (isFoodLike(c) || isRestaurantLike(c)) && !isCafeLike(c) && !isBeautyLike(c);
-          fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, allRowsFood.filter(foodSlurp));
+          const allRestaurantLike = allRowsFood.filter(foodSlurp);
+          fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, allRestaurantLike);
+          if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
+            console.log("[restaurant all merge diagnosis]", {
+              query: options.searchQuery ?? null,
+              allFetchedCount: allRowsFood.length,
+              restaurantLikeFromAllCount: allRestaurantLike.length,
+              mergedFoodPoolCount: fetchedRaw.filter((c) => isRestaurantLike(c)).length,
+              mergedNamesTop50: fetchedRaw
+                .filter((c) => isRestaurantLike(c))
+                .slice(0, 50)
+                .map((c) => c.name),
+            });
+          }
         }
 
         const fetchedPreGate = fetchedRaw;
+        if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
+          const restaurantLikeRows = fetchedPreGate.filter((c) => isRestaurantLike(c));
+          const countsByCategory = restaurantLikeRows.reduce<Record<string, number>>((acc, card) => {
+            const key = String(card.category ?? "unknown");
+            acc[key] = (acc[key] ?? 0) + 1;
+            return acc;
+          }, {});
+          const countsByArea = restaurantLikeRows.reduce<Record<string, number>>((acc, card) => {
+            const key = String(card.area ?? "unknown");
+            acc[key] = (acc[key] ?? 0) + 1;
+            return acc;
+          }, {});
+          const withLatLngCount = restaurantLikeRows.filter(
+            (c) => typeof c.lat === "number" && typeof c.lng === "number"
+          ).length;
+          const withoutLatLngCount = Math.max(0, restaurantLikeRows.length - withLatLngCount);
+          console.log("[restaurant db pool diagnosis]", {
+            query: options.searchQuery ?? null,
+            knownDbRestaurantCount: 284,
+            categoriesForRestaurantTab: categoriesForHomeTab("restaurant"),
+            fetchedRestaurantTabCount: restaurantTabOnlyCount,
+            allFetchedCount: allFetchLastCount,
+            restaurantLikeFromAllCount: fetchedRaw.filter((c) => isRestaurantLike(c)).length,
+            withLatLngCount,
+            withoutLatLngCount,
+            countsByCategory,
+            countsByArea,
+            sampleNames: restaurantLikeRows.slice(0, 30).map((c) => c.name),
+          });
+          console.log("[restaurant fetch diagnosis]", {
+            query: options.searchQuery ?? null,
+            fetchTab: strictTab ?? explicitTab ?? tab,
+            categoriesForTab: categoriesForHomeTab("restaurant"),
+            fetchedCount: restaurantLikeRows.length,
+            fetchedNamesTop50: restaurantLikeRows.slice(0, 50).map((c) => c.name),
+            fetchLimit: RECOMMEND_POOL_SINGLE_TAB,
+            hasDistanceFilter: false,
+            maxDistanceKm: null,
+          });
+        }
         const afterMatcherCount =
           exCatLower === "culture"
             ? fetchedPreGate.filter((c) => isCultureLike(c) || hasCultureAnchor(c)).length
@@ -2292,6 +2515,31 @@ export function useHomeCards(
           relaxPersonalRules,
         };
         let rankedPrimary = await buildExpandedRankedPool(fetched, ctx, 50);
+        if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
+          const top30 = rankedPrimary.slice(0, 30);
+          console.log("[restaurant ranking diagnosis]", {
+            query: options.searchQuery ?? null,
+            rankedPoolCount: rankedPrimary.length,
+            top30NamesWithScores: top30.map((x) => ({
+              name: x.card.name,
+              category: x.card.category,
+              area: x.card.area,
+              distanceKm: x.card.distanceKm,
+              finalScore: x.breakdown.finalScore,
+              tags: x.card.tags,
+              mood: x.card.mood,
+              breakdown: x.breakdown,
+            })),
+          });
+          console.log("[restaurant distance diagnosis]", {
+            query: options.searchQuery ?? null,
+            top30: top30.map((x) => ({
+              name: x.card.name,
+              distanceKm: x.card.distanceKm,
+              finalScore: x.breakdown.finalScore,
+            })),
+          });
+        }
         let foodDiversityMeta: {
           poolSize: number;
           beforeShuffle: string[];
@@ -2605,6 +2853,45 @@ export function useHomeCards(
               cultureMuseumDiag?.anchorCount ??
               fetchedPreGate.filter((c) => hasCultureAnchor(c) && !cultureRescueSoftBlock(c)).length,
             selectedNames: picked.map((x) => x.card.name),
+          });
+        }
+
+        const suppressionScope = inferStoreSuppressionScope({
+          query: options.searchQuery ?? null,
+          explicitCategory: options.explicitCategory ?? null,
+          explicitIntent: options.explicitIntent ?? null,
+        });
+        const suppressionRules = await fetchActiveStoreSuppressionRules(suppressionScope);
+        const suppressionBeforeTop10 = picked.slice(0, 10).map((x) => x.card.name);
+        const beforeSuppressionCount = picked.length;
+        const suppressionApplied = applyStoreSuppression(picked, suppressionRules, {
+          scope: suppressionScope,
+          getStoreId: (item) => {
+            const cardAny = item.card as { place_id?: string | null; store_id?: string | null };
+            return String(cardAny.place_id ?? cardAny.store_id ?? item.card.id ?? "");
+          },
+          getStoreName: (item) => String(item.card.name ?? ""),
+        });
+        picked = suppressionApplied.next;
+        const suppressionAfterTop10 = picked.slice(0, 10).map((x) => x.card.name);
+        console.log("[store suppression applied]", {
+          scope: suppressionScope,
+          ruleCount: suppressionRules.length,
+          suppressedNames: suppressionApplied.suppressedNames,
+          beforeTop10: suppressionBeforeTop10,
+          afterTop10: suppressionAfterTop10,
+        });
+        if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
+          console.log("[restaurant final pool diagnosis]", {
+            query: options.searchQuery ?? null,
+            beforeGateCount: fetchedPreGate.length,
+            afterGateCount: afterExplicitGateCount,
+            afterSafetyCount: beforeSuppressionCount,
+            afterRecentExposureCount: beforeSuppressionCount,
+            afterSuppressionCount: picked.length,
+            finalCandidatePoolCount: rankedPrimary.length,
+            finalTop20: picked.slice(0, 20).map((x) => x.card.name),
+            finalTop3: picked.slice(0, 3).map((x) => x.card.name),
           });
         }
 

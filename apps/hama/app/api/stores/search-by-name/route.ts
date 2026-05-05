@@ -15,6 +15,11 @@ import {
 import { orderRowsServiceRegionFirst } from "@/lib/serviceRegion";
 import type { StoreRow } from "@/lib/storeTypes";
 import { isAlcoholNightlifeHaystack } from "@/lib/recommend/childFriendlyScore";
+import {
+  applyStoreSuppression,
+  fetchActiveStoreSuppressionRules,
+  inferStoreSuppressionScope,
+} from "@/lib/recommend/storeSuppression";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -696,6 +701,8 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const searchQuery = String(url.searchParams.get("q") ?? "").trim();
     const safe = sanitizeToken(normalizeBrandQuery(searchQuery));
+    const explicitCategory = String(url.searchParams.get("category") ?? "").trim();
+    const explicitIntent = String(url.searchParams.get("intent") ?? "").trim();
 
     if (process.env.NODE_ENV === "development") {
       // eslint-disable-next-line no-console
@@ -1006,6 +1013,31 @@ export async function GET(req: Request) {
         afterGuardNames,
       });
     }
+
+    const suppressionScope = inferStoreSuppressionScope({
+      query: searchQuery,
+      explicitCategory,
+      explicitIntent,
+    });
+    const suppressionRules = await fetchActiveStoreSuppressionRules(suppressionScope);
+    const suppressionBeforeTop10 = items.slice(0, 10).map((r) => r.name);
+    const suppressionApplied = applyStoreSuppression(items, suppressionRules, {
+      scope: suppressionScope,
+      getStoreId: (row) => {
+        const r = row as StoreRow & { place_id?: string | null; store_id?: string | null };
+        return String(r.store_id ?? r.place_id ?? r.id ?? "");
+      },
+      getStoreName: (row) => String(row.name ?? ""),
+    });
+    items = suppressionApplied.next;
+    const suppressionAfterTop10 = items.slice(0, 10).map((r) => r.name);
+    console.log("[store suppression applied]", {
+      scope: suppressionScope,
+      ruleCount: suppressionRules.length,
+      suppressedNames: suppressionApplied.suppressedNames,
+      beforeTop10: suppressionBeforeTop10,
+      afterTop10: suppressionAfterTop10,
+    });
 
     const body: Record<string, unknown> = { items };
     if (wantDebug) {
