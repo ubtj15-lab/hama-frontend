@@ -818,6 +818,21 @@ export async function GET(req: Request) {
     const qualityFilteredCount = qualityFiltered.length;
 
     const pipelineFiltered = filterQualityForStrictLibraryQuery(searchQuery, safe, qualityFiltered);
+    if (isStrictLibraryNameQuery(safe)) {
+      const libraryLikeCount = pipelineFiltered.filter(({ row }) => isLibraryCandidateRow(row)).length;
+      const removedMuseumLikeNames = qualityFiltered
+        .filter(({ row }) => isMuseumLikeForLibraryQuery(row))
+        .map(({ row }) => String(row.name ?? ""));
+      const selectedNames = pipelineFiltered.slice(0, 12).map(({ row }) => row.name);
+      console.log("[library search diagnosis]", {
+        query: searchQuery,
+        rawRowsCount,
+        qualityFilteredCount,
+        libraryLikeCount,
+        removedMuseumLikeNames,
+        selectedNames,
+      });
+    }
 
     const pipelineFilteredCount = pipelineFiltered.length;
 

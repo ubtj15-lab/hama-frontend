@@ -384,6 +384,7 @@ function ResultsContent() {
   const searchQueryForHomeCards = useMemo(() => {
     const qTrim = qRaw.trim();
     if (qTrim === "박물관") return qTrim;
+    if (qTrim === "도서관") return qTrim;
     if ((explicitCategory ?? "").trim().toLowerCase() === "culture") return qRaw || null;
     const qNorm = normalizeBrandQuery(qRaw).trim();
     if (FAMILY_DINING_ALIAS_QUERIES.has(qTrim) || FAMILY_DINING_ALIAS_QUERIES.has(qNorm)) return "식당";
@@ -782,7 +783,26 @@ function ResultsContent() {
       homeCardsCount: cards.length,
       renderedSource,
     });
-  }, [qRaw, placeSearchEnabled, placeHits.length, cards.length, showNameSearch]);
+    console.log("[library results diagnosis]", {
+      qRaw,
+      placeSearchEnabled,
+      placeSearchResultsCount: placeHits.length,
+      homeCardsCount: cards.length,
+      renderedSource,
+      searchQueryForHomeCards,
+      explicitIntent,
+      explicitCategory,
+    });
+  }, [
+    qRaw,
+    placeSearchEnabled,
+    placeHits.length,
+    cards.length,
+    showNameSearch,
+    searchQueryForHomeCards,
+    explicitIntent,
+    explicitCategory,
+  ]);
 
   const filteredCoursePlans = useMemo(() => {
     if (courseFilter === "all") return coursePlans;
