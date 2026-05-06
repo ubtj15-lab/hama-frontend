@@ -487,6 +487,14 @@ export function RecommendationList({
       alert("선택한 매장 정보를 찾을 수 없어요. 다시 선택해 주세요.");
       return;
     }
+    console.log("[receipt verify submit]", {
+      storeId: selectedPlaceId,
+      storeName: selectedPlaceName,
+      isLoggedIn,
+      hasFile: Boolean(receiptFile),
+      hasText: Boolean(visitFeedbackText.trim()),
+      endpoint: "/api/beta/receipt-verify",
+    });
     try {
       setReceiptVerifying(true);
       setReceiptResult(null);
@@ -517,6 +525,11 @@ export function RecommendationList({
         message?: string;
         error?: string;
       };
+      console.log("[receipt verify response]", {
+        ok: Boolean(json.ok),
+        status: res.status,
+        message: json.message ?? json.error ?? null,
+      });
       if (!res.ok || !json.ok) {
         setReceiptResult("인증 처리에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;
