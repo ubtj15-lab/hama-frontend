@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@hama/shared";
 import { filterRowsByServiceRegion } from "@/lib/serviceRegion";
 import { PLACE_NAME_SELECT, PLACES_TABLE } from "@/lib/places/placeNameSearch";
+import { hamaDevLog } from "@/lib/hamaDevLog";
 
 export type Category = "cafe" | "restaurant" | "salon" | "activity";
 
@@ -61,6 +62,7 @@ export function normalizeCategory(raw: unknown): Category | null {
   }
 
   if (c === "beauty") return "salon";
+  if (c === "library") return "activity";
 
   if (c0 === "CE7") return "cafe";
   if (c0 === "FD6") return "restaurant";
@@ -69,7 +71,7 @@ export function normalizeCategory(raw: unknown): Category | null {
   if (c0 === "카페") return "cafe";
   if (c0 === "식당") return "restaurant";
   if (c0 === "미용실") return "salon";
-  if (c0 === "액티비티" || c0 === "활동" || c0 === "공원" || c0 === "박물관") {
+  if (c0 === "액티비티" || c0 === "활동" || c0 === "공원" || c0 === "박물관" || c0 === "도서관") {
     return "activity";
   }
 
@@ -77,7 +79,16 @@ export function normalizeCategory(raw: unknown): Category | null {
   if (c.includes("cafe") || c.includes("카페")) return "cafe";
   if (c.includes("restaurant") || c.includes("식당") || c.includes("fd6") || c.includes("중식") || c.includes("한식") || c.includes("양식") || c.includes("일식")) return "restaurant";
   if (c.includes("salon") || c.includes("미용") || c.includes("beauty") || c.includes("bk9")) return "salon";
-  if (c.includes("activity") || c.includes("액티비티") || c.includes("활동") || c.includes("공원") || c.includes("박물관")) return "activity";
+  if (
+    c.includes("activity") ||
+    c.includes("액티비티") ||
+    c.includes("활동") ||
+    c.includes("공원") ||
+    c.includes("박물관") ||
+    c.includes("library") ||
+    c.includes("도서관")
+  )
+    return "activity";
 
   return null;
 }
@@ -165,6 +176,14 @@ export function useSearchStores() {
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const query = params.get("query") ?? "";
+    hamaDevLog("[HAMA_SEARCH] query:", query);
+    hamaDevLog("[HAMA_SEARCH] route:", "search");
+  }, []);
 
   useEffect(() => {
     let alive = true;

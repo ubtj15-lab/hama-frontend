@@ -10,6 +10,14 @@ import {
   RECOMMEND_POOL_PER_CATEGORY_MIXED,
   RECOMMEND_POOL_SINGLE_TAB,
 } from "@/lib/recommend/recommendConstants";
+import { hamaDevLog } from "@/lib/hamaDevLog";
+import type { NamedFoodPreset } from "@/lib/recommend/namedFoodPresets";
+import {
+  passesNamedFoodPresetFullCardGate,
+  passesTonkatsuJapaneseRelaxGate,
+} from "@/lib/recommend/namedFoodPresets";
+
+export type NamedFoodPresetRepoPhase = "strict" | "broad" | "tonkatsu_relax";
 
 /** ---------- Options ---------- */
 export type FetchHomeOptions = {
@@ -155,6 +163,52 @@ export function toHomeCard(row: StoreRow): HomeCard {
   return applyDefaultImage(card as HomeCard);
 }
 
+/** 상황형(아이/데잍트/실내 등) 검색에서 살롱·뷰티 계열 카드 차단용 — category + 텍스트 */
+const SCENARIO_BEAUTY_SALON_BLOCK_SUBSTRINGS = [
+  "미용실",
+  "헤어",
+  "헤어샵",
+  "뷰티",
+  "네일",
+  "피부",
+  "왁싱",
+  "속눈썹",
+  "살롱",
+] as const;
+
+const EMERGENCY_FORBIDDEN_CATEGORIES = new Set(["salon", "bk9", "beauty"]);
+
+export function homeCardMatchesScenarioBeautySalonBlock(card: HomeCard): boolean {
+  const rawCat = String((card as { category?: string | null }).category ?? "")
+    .trim()
+    .toLowerCase();
+  if (rawCat === "salon") return true;
+  if (
+    rawCat === "bk9" ||
+    rawCat === "beauty" ||
+    rawCat.includes("salon") ||
+    rawCat.includes("beauty")
+  ) {
+    return true;
+  }
+  const c = card as {
+    name?: string | null;
+    tags?: string[] | unknown;
+    mood?: string[] | unknown;
+    description?: string | null;
+  };
+  const tagStr = Array.isArray(c?.tags)
+    ? c.tags.join(" ")
+    : String((c?.tags ?? "") as string);
+  const moodStr = Array.isArray(c?.mood)
+    ? c.mood.join(" ")
+    : String((c?.mood ?? "") as string);
+  const blob = `${String(c?.name ?? "")} ${tagStr} ${moodStr} ${String(c?.description ?? "")}`
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  return SCENARIO_BEAUTY_SALON_BLOCK_SUBSTRINGS.some((kw) => blob.includes(kw));
+}
+
 /** ---------- Fetch: Home Cards ---------- */
 const STORES_HOME_CARD_SELECT = `
       id,
@@ -181,6 +235,30 @@ const STORES_HOME_CARD_SELECT = `
       updated_at
     `;
 
+const STORES_HOME_CARD_SELECT_FALLBACK = `
+      id,
+      name,
+      category,
+      area,
+      address,
+      lat,
+      lng,
+      phone,
+      image_url,
+      kakao_place_url,
+      naver_place_id,
+      mood,
+      tags,
+      with_kids,
+      for_work,
+      reservation_required,
+      price_level,
+      updated_at
+    `;
+const STORES_EMERGENCY_SIMPLE_SELECT = "id,name,category,area,address,lat,lng,tags,mood";
+
+const VALID_STORE_CATEGORIES = new Set(["restaurant", "cafe", "salon", "activity", "library"]);
+
 function fetchTabAuditSamples(cards: HomeCard[]) {
   return cards.slice(0, 10).map((card) => ({
     name: card.name,
@@ -196,7 +274,8 @@ export async function fetchHomeCardsByTab(
   options: FetchHomeOptions = {}
 ): Promise<HomeCard[]> {
   const count = options.count ?? (tab === "all" ? 12 : 6);
-  const categories = categoriesForHomeTab(tab);
+  const categoriesRaw = categoriesForHomeTab(tab);
+  const categories = categoriesRaw?.filter((c) => VALID_STORE_CATEGORIES.has(String(c ?? "").toLowerCase())) ?? null;
 
   let q = supabase.from("stores").select(STORES_HOME_CARD_SELECT).limit(count);
 
@@ -210,8 +289,79 @@ export async function fetchHomeCardsByTab(
   const { data, error } = await q;
 
   if (error) {
-    console.error("[fetchHomeCardsByTab]", { tab, categories, error });
-    return [];
+    console.error("[fetchHomeCardsByTab]", {
+      tab,
+      categoriesRaw,
+      categories,
+      message: error.message,
+      code: (error as any).code ?? null,
+      details: (error as any).details ?? null,
+      hint: (error as any).hint ?? null,
+      error,
+    });
+    // primary query 실패 시: category별 최소 컬럼 fallback
+    try {
+      const fallbackCategories = categories && categories.length > 0 ? categories : null;
+      const fallbackRows: StoreRow[] = [];
+      if (fallbackCategories) {
+        for (const category of fallbackCategories) {
+          const { data: oneData, error: oneError } = await supabase
+            .from("stores")
+            .select(STORES_HOME_CARD_SELECT_FALLBACK)
+            .eq("category", category)
+            .order("updated_at", { ascending: false, nullsFirst: false })
+            .limit(Math.max(3, Math.ceil(count / Math.max(1, fallbackCategories.length))));
+          if (oneError) {
+            console.error("[fetchHomeCardsByTab fallback category failed]", {
+              tab,
+              category,
+              message: oneError.message,
+              code: (oneError as any).code ?? null,
+              details: (oneError as any).details ?? null,
+              hint: (oneError as any).hint ?? null,
+            });
+            continue;
+          }
+          fallbackRows.push(...((oneData ?? []) as StoreRow[]));
+        }
+      } else {
+        const { data: allData, error: allError } = await supabase
+          .from("stores")
+          .select(STORES_HOME_CARD_SELECT_FALLBACK)
+          .order("updated_at", { ascending: false, nullsFirst: false })
+          .limit(Math.max(12, count));
+        if (allError) {
+          console.error("[fetchHomeCardsByTab fallback all failed]", {
+            tab,
+            message: allError.message,
+            code: (allError as any).code ?? null,
+            details: (allError as any).details ?? null,
+            hint: (allError as any).hint ?? null,
+          });
+          return [];
+        }
+        fallbackRows.push(...((allData ?? []) as StoreRow[]));
+      }
+
+      const dedup = new Map<string, StoreRow>();
+      for (const row of fallbackRows) {
+        const id = String((row as any)?.id ?? "");
+        if (!id || dedup.has(id)) continue;
+        dedup.set(id, row);
+      }
+      const rows = filterRowsByServiceRegion(Array.from(dedup.values())).slice(0, count);
+      const cards = rows.map(toHomeCard);
+      console.log("[fetchHomeCardsByTab fallback success]", {
+        tab,
+        categories: fallbackCategories ?? "all",
+        count: cards.length,
+        samples: fetchTabAuditSamples(cards),
+      });
+      return cards;
+    } catch (fallbackError) {
+      console.error("[fetchHomeCardsByTab fallback fatal]", { tab, fallbackError });
+      return [];
+    }
   }
 
   const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
@@ -221,6 +371,124 @@ export async function fetchHomeCardsByTab(
     categories: categories ?? "all",
     count: cards.length,
     samples: fetchTabAuditSamples(cards),
+  });
+  return cards;
+}
+
+/** 상황형 fallback용: stores.category 다중 후보를 직접 조회 */
+export async function fetchHomeCardsByStoreCategories(
+  categories: string[],
+  options: FetchHomeOptions = {}
+): Promise<HomeCard[]> {
+  const count = options.count ?? RECOMMEND_POOL_SINGLE_TAB;
+  const safeCategories = [...new Set(categories.map((c) => String(c ?? "").trim()).filter(Boolean))];
+  if (safeCategories.length === 0) return [];
+
+  let q = supabase
+    .from("stores")
+    .select(STORES_HOME_CARD_SELECT)
+    .in("category", safeCategories)
+    .limit(count)
+    .order("updated_at", { ascending: false, nullsFirst: false });
+
+  const { data, error } = await q;
+  if (error) {
+    console.error("[fetchHomeCardsByStoreCategories]", { categories: safeCategories, error });
+    return [];
+  }
+  const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
+  return rows.map(toHomeCard);
+}
+
+function hashSeedToNonNegativeInt(seed: string | undefined): number {
+  if (!seed) return 0;
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export async function fetchEmergencySimpleCardsByCategories(
+  categories: string[],
+  options: {
+    count?: number;
+    query?: string | null;
+    rngSeed?: string;
+    /** 응급 패치에서 매장 행 레벨로 살롱/뷰티 문자열 재제외 */
+    scenarioStripBeautySalon?: boolean;
+  } = {}
+): Promise<HomeCard[]> {
+  const count = Math.min(120, Math.max(80, options.count ?? 100));
+  const safeCategories = [
+    ...new Set(
+      categories
+        .map((c) => String(c ?? "").trim())
+        .filter(Boolean)
+        .filter((c) => !EMERGENCY_FORBIDDEN_CATEGORIES.has(c.toLowerCase()))
+    ),
+  ];
+  if (safeCategories.length === 0) return [];
+
+  const base = supabase
+    .from("stores")
+    .select(STORES_EMERGENCY_SIMPLE_SELECT)
+    .in("category", safeCategories);
+
+  let rows: StoreRow[] = [];
+  let fetchMode: "range" | "limit" | "range_fallback" = "limit";
+
+  if (options.rngSeed) {
+    const span = Math.max(count * 8, 400);
+    const offset = hashSeedToNonNegativeInt(options.rngSeed) % span;
+    const { data, error } = await base.range(offset, offset + count - 1);
+    if (error) {
+      console.error("[HAMA_EMERGENCY_SIMPLE_FETCH_ERROR]", error);
+      return [];
+    }
+    rows = (data ?? []) as StoreRow[];
+    fetchMode = "range";
+    if (rows.length < Math.min(16, Math.max(6, Math.floor(count / 6)))) {
+      fetchMode = "range_fallback";
+      const { data: d2, error: e2 } = await base.range(0, count - 1);
+      if (e2) {
+        console.error("[HAMA_EMERGENCY_SIMPLE_FETCH_ERROR]", e2);
+        return [];
+      }
+      rows = ((d2 ?? []) as StoreRow[]).slice(0, count);
+    }
+  } else {
+    const { data, error } = await base.limit(count);
+    if (error) {
+      console.error("[HAMA_EMERGENCY_SIMPLE_FETCH_ERROR]", error);
+      return [];
+    }
+    rows = ((data ?? []) as StoreRow[]).slice(0, count);
+  }
+
+  rows = filterRowsByServiceRegion(rows);
+  let cards = rows.map(toHomeCard);
+  if (options.scenarioStripBeautySalon) {
+    const beforeStrip = cards.length;
+    cards = cards.filter((c) => !homeCardMatchesScenarioBeautySalonBlock(c));
+    if (beforeStrip !== cards.length) {
+      hamaDevLog("[HAMA_EMERGENCY_STRIP_SCENARIO_BEAUTY]", {
+        query: options.query ?? null,
+        before: beforeStrip,
+        after: cards.length,
+      });
+    }
+  }
+  hamaDevLog("[HAMA_EMERGENCY_SIMPLE_FETCH]", {
+    query: options.query ?? null,
+    categories: safeCategories,
+    requested: count,
+    countRawRows: rows.length,
+    count: cards.length,
+    fetchMode,
+    scenarioStripBeautySalon: Boolean(options.scenarioStripBeautySalon),
+    first: cards[0] ?? rows[0] ?? null,
   });
   return cards;
 }
@@ -377,6 +645,26 @@ export async function fetchHomeRecommendCandidates(tab: HomeTabKey): Promise<Hom
     return merged;
   }
   return fetchHomeCardsByTab(tab, { count: RECOMMEND_POOL_SINGLE_TAB });
+}
+
+/**
+ * 음식 프리셋 전용 보강: `restaurant` 탭만 긁어온 뒤 DB 카테고리·블롭 하드 제외·프리셋 키워드로 필터합니다.
+ */
+export async function fetchRestaurantOnlyFoodPresetCards(options: {
+  preset: NamedFoodPreset;
+  phase: NamedFoodPresetRepoPhase;
+  count?: number;
+}): Promise<HomeCard[]> {
+  const limit = Math.min(Math.max(options.count ?? 420, 64), 520);
+  const rows = await fetchHomeCardsByTab("restaurant", { count: limit });
+  const filtered =
+    options.phase === "tonkatsu_relax"
+      ? rows.filter((c) => options.preset.id === "tonkatsu" && passesTonkatsuJapaneseRelaxGate(c))
+      : rows.filter((c) =>
+          passesNamedFoodPresetFullCardGate(c, options.preset, options.phase === "strict" ? "strict" : "broad")
+        );
+  hamaDevLog("[fetchRestaurantOnlyFoodPresetCards]", options.preset.id, options.phase, rows.length, filtered.length);
+  return filtered;
 }
 
 /**

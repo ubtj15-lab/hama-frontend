@@ -4,9 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
 import {
   fetchCultureStoresByNameHintsChained,
+  fetchEmergencySimpleCardsByCategories,
+  homeCardMatchesScenarioBeautySalonBlock,
   fetchHomeCardsByTab,
+  fetchHomeCardsByStoreCategories,
   fetchHomeCourseCandidatePool,
   fetchHomeRecommendCandidates,
+  fetchRestaurantOnlyFoodPresetCards,
   toHomeCard,
   type StoreRow,
 } from "@/lib/storeRepository";
@@ -20,7 +24,17 @@ import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 import { explicitCategoryToFetchTab } from "@/lib/homeResultsNavParams";
 import { normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
 import { isAlcoholNightlifeVenue } from "@/lib/recommend/childFriendlyScore";
-import { getCardExposureId, readRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
+import {
+  bumpAndReadSearchAttemptForQuery,
+  commitNamedFoodTop1Streak,
+  getCardExposureId,
+  getRecentExposureRotationSignature,
+  readNamedFoodPrevTop3Fingerprint,
+  readRecentExposedStoreIds,
+  readNamedFoodTop1Streak,
+  saveRecentExposedStoreIds,
+  writeNamedFoodPrevTop3Fingerprint,
+} from "@/lib/recommend/recentExposure";
 import { logEvent } from "@/lib/logEvent";
 import { getOrCreateHamaSearchSeed } from "@/lib/searchDiversityClient";
 import { categoriesForHomeTab } from "@/lib/storeCategoryFilters";
@@ -29,6 +43,24 @@ import {
   fetchActiveStoreSuppressionRules,
   inferStoreSuppressionScope,
 } from "@/lib/recommend/storeSuppression";
+import { applyReasonTemplateEngine } from "@/lib/recommend/reasonTemplateEngine";
+import { hamaDevLog } from "@/lib/hamaDevLog";
+import {
+  namedFoodPresetCompositeRankingBoost,
+  namedFoodPresetCardSubBucket,
+  presetSubIntentLabel,
+  reorderNamedFoodPresetRankingStrictPriority,
+  blobFailsNamedFoodPresetHardExclude,
+  isNamedFoodPresetRestaurantDbCategoryOnly,
+  matchesNamedFoodPresetKeywords,
+  passesNamedFoodPresetFinalRestaurantLabel,
+  passesNamedFoodPresetFullCardGate,
+  isConservativeAccuracyFirstFoodPreset,
+  passesTonkatsuJapaneseRelaxGate,
+  matchNamedFoodPreset,
+  isSoloSituationIntentQuery as textMatchesSoloSituationIntent,
+  type NamedFoodPreset,
+} from "@/lib/recommend/namedFoodPresets";
 
 const KIDS_FAMILY_QUERY_KEYWORDS = [
   "아이",
@@ -64,6 +96,8 @@ const UNSAFE_FOR_KIDS_KEYWORDS = [
   " bar ",
 ] as const;
 
+const UNSAFE_FOR_KIDS_FOOD_KEYWORDS = ["횟집", "회 ", "활어", "숙성회"] as const;
+
 const FAST_FOOD_BRANDS = [
   "맥도날드",
   "맥도날도",
@@ -89,9 +123,293 @@ const RESTAURANT_DIAG_TARGET_QUERIES = new Set([
   "아이랑 밥",
 ]);
 
+const SITUATION_QUERY_PRESETS: Record<
+  string,
+  { categories: string[]; keywords: string[] }
+> = {
+  문화생활: {
+    categories: ["activity", "library"],
+    keywords: ["문화", "박물관", "전시", "미술관", "역사관", "도서관", "체험"],
+  },
+  데이트: {
+    categories: ["cafe", "restaurant", "activity"],
+    keywords: ["카페", "디저트", "레스토랑", "산책", "분위기", "브런치"],
+  },
+  "아이랑 갈만한 곳": {
+    categories: ["activity", "library", "cafe", "restaurant"],
+    keywords: ["아이", "가족", "키즈", "공원", "도서관", "체험", "실내"],
+  },
+  "비오는날 실내": {
+    categories: ["cafe", "library", "activity"],
+    keywords: ["실내", "카페", "도서관", "박물관", "전시", "키즈", "체험"],
+  },
+};
+
 function isRestaurantDiagTargetQuery(q: string | null | undefined): boolean {
   const t = normalizeBrandQuery(String(q ?? "")).trim();
   return RESTAURANT_DIAG_TARGET_QUERIES.has(t);
+}
+
+function getSituationQueryPreset(q: string | null | undefined): { categories: string[]; keywords: string[] } | null {
+  const t = normalizeBrandQuery(String(q ?? "")).trim();
+  return SITUATION_QUERY_PRESETS[t] ?? null;
+}
+
+/** 응급 fetch category — salon/bk9는 storeRepository에서 추가로 제거함 */
+function getResultsEmergencyFallbackCategories(q: string | null | undefined): string[] | null {
+  const t = normalizeBrandQuery(String(q ?? "")).trim();
+  if (!t) return null;
+  if (t === "데이트") return ["cafe", "restaurant", "activity"];
+  if (t === "비오는날 실내") return ["cafe", "library", "activity"];
+  if (t === "아이랑 갈만한 곳") return ["activity", "library", "cafe", "restaurant"];
+  if (t.includes("아이랑") || t.includes("가족")) return ["activity", "library", "cafe", "restaurant"];
+  if (t.includes("비오는날") || t.includes("실내")) return ["cafe", "library", "activity"];
+  if (t === "문화생활") return ["activity", "library"];
+  return null;
+}
+
+function shouldBlockBeautySalonForListedScenarioQueries(q: string | null | undefined): boolean {
+  const t = normalizeBrandQuery(String(q ?? "")).trim();
+  if (!t) return false;
+  return (
+    t === "데이트" ||
+    t.includes("아이랑") ||
+    t.includes("가족") ||
+    t.includes("실내") ||
+    t.includes("비오는날")
+  );
+}
+
+function isCultureLifestyleQuery(q: string | null | undefined): boolean {
+  const t = normalizeBrandQuery(String(q ?? "")).trim();
+  return t === "문화생활";
+}
+
+function isKidsFamilyLikeQuery(q: string | null | undefined): boolean {
+  return /아이|아이랑|가족|키즈/.test(normalizeBrandQuery(String(q ?? "")));
+}
+
+function isNightlifeAdultTone(card: HomeCard): boolean {
+  const b = normalizeBlob(card);
+  return includesAny(b, [
+    "술",
+    "주점",
+    "포차",
+    "이자카야",
+    "호프",
+    "유흥",
+    "클럽",
+    "심야",
+    "새벽",
+    "라운지",
+    "칵테일",
+    "와인바",
+    " bar ",
+  ]);
+}
+
+function cultureLifestylePriorityScore(card: HomeCard, query: string | null | undefined): number {
+  const b = normalizeBlob(card);
+  const cat = categoryOf(card);
+  const rawCat = String((card as any)?.category ?? "").toLowerCase();
+  let score = 0;
+  if (cat === "activity") score += 130;
+  if (rawCat === "library") score += 120;
+  if (isCultureLike(card) || hasCultureAnchor(card)) score += 95;
+  if (isCafeLike(card)) score += 18; // 카페는 보조
+  if (isRestaurantLike(card) || isFoodLike(card)) score -= 140; // 일반 식당 최하위
+  if (includesAny(b, ["박물관", "전시", "미술관", "도서관", "공연", "체험", "공방", "보드게임", "실내", "문화"])) {
+    score += 60;
+  }
+  if (includesAny(b, ["보드게임", "boardgame"])) score += 28;
+  if (isKidsFamilyLikeQuery(query) && includesAny(b, ["보드게임", "boardgame"]) && isNightlifeAdultTone(card)) {
+    score -= 85;
+  }
+  return score;
+}
+
+function applyCultureLifestyleTop3Guard(params: {
+  selected: ScoredRecommendItem[];
+  candidates: ScoredRecommendItem[];
+  query: string | null | undefined;
+}): ScoredRecommendItem[] {
+  const { selected, candidates, query } = params;
+  if (!isCultureLifestyleQuery(query)) return selected;
+  const merged = mergeUniqueById(selected, candidates);
+  if (merged.length === 0) return selected;
+  const ranked = [...merged].sort((a, b) => {
+    const sa = cultureLifestylePriorityScore(a.card, query);
+    const sb = cultureLifestylePriorityScore(b.card, query);
+    if (sa !== sb) return sb - sa;
+    return hashString(`${a.card.id}|culture_lifestyle`) - hashString(`${b.card.id}|culture_lifestyle`);
+  });
+  const used = new Set<string>();
+  const out: ScoredRecommendItem[] = [];
+  const nonRestaurant = ranked.filter((x) => !isRestaurantLike(x.card) && !isFoodLike(x.card));
+  // 문화생활 top3는 일반 식당을 배제
+  for (const item of nonRestaurant) {
+    if (out.length >= Math.min(3, RECOMMEND_DECK_SIZE)) break;
+    if (used.has(item.card.id)) continue;
+    out.push(item);
+    used.add(item.card.id);
+  }
+  for (const item of ranked) {
+    if (out.length >= RECOMMEND_DECK_SIZE) break;
+    if (used.has(item.card.id)) continue;
+    out.push(item);
+    used.add(item.card.id);
+  }
+  return out;
+}
+
+type DiversityBucket =
+  | "park"
+  | "library"
+  | "museum"
+  | "boardgame"
+  | "cafe"
+  | "restaurant"
+  | "kids"
+  | "beauty";
+
+function getDiversityBucket(card: HomeCard): DiversityBucket {
+  const b = normalizeBlob(card);
+  if (includesAny(b, ["공원", "산책", "둘레길"])) return "park";
+  if (includesAny(b, ["도서관", "library"])) return "library";
+  if (includesAny(b, ["박물관", "전시", "미술관", "역사관", "gallery", "museum"])) return "museum";
+  if (includesAny(b, ["보드게임", "boardgame"])) return "boardgame";
+  if (isBeautyLike(card) || includesAny(b, ["미용실", "헤어", "살롱"])) return "beauty";
+  if (includesAny(b, ["키즈", "체험", "놀이터", "어린이"])) return "kids";
+  if (isCafeLike(card) || includesAny(b, ["카페", "커피", "디저트"])) return "cafe";
+  if (isRestaurantLike(card) || includesAny(b, ["식당", "음식", "밥", "맛집"])) return "restaurant";
+  return "kids";
+}
+
+function pickFirstMatching(
+  pool: ScoredRecommendItem[],
+  usedIds: Set<string>,
+  usedBuckets: Set<DiversityBucket>,
+  buckets: DiversityBucket[],
+  allowUsedBucket = false
+): ScoredRecommendItem | null {
+  for (const item of pool) {
+    if (usedIds.has(item.card.id)) continue;
+    const bucket = getDiversityBucket(item.card);
+    if (!buckets.includes(bucket)) continue;
+    if (!allowUsedBucket && usedBuckets.has(bucket)) continue;
+    return item;
+  }
+  return null;
+}
+
+function applyBucketDiversityToPicked(
+  selected: ScoredRecommendItem[],
+  query: string | null | undefined,
+  opts?: { deckTarget?: number; namedFoodPreset?: NamedFoodPreset | null }
+): ScoredRecommendItem[] {
+  if (selected.length < 2) return selected;
+  const t = normalizeBrandQuery(String(query ?? "")).trim();
+  const target = Math.min(opts?.deckTarget ?? RECOMMEND_DECK_SIZE, selected.length);
+  const foodPreset = opts?.namedFoodPreset ?? null;
+  const usedIds = new Set<string>();
+  const usedBuckets = new Set<DiversityBucket>();
+  const usedFoodPresetSubs = new Set<string>();
+  const out: ScoredRecommendItem[] = [];
+
+  const add = (item: ScoredRecommendItem | null) => {
+    if (!item) return;
+    if (usedIds.has(item.card.id)) return;
+    out.push(item);
+    usedIds.add(item.card.id);
+    usedBuckets.add(getDiversityBucket(item.card));
+  };
+
+  if (t === "문화생활") {
+    add(pickFirstMatching(selected, usedIds, usedBuckets, ["museum", "library", "park", "kids"]));
+    add(pickFirstMatching(selected, usedIds, usedBuckets, ["boardgame", "kids", "museum", "library"]));
+    add(pickFirstMatching(selected, usedIds, usedBuckets, ["cafe", "kids", "museum", "library", "park"]));
+  } else if (isKidsFamilyLikeQuery(t)) {
+    add(pickFirstMatching(selected, usedIds, usedBuckets, ["park"]));
+    add(pickFirstMatching(selected, usedIds, usedBuckets, ["kids", "boardgame", "library", "museum"]));
+    add(pickFirstMatching(selected, usedIds, usedBuckets, ["cafe", "restaurant"]));
+  }
+
+  // 공통: 같은 bucket(또는 음식 프리셋 서브버킷) 최대 1개 우선
+  for (const item of selected) {
+    if (out.length >= target) break;
+    if (usedIds.has(item.card.id)) continue;
+    if (foodPreset && (isRestaurantLike(item.card) || isFoodLike(item.card))) {
+      const sub = namedFoodPresetCardSubBucket(item.card, foodPreset);
+      if (usedFoodPresetSubs.has(sub)) continue;
+      out.push(item);
+      usedIds.add(item.card.id);
+      usedFoodPresetSubs.add(sub);
+      continue;
+    }
+    const bucket = getDiversityBucket(item.card);
+    if (usedBuckets.has(bucket)) continue;
+    out.push(item);
+    usedIds.add(item.card.id);
+    usedBuckets.add(bucket);
+  }
+
+  // 3개 미만이면 중복 bucket 허용
+  if (out.length < 3) {
+    for (const item of selected) {
+      if (out.length >= Math.min(3, target)) break;
+      if (usedIds.has(item.card.id)) continue;
+      out.push(item);
+      usedIds.add(item.card.id);
+    }
+  }
+
+  for (const item of selected) {
+    if (out.length >= target) break;
+    if (usedIds.has(item.card.id)) continue;
+    out.push(item);
+    usedIds.add(item.card.id);
+  }
+  return out;
+}
+
+function shuffleCardsBySeed(cards: HomeCard[], seedText: string): HomeCard[] {
+  if (cards.length < 2) return cards;
+  let h = 2166136261;
+  for (let i = 0; i < seedText.length; i += 1) {
+    h ^= seedText.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  let rng = h >>> 0;
+  const next = () => {
+    rng = (rng * 1103515245 + 12345) >>> 0;
+    return rng;
+  };
+  const out = [...cards];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = next() % (i + 1);
+    const t = out[i]!;
+    out[i] = out[j]!;
+    out[j] = t;
+  }
+  return out;
+}
+
+/** 최근 노출 id 정렬용 감점(클수록 뒤로). */
+function recentExposureSortPenalty(exposureId: string, recentOrdered: string[]): number {
+  if (!exposureId) return 0;
+  const idx = recentOrdered.indexOf(exposureId);
+  if (idx < 0) return 0;
+  return Math.min(360, 88 + idx * 16);
+}
+
+function shuffleScoredItemsBySeed(items: ScoredRecommendItem[], seedText: string): ScoredRecommendItem[] {
+  if (items.length < 2) return items;
+  const shuffledCards = shuffleCardsBySeed(
+    items.map((x) => x.card),
+    seedText
+  );
+  const byId = new Map(items.map((x) => [x.card.id, x] as const));
+  return shuffledCards.map((c) => byId.get(c.id)).filter((x): x is ScoredRecommendItem => x != null);
 }
 
 function normalizeBlob(card: HomeCard): string {
@@ -110,6 +428,144 @@ function normalizeBlob(card: HomeCard): string {
     menuKw,
   ];
   return ` ${parts.join(" ").toLowerCase().replace(/\s+/g, " ").trim()} `;
+}
+
+/** 데이트 단독 검색에서는 술집·야외 공원 차단 규칙을 쓰지 않음 */
+function isDateOnlySituationSearchQuery(query: string | null | undefined): boolean {
+  return normalizeBrandQuery(String(query ?? "")).trim() === "데이트";
+}
+
+/** 아이/가족/키즈 상황 — 포차·술집 등 제외 */
+function scenarioQueryNeedsKidsNightlifeSafetyStrip(
+  query: string | null | undefined,
+  scenario: ScenarioObject | null | undefined
+): boolean {
+  if (isDateOnlySituationSearchQuery(query)) return false;
+  const intent = detectIntentFit(query ?? null, scenario ?? null);
+  if (
+    intent === "kids_outing" ||
+    intent === "kids_meal" ||
+    intent === "family_dining" ||
+    intent === "kids_cafe"
+  ) {
+    return true;
+  }
+  const t = normalizeBrandQuery(String(query ?? "")).trim();
+  if (!t) return false;
+  return (
+    t.includes("아이랑") ||
+    t.includes("가족") ||
+    t.includes("키즈") ||
+    /유아|어린이|영유아|초등|아기/.test(t) ||
+    isKidsFamilyIntent(query, scenario ?? null)
+  );
+}
+
+/** 비오는 날 · 실내 상황 — 야외 공원·산책 후보 축소(실내 면허 키워드는 예외) */
+function scenarioQueryNeedsRainyIndoorOutdoorStrip(query: string | null | undefined): boolean {
+  if (isDateOnlySituationSearchQuery(query)) return false;
+  const t = normalizeBrandQuery(String(query ?? "")).trim();
+  if (!t) return false;
+  return t.includes("비오는날") || t.includes("실내");
+}
+
+const SCENARIO_KIDS_NIGHT_TOKENS = [
+  "포차",
+  "술집",
+  "이자카야",
+  "호프",
+  "주점",
+  "펍",
+  "소주",
+  "맥주",
+  "와인바",
+  "야식포차",
+] as const;
+
+function cardMatchesKidsScenarioNightExclude(card: HomeCard): boolean {
+  const blob = normalizeBlob(card);
+  if (includesAny(blob, [...SCENARIO_KIDS_NIGHT_TOKENS])) return true;
+  if (blob.includes(` 바 `)) return true;
+  if (blob.includes(` 펍 `) || /\sbar\s/.test(blob) || /\sbeer\s|\swine\b/.test(blob))
+    return true;
+  const rawCat = String((card as any)?.category ?? "").toLowerCase().replace(/\s+/g, "");
+  if (rawCat.includes("pub") || rawCat.includes("bar")) return true;
+  return false;
+}
+
+const RAIN_INDOOR_ALLOW_SUBSTRINGS = [
+  "실내체육관",
+  "실내놀이터",
+  "키즈카페",
+  "박물관",
+  "도서관",
+  "전시관",
+] as const;
+
+const RAIN_OUTDOOR_PARK_SUBSTRINGS = ["소공원", "산책로", "산책", "놀이터", "체육공원", "광장", "공원", "야외", "운동장"] as const;
+
+function cardMatchesRainyOutdoorParkExclude(card: HomeCard): boolean {
+  const blob = normalizeBlob(card);
+  for (const ok of RAIN_INDOOR_ALLOW_SUBSTRINGS) {
+    if (blob.includes(ok)) return false;
+  }
+  return includesAny(blob, [...RAIN_OUTDOOR_PARK_SUBSTRINGS]);
+}
+
+function shouldRemoveHomeCardForScenarioSafety(
+  card: HomeCard,
+  query: string | null | undefined,
+  scenario: ScenarioObject | null | undefined,
+  opts: { kids: boolean; rain: boolean }
+): boolean {
+  void query;
+  void scenario;
+  if (opts.kids && cardMatchesKidsScenarioNightExclude(card)) return true;
+  if (opts.rain && cardMatchesRainyOutdoorParkExclude(card)) return true;
+  return false;
+}
+
+function filterHomeCardsForScenarioSafety(
+  cards: HomeCard[],
+  query: string | null | undefined,
+  scenario: ScenarioObject | null | undefined
+): HomeCard[] {
+  const kids = scenarioQueryNeedsKidsNightlifeSafetyStrip(query, scenario);
+  const rain = scenarioQueryNeedsRainyIndoorOutdoorStrip(query);
+  if (!kids && !rain) return cards;
+  return cards.filter((c) => !shouldRemoveHomeCardForScenarioSafety(c, query, scenario, { kids, rain }));
+}
+
+function stripScenarioSafetyFromScoredRecommendDeck(
+  deck: ScoredRecommendItem[],
+  query: string | null | undefined,
+  scenario: ScenarioObject | null | undefined
+): { deck: ScoredRecommendItem[]; removedNames: string[] } {
+  const kids = scenarioQueryNeedsKidsNightlifeSafetyStrip(query, scenario);
+  const rain = scenarioQueryNeedsRainyIndoorOutdoorStrip(query);
+  if (!kids && !rain) return { deck, removedNames: [] };
+  const removedNames: string[] = [];
+  const next = deck.filter((item) => {
+    if (shouldRemoveHomeCardForScenarioSafety(item.card, query, scenario, { kids, rain })) {
+      removedNames.push(item.card.name);
+      return false;
+    }
+    return true;
+  });
+  return { deck: next, removedNames };
+}
+
+function filterScoredRecommendItemsForScenarioSafety(
+  items: ScoredRecommendItem[],
+  query: string | null | undefined,
+  scenario: ScenarioObject | null | undefined
+): ScoredRecommendItem[] {
+  const kids = scenarioQueryNeedsKidsNightlifeSafetyStrip(query, scenario);
+  const rain = scenarioQueryNeedsRainyIndoorOutdoorStrip(query);
+  if (!kids && !rain) return items;
+  return items.filter(
+    (it) => !shouldRemoveHomeCardForScenarioSafety(it.card, query, scenario, { kids, rain })
+  );
 }
 
 function isKidsFamilyIntent(query: string | null | undefined, scenario: ScenarioObject | null | undefined): boolean {
@@ -1078,6 +1534,7 @@ function applyFinalDeckConstraint(params: {
   removedByGateIds: Set<string>;
   unsafeIds: Set<string>;
   kidsFamily: boolean;
+  deckSize: number;
 }): FinalDeckConstraintResult {
   const {
     detectedIntent,
@@ -1087,6 +1544,7 @@ function applyFinalDeckConstraint(params: {
     removedByGateIds,
     unsafeIds,
     kidsFamily,
+    deckSize,
   } = params;
 
   const restaurantLikeCount = candidates.filter((x) => isRestaurantLike(x.card)).length;
@@ -1117,7 +1575,7 @@ function applyFinalDeckConstraint(params: {
   if (detectedIntent === "family_dining") {
     const mealOrdered = eligibleFromOrdered(candidates, (c) => isFamilyDiningMealVenue(c));
     if (mealOrdered.length >= 3) {
-      next = mealOrdered.slice(0, RECOMMEND_DECK_SIZE);
+      next = mealOrdered.slice(0, deckSize);
     } else if (mealOrdered.length === 2) {
       const pickedIds = new Set(mealOrdered.map((x) => x.card.id));
       const aux = mergeUniqueById(candidates, source).find(
@@ -1126,7 +1584,7 @@ function applyFinalDeckConstraint(params: {
       next = aux ? [...mealOrdered, aux] : [...mealOrdered];
     } else {
       const pool = eligibleFromOrdered(mergeUniqueById(candidates, source), (c) => !isFamilyDiningFinalSlotBanned(c));
-      next = pool.slice(0, RECOMMEND_DECK_SIZE);
+      next = pool.slice(0, deckSize);
     }
   } else if (detectedIntent === "kids_outing") {
     const poolRaw = mergeUniqueById(candidates, source).filter((x) => !isItemBaseExcluded(x) && !isKidsOutingFinalBanned(x.card));
@@ -1142,7 +1600,7 @@ function applyFinalDeckConstraint(params: {
       if (d !== 0) return d;
       return poolRaw.indexOf(a) - poolRaw.indexOf(b);
     });
-    next = sorted.slice(0, RECOMMEND_DECK_SIZE);
+    next = sorted.slice(0, deckSize);
   } else if (detectedIntent === "kids_meal") {
     const restInPool = candidates.filter((x) => isRestaurantLike(x.card)).length;
     const allowCafeEtc = restInPool < 2;
@@ -1178,14 +1636,14 @@ function applyFinalDeckConstraint(params: {
       return aff - bff;
     });
     for (const item of pri) {
-      if (out.length >= RECOMMEND_DECK_SIZE) break;
+      if (out.length >= deckSize) break;
       tryPush(item);
     }
     for (const item of pool) {
-      if (out.length >= RECOMMEND_DECK_SIZE) break;
+      if (out.length >= deckSize) break;
       tryPush(item);
     }
-    next = out.slice(0, RECOMMEND_DECK_SIZE);
+    next = out.slice(0, deckSize);
   } else if (detectedIntent === "cafe_general") {
     const pool = eligibleFromOrdered(mergeUniqueById(candidates, source), () => true);
     const sorted = [...pool].sort((a, b) => {
@@ -1194,10 +1652,10 @@ function applyFinalDeckConstraint(params: {
       if (ta !== tb) return ta - tb;
       return pool.indexOf(a) - pool.indexOf(b);
     });
-    let arr = sorted.slice(0, RECOMMEND_DECK_SIZE);
+    let arr = sorted.slice(0, deckSize);
     if (arr.length > 0 && isUnmannedCafe(arr[0].card)) {
       const swap = sorted.find((x) => !isUnmannedCafe(x.card) && isCafeLike(x.card));
-      if (swap) arr = [swap, ...arr.filter((x) => x.card.id !== swap.card.id)].slice(0, RECOMMEND_DECK_SIZE);
+      if (swap) arr = [swap, ...arr.filter((x) => x.card.id !== swap.card.id)].slice(0, deckSize);
     }
     next = arr;
   } else if (detectedIntent === "date_social") {
@@ -1208,7 +1666,7 @@ function applyFinalDeckConstraint(params: {
       if (af !== bf) return af - bf;
       return pool.indexOf(a) - pool.indexOf(b);
     });
-    next = nonFfFirst.slice(0, RECOMMEND_DECK_SIZE);
+    next = nonFfFirst.slice(0, deckSize);
   } else {
     next = [...before];
   }
@@ -1229,7 +1687,8 @@ function applyFinalDeckConstraint(params: {
 function isUnsafeForKids(card: HomeCard): boolean {
   if (isAlcoholNightlifeVenue(card)) return true;
   const blob = normalizeBlob(card);
-  return UNSAFE_FOR_KIDS_KEYWORDS.some((kw) => blob.includes(kw.toLowerCase()));
+  if (UNSAFE_FOR_KIDS_KEYWORDS.some((kw) => blob.includes(kw.toLowerCase()))) return true;
+  return UNSAFE_FOR_KIDS_FOOD_KEYWORDS.some((kw) => blob.includes(kw.toLowerCase()));
 }
 
 function isExplicitFamilyOutingScenario(scenario: ScenarioObject | null | undefined): boolean {
@@ -1475,6 +1934,7 @@ function isRecentExposureTargetQuery(
   query: string | null | undefined,
   explicitCategory: string | null | undefined
 ): boolean {
+  if (getSituationQueryPreset(query)) return true;
   const t = normalizeBrandQuery(String(query ?? "")).trim();
   if (
     [
@@ -1497,7 +1957,273 @@ function isRecentExposureTargetQuery(
   ) {
     return true;
   }
+  if (matchNamedFoodPreset(String(query ?? "").trim())) return true;
   return String(explicitCategory ?? "").trim().toLowerCase() === "culture";
+}
+
+/** 랭킹·solo strip — URL q와 달리 `searchQuery`만 넘어오는 경우 대비해 rawQuery도 검사 */
+function isSoloSituationIntentQuery(
+  query: string | null | undefined,
+  scenario: ScenarioObject | null | undefined
+): boolean {
+  if (scenario?.scenario === "solo") return true;
+  const raw = String(scenario?.rawQuery ?? "").trim();
+  if (raw && textMatchesSoloSituationIntent(raw)) return true;
+  return textMatchesSoloSituationIntent(query ?? null);
+}
+
+function soloIntentFitDelta(card: HomeCard): number {
+  const b = normalizeBlob(card);
+  const c = card as {
+    categoryLabel?: string | null;
+    tags?: string[] | unknown;
+    menu_keywords?: string[] | unknown;
+    solo_friendly?: boolean | null;
+    quick_service?: boolean | null;
+  };
+  const categoryLabelBlob = normalizeBrandQuery(String(c.categoryLabel ?? "").toLowerCase());
+  const tagsBlob = normalizeBrandQuery(
+    (Array.isArray(c.tags) ? c.tags.join(" ") : String(c.tags ?? "")).toLowerCase()
+  );
+  const menuKeywordsBlob = normalizeBrandQuery(
+    (Array.isArray(c.menu_keywords) ? c.menu_keywords.join(" ") : String(c.menu_keywords ?? "")).toLowerCase()
+  );
+  const cuisineSignalBlob = `${categoryLabelBlob} ${tagsBlob} ${menuKeywordsBlob}`.trim();
+  let d = 0;
+
+  // 혼밥 intent 재정렬 우선 항목
+  if (/국밥|순대국|곰탕|설렁탕|해장국/.test(b)) d += 90;
+  if (/김밥|꼬마김밥/.test(b)) d += 84;
+  if (/분식|떡볶이|어묵|튀김/.test(b)) d += 76;
+  if (/우동|소바/.test(b)) d += 52;
+  if (/1인식당|1인\s*석|혼밥|혼자\s*식사|카운터\s*좌석|바테이블|counter/.test(b)) d += 64;
+  if ((c.solo_friendly ?? false) === true) d += 58;
+  if ((c.quick_service ?? false) === true || /빠른\s*식사|quick\s*meal|회전\s*빠름/.test(b)) d += 44;
+  if (isCafeLike(card) && /조용|한적|집중|작업|독서/.test(b)) d += 42;
+
+  if (isRestaurantLike(card)) d += 36;
+  if (isCafeLike(card) || isDessertLike(card)) d += 24;
+  if (/국밥|분식|백반|덮밥|김밥|칼국수|우동/.test(b)) d += 20;
+  if (/조용|한적|혼밥|1인|카운터|바테이블|빠른\s*식사|가성비/.test(b)) d += 16;
+
+  // solo intent에서는 cuisine/categoryLabel/tags/menu_keywords 기반 중식 계열 부스트를 강하게 감쇠
+  if (/중식|중국집|중화요리|마라|짬뽕|탕수육|훠궈|양꼬치/.test(cuisineSignalBlob)) d -= 190;
+  if (/중식|중국집|중화요리|마라|짬뽕|탕수육|훠궈|양꼬치/.test(b)) d -= 110;
+
+  if (/키즈카페|키즈\s*카페/.test(b)) d -= 130;
+  if (/가족\s*외식|가족모임|가족식사|아이동반|키즈존|대형\s*식당|룸\s*완비|단체석/.test(b)) d -= 96;
+  if (isAlcoholNightlifeVenue(card) || /포차|호프|주점|이자카야|단체|회식/.test(b)) d -= 112;
+  if (isCultureLike(card) || hasCultureAnchor(card) || /도서관|박물관|미술관|전시/.test(b)) d -= 72;
+
+  return d;
+}
+
+/** solo intent: 중식 계열 top3 하드 블록 — categoryLabel/tags/menu/name/blob 중 한 필드라도 강 매칭 시 제외 */
+const SOLO_CHINESE_HARD_BLOCK_RE =
+  /(?:중식|중국집|중화요리|마라|짬뽕|탕수육|훠궈|양꼬치)/;
+
+function soloChineseHardBlockException(card: HomeCard): boolean {
+  const c = card as {
+    solo_friendly?: boolean | null;
+  };
+  if ((c.solo_friendly ?? false) === true) return true;
+  const inspect = buildSoloChineseInspectBlob(card);
+  let hits = 0;
+  if (/혼밥/.test(inspect)) hits += 1;
+  if (/1인|1인석|1인식당/.test(inspect)) hits += 1;
+  if (/\bsolo\b|솔로/.test(inspect)) hits += 1;
+  if (/counter|카운터/.test(inspect)) hits += 1;
+  if (/quick\s*meal|빠른\s*식사/.test(inspect)) hits += 1;
+  if (/혼자/.test(inspect)) hits += 1;
+  if (/작은\s*매장|작은매장|소규모|아담한|소형/.test(inspect)) hits += 1;
+  return hits >= 2;
+}
+
+function buildSoloChineseInspectBlob(card: HomeCard): string {
+  const c = card as {
+    name?: string | null;
+    categoryLabel?: string | null;
+    tags?: string[] | unknown;
+    menu_keywords?: string[] | unknown;
+  };
+  const tags = Array.isArray(c.tags) ? c.tags.join(" ") : String(c.tags ?? "");
+  const menuKw = Array.isArray(c.menu_keywords) ? c.menu_keywords.join(" ") : String(c.menu_keywords ?? "");
+  const parts = [String(c.name ?? ""), String(c.categoryLabel ?? ""), tags, menuKw, normalizeBlob(card)];
+  return normalizeBrandQuery(parts.join(" ").toLowerCase()).trim();
+}
+
+function soloChineseHardBlockHit(card: HomeCard): boolean {
+  const c = card as {
+    name?: string | null;
+    categoryLabel?: string | null;
+    tags?: string[] | unknown;
+    menu_keywords?: string[] | unknown;
+  };
+  const nameN = normalizeBrandQuery(String(c.name ?? "").toLowerCase());
+  const labN = normalizeBrandQuery(String(c.categoryLabel ?? "").toLowerCase());
+  const tagsN = normalizeBrandQuery(
+    (Array.isArray(c.tags) ? c.tags.join(" ") : String(c.tags ?? "")).toLowerCase()
+  );
+  const menuN = normalizeBrandQuery(
+    (Array.isArray(c.menu_keywords) ? c.menu_keywords.join(" ") : String(c.menu_keywords ?? "")).toLowerCase()
+  );
+  const blobN = normalizeBrandQuery(normalizeBlob(card));
+  return (
+    SOLO_CHINESE_HARD_BLOCK_RE.test(nameN) ||
+    SOLO_CHINESE_HARD_BLOCK_RE.test(labN) ||
+    SOLO_CHINESE_HARD_BLOCK_RE.test(tagsN) ||
+    SOLO_CHINESE_HARD_BLOCK_RE.test(menuN) ||
+    SOLO_CHINESE_HARD_BLOCK_RE.test(blobN)
+  );
+}
+
+function soloChineseTop3HardBlocked(item: ScoredRecommendItem): boolean {
+  if (soloChineseHardBlockException(item.card)) return false;
+  return soloChineseHardBlockHit(item.card);
+}
+
+function soloChineseTop3NormalizeDebug(card: HomeCard): {
+  nameN: string;
+  categoryLabelN: string;
+  tagsN: string;
+  menuKeywordsN: string;
+  blobN: string;
+} {
+  const c = card as {
+    name?: string | null;
+    categoryLabel?: string | null;
+    tags?: string[] | unknown;
+    menu_keywords?: string[] | unknown;
+  };
+  const tagsRaw = Array.isArray(c.tags) ? c.tags.join(" ") : String(c.tags ?? "");
+  const menuRaw = Array.isArray(c.menu_keywords) ? c.menu_keywords.join(" ") : String(c.menu_keywords ?? "");
+  return {
+    nameN: normalizeBrandQuery(String(c.name ?? "").toLowerCase()),
+    categoryLabelN: normalizeBrandQuery(String(c.categoryLabel ?? "").toLowerCase()),
+    tagsN: normalizeBrandQuery(tagsRaw.toLowerCase()),
+    menuKeywordsN: normalizeBrandQuery(menuRaw.toLowerCase()),
+    blobN: normalizeBrandQuery(normalizeBlob(card)),
+  };
+}
+
+/**
+ * 최종 picked 직전: solo intent에서 top3만 중식 계열 strip 후보로 교체 (점수 아닌 후보 제거).
+ * applyReasonTemplateEngine 이전에만 호출된다.
+ */
+function applySoloIntentChineseTop3HardStrip(
+  picked: ScoredRecommendItem[],
+  pool: ScoredRecommendItem[],
+  query: string | null,
+  scenario: ScenarioObject | null | undefined
+): ScoredRecommendItem[] {
+  const isSoloSituationQuery = isSoloSituationIntentQuery(query, scenario);
+
+  hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_ENTER]", {
+    tag: "inside_apply_first_line",
+    query,
+    pickedLength: picked.length,
+    isSoloSituationQuery,
+    scenarioRawQuery: scenario?.rawQuery ?? null,
+    effectiveScenarioScenario: scenario?.scenario ?? null,
+    optionsSearchQuery: query,
+    poolLength: pool.length,
+  });
+
+  if (picked.length === 0) {
+    hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_EARLY]", {
+      reason: "picked_empty",
+      pickedLength: picked.length,
+      isSoloSituationQuery,
+      poolLength: pool.length,
+    });
+    return picked;
+  }
+
+  if (!isSoloSituationQuery) {
+    hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_EARLY]", {
+      reason: "not_solo_situation_query",
+      query,
+      scenarioRawQuery: scenario?.rawQuery ?? null,
+      scenarioScenario: scenario?.scenario ?? null,
+      pickedLength: picked.length,
+      poolLength: pool.length,
+    });
+    return picked;
+  }
+
+  if (pool.length === 0) {
+    hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_GUARD]", {
+      reason: "solo_chinese_strip_pool_empty",
+      note: "replacements_impossible_until_pool_refills",
+      pickedLength: picked.length,
+    });
+  }
+
+  const topSlots = Math.min(3, picked.length);
+  const head = picked.slice(0, topSlots);
+  const anyTop3HardBlocked = head.some((x) => soloChineseTop3HardBlocked(x));
+  const poolLen = pool.length;
+  const poolNonBlockedCount = pool.filter((c) => !soloChineseTop3HardBlocked(c)).length;
+
+  const shouldLog = isSoloSituationQuery || anyTop3HardBlocked;
+
+  const poolSorted = [...pool].sort((a, b) => b.breakdown.finalScore - a.breakdown.finalScore);
+  const used = new Set(picked.map((x) => x.card.id));
+  const out = [...picked];
+  const top3Log: Array<{
+    name: string;
+    blockedBySoloChineseHardBlock: boolean;
+    allowBySoloException: boolean;
+    replaceAttempted: boolean;
+    replacementName: string | null;
+    normalizeBrandQuery: ReturnType<typeof soloChineseTop3NormalizeDebug>;
+  }> = [];
+
+  for (let i = 0; i < topSlots; i += 1) {
+    const cur = out[i]!;
+    const card = cur.card;
+    const blocked = soloChineseTop3HardBlocked(cur);
+    const allowEx = soloChineseHardBlockException(card);
+    let replaceAttempted = false;
+    let replacementName: string | null = null;
+
+    if (blocked) {
+      replaceAttempted = true;
+      const repl = poolSorted.find((c) => !used.has(c.card.id) && !soloChineseTop3HardBlocked(c));
+      if (repl) {
+        replacementName = repl.card.name;
+        used.delete(cur.card.id);
+        out[i] = repl;
+        used.add(repl.card.id);
+      }
+    }
+
+    top3Log.push({
+      name: card.name,
+      blockedBySoloChineseHardBlock: blocked,
+      allowBySoloException: allowEx,
+      replaceAttempted,
+      replacementName,
+      normalizeBrandQuery: soloChineseTop3NormalizeDebug(card),
+    });
+  }
+
+  if (shouldLog) {
+    hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_DEBUG]", {
+      query,
+      scenarioRawQuery: scenario?.rawQuery ?? null,
+      scenarioScenario: scenario?.scenario ?? null,
+      isSoloSituationQuery,
+      poolLen,
+      poolNonBlockedCount,
+      poolAllHardBlocked: poolLen > 0 && poolNonBlockedCount === 0,
+      top3: top3Log,
+      finalTop3Names: out.slice(0, 3).map((x) => x.card.name),
+      note: "solo_strip_applied_or_evaluated",
+    });
+  }
+
+  return out;
 }
 
 function applyRecentExposureDiversity(params: {
@@ -1515,6 +2241,15 @@ function applyRecentExposureDiversity(params: {
     return { next: selected, recentIds, replacedNames: [] };
   }
   const recentSet = new Set(recentIds);
+  const nonRecentInPool = orderedCandidates.filter((candidate) => {
+    const exposureId = getCardExposureId(candidate.card);
+    return Boolean(exposureId) && !recentSet.has(exposureId);
+  }).length;
+  const namedFoodMatched = Boolean(matchNamedFoodPreset(String(query ?? "").trim()));
+  const topSlotStart =
+    namedFoodMatched ? 0
+    : nonRecentInPool >= 8 ? 0
+    : 1;
   console.log("[recent exposure id match check]", {
     query,
     candidateNames: orderedCandidates.slice(0, 10).map((x) => {
@@ -1536,7 +2271,7 @@ function applyRecentExposureDiversity(params: {
   const usedCardIds = new Set(out.map((x) => x.card.id));
   const replacedNames: string[] = [];
   const limit = Math.min(3, out.length);
-  for (let i = 1; i < limit; i += 1) {
+  for (let i = topSlotStart; i < limit; i += 1) {
     const current = out[i]!;
     const currentExposureId = getCardExposureId(current.card);
     if (!recentSet.has(currentExposureId)) continue;
@@ -1553,6 +2288,140 @@ function applyRecentExposureDiversity(params: {
     usedCardIds.add(replacement.card.id);
   }
   return { next: out, recentIds, replacedNames };
+}
+
+function top3ExposureFingerprintForDeck(deck: readonly ScoredRecommendItem[]): string {
+  return deck
+    .slice(0, 3)
+    .map((x) => `${getCardExposureId(x.card) || x.card.id}`)
+    .join(">");
+}
+
+/** 같은 점수대에서는 searchAttempt 기반으로 순서가 흔들리도록 한다(의도 피팅 없을 때 안정 순서 방지). */
+function applyNamedFoodSearchAttemptScoreBandShuffle(
+  items: ScoredRecommendItem[],
+  opts: { query: string; presetId: string; searchAttempt: number }
+): ScoredRecommendItem[] {
+  if (items.length < 2) return items;
+  const headLen = Math.min(36, items.length);
+  const head = items.slice(0, headLen);
+  const tail = items.slice(headLen);
+  const band = 7;
+  const sortedHead = [...head].sort((a, b) => {
+    const db = b.breakdown.finalScore;
+    const da = a.breakdown.finalScore;
+    const qb = Math.floor(db / band);
+    const qa = Math.floor(da / band);
+    if (qb !== qa) return db - da;
+    const ja = hashString(`${opts.query}|${opts.presetId}|band|${opts.searchAttempt}|${a.card.id}`) % 131071;
+    const jb = hashString(`${opts.query}|${opts.presetId}|band|${opts.searchAttempt}|${b.card.id}`) % 131071;
+    if (jb !== ja) return jb - ja;
+    return db - da;
+  });
+  return [...sortedHead, ...tail];
+}
+
+function deprioritizeRecentInNamedFoodTop(
+  deck: ScoredRecommendItem[],
+  pool: ScoredRecommendItem[],
+  cap: number,
+  recentSet: Set<string>,
+  excludedRecentNames: string[]
+): ScoredRecommendItem[] {
+  const out = [...deck];
+  const used = new Set(out.map((x) => x.card.id));
+  const limit = Math.min(3, cap, out.length);
+  for (let i = 0; i < limit; i++) {
+    const exp = String(getCardExposureId(out[i]!.card) || "").trim();
+    if (!exp || !recentSet.has(exp)) continue;
+    const repl = pool.find((c) => {
+      if (used.has(c.card.id)) return false;
+      const e = String(getCardExposureId(c.card) || "").trim();
+      return Boolean(e) && !recentSet.has(e);
+    });
+    if (!repl) continue;
+    excludedRecentNames.push(out[i]!.card.name);
+    used.delete(out[i]!.card.id);
+    out[i] = repl;
+    used.add(repl.card.id);
+  }
+  return out;
+}
+
+function avoidTripleTop1Same(
+  deck: ScoredRecommendItem[],
+  pool: ScoredRecommendItem[],
+  query: string | null,
+  presetId: string
+): ScoredRecommendItem[] {
+  if (deck.length === 0) return deck;
+  const state = readNamedFoodTop1Streak(query, presetId);
+  const topExp = String(getCardExposureId(deck[0]!.card) || deck[0]!.card.id || "").trim();
+  if (!topExp || !state || state.streak < 2 || state.lastId !== topExp) return deck;
+  const used = new Set(deck.map((x) => x.card.id));
+  const alt = pool.find((c) => {
+    if (used.has(c.card.id)) return false;
+    const e = String(getCardExposureId(c.card) || c.card.id || "").trim();
+    return Boolean(e) && e !== topExp;
+  });
+  if (!alt) return deck;
+  const out = [...deck];
+  out[0] = alt;
+  return out;
+}
+
+function applyNamedFoodPresetDeckRotation(
+  picked: ScoredRecommendItem[],
+  mergedPool: ScoredRecommendItem[],
+  params: {
+    query: string | null;
+    preset: NamedFoodPreset;
+    searchAttempt: number;
+    deckCap: number;
+    candidateCount: number;
+  }
+): ScoredRecommendItem[] {
+  const cap = Math.min(3, params.deckCap, picked.length);
+  if (cap === 0) return picked;
+
+  const recentOrdered = readRecentExposedStoreIds();
+  const recentSet = new Set(recentOrdered);
+  const beforeNames = picked.slice(0, 3).map((x) => x.card.name);
+
+  const excludedRecentNames: string[] = [];
+  let next = deprioritizeRecentInNamedFoodTop(picked, mergedPool, cap, recentSet, excludedRecentNames);
+
+  if (mergedPool.length >= 6) {
+    const prevFp = readNamedFoodPrevTop3Fingerprint(params.query, params.preset.id);
+    const curFp = top3ExposureFingerprintForDeck(next);
+    if (prevFp && prevFp === curFp) {
+      const used = new Set(next.slice(0, cap).map((x) => x.card.id));
+      const alt = mergedPool.find((c) => !used.has(c.card.id));
+      if (alt) {
+        const out = [...next];
+        const replaceIdx = cap >= 3 ? 2 : Math.max(0, cap - 1);
+        out[replaceIdx] = alt;
+        next = out;
+      }
+    }
+  }
+
+  next = avoidTripleTop1Same(next, mergedPool, params.query, params.preset.id);
+
+  const afterNames = next.slice(0, 3).map((x) => x.card.name);
+  if (params.preset.id === "tonkatsu") {
+    hamaDevLog("[HAMA_TONKATSU_ROTATION]", {
+      query: params.query,
+      searchAttempt: params.searchAttempt,
+      recentIdsCount: recentOrdered.length,
+      candidateCount: params.candidateCount,
+      beforeNames,
+      afterNames,
+      excludedRecentNames,
+    });
+  }
+
+  return next;
 }
 
 /** 홈 퀵 `explicitCategory=life|culture|fitness` — 최종 덱·페치 후보에서 식당 등 강제 배제 */
@@ -1594,6 +2463,11 @@ function passesExplicitCategoryDeck(card: HomeCard, cat: "life" | "culture" | "f
   return true;
 }
 
+type SafetyDiversityOutcome = {
+  deck: ScoredRecommendItem[];
+  recentExposureReplacements: number;
+};
+
 function applySafetyAndDiversity(
   picked: ScoredRecommendItem[],
   allRanked: ScoredRecommendItem[],
@@ -1604,9 +2478,16 @@ function applySafetyAndDiversity(
     explicitIntent?: string | null;
     fetchedCount?: number;
     rankedPoolCount?: number;
+    searchAttempt?: number;
+    /** 명시 음식 프리셋 등 — 덱 최대 5까지 */
+    deckCap?: number;
+    namedFoodPresetId?: string | null;
   }
-): ScoredRecommendItem[] {
+): SafetyDiversityOutcome {
+  const cap = Math.min(5, Math.max(3, diagnostics?.deckCap ?? RECOMMEND_DECK_SIZE));
+  const recentOrdered = readRecentExposedStoreIds();
   const kidsFamily = isKidsFamilyIntent(query, scenario);
+  const soloSituation = isSoloSituationIntentQuery(query, scenario);
   const detectedIntent = detectIntentFit(query, scenario);
   const excludeNightlifeFromPool =
     kidsFamily ||
@@ -1632,7 +2513,7 @@ function applySafetyAndDiversity(
       })
     : source;
 
-  const topBefore = pipelineSource.slice(0, RECOMMEND_DECK_SIZE).map((x) => x.card.name);
+  const topBefore = pipelineSource.slice(0, cap).map((x) => x.card.name);
   const removedNames: string[] = [];
   const fastFoodBefore = pipelineSource.filter((x) => detectFastFoodBrand(x.card)).length;
 
@@ -1645,16 +2526,22 @@ function applySafetyAndDiversity(
 
   candidates = candidates
     .map((item, idx) => {
-      const fit = intentFitDelta(detectedIntent, item.card);
-      const jitterKey = `${String(query ?? "")}|${dayBucket}|${sessionSeed}|${item.card.id}|${idx}`;
+      const fit = intentFitDelta(detectedIntent, item.card) + (soloSituation ? soloIntentFitDelta(item.card) : 0);
+      const jitterKey = `${String(query ?? "")}|${dayBucket}|${sessionSeed}|${diagnostics?.searchAttempt ?? 0}|${item.card.id}|${idx}`;
       const jitter = hashString(jitterKey);
-      return { item, idx, fit, jitter };
+      const penMul = diagnostics?.namedFoodPresetId ? 1.48 : 1;
+      const exposurePen = recentExposureSortPenalty(getCardExposureId(item.card), recentOrdered) * penMul;
+      return { item, idx, fit, jitter, exposurePen };
     })
     .sort((a, b) => {
-      const diff = b.fit - a.fit;
+      const adjA = a.fit - a.exposurePen;
+      const adjB = b.fit - b.exposurePen;
+      const diff = adjB - adjA;
       if (Math.abs(diff) <= 12 && diff !== 0) return b.jitter - a.jitter;
       if (diff !== 0) return diff;
-      return a.idx - b.idx;
+      const jitterTie = b.jitter - a.jitter;
+      if (jitterTie !== 0) return jitterTie;
+      return String(a.item.card.id ?? "").localeCompare(String(b.item.card.id ?? ""));
     })
     .map((x) => x.item);
 
@@ -1693,7 +2580,7 @@ function applySafetyAndDiversity(
     return false;
   };
 
-  const beforeGateTop = candidates.slice(0, RECOMMEND_DECK_SIZE).map((x) => x.card.name);
+  const beforeGateTop = candidates.slice(0, cap).map((x) => x.card.name);
   candidates = candidates.filter((item) => {
     const out = gateOut(item);
     if (out) {
@@ -1718,7 +2605,7 @@ function applySafetyAndDiversity(
   const hardExcludeCafeTop3 = intentPrefersNoCafe && restaurantCandidates >= 2;
 
   for (const item of candidates) {
-    if (selected.length >= RECOMMEND_DECK_SIZE) break;
+    if (selected.length >= cap) break;
     const brand = detectFastFoodBrand(item.card);
     if (brand && usedBrands.size >= 1) continue;
     if (hardExcludeCafeTop3 && isCafeLike(item.card) && candidates.some((x) => isRestaurantLike(x.card))) {
@@ -1748,10 +2635,10 @@ function applySafetyAndDiversity(
     if (cat) usedCategories.add(cat);
   }
 
-  if (selected.length < RECOMMEND_DECK_SIZE) {
+  if (selected.length < cap) {
     fallbackUsed = true;
     for (const item of candidates) {
-      if (selected.length >= RECOMMEND_DECK_SIZE) break;
+      if (selected.length >= cap) break;
       if (selected.some((x) => x.card.id === item.card.id)) continue;
       if (
         hardExcludeCafeTop3 &&
@@ -1781,12 +2668,12 @@ function applySafetyAndDiversity(
   ) {
     const activityPick = candidates.find((x) => categoryOf(x.card) === "activity");
     if (activityPick) {
-      if (selected.length < RECOMMEND_DECK_SIZE) selected.push(activityPick);
+      if (selected.length < cap) selected.push(activityPick);
       else selected[selected.length - 1] = activityPick;
     }
   }
 
-  if (selected.length < RECOMMEND_DECK_SIZE) {
+  if (selected.length < cap) {
     fallbackUsed = true;
     const topCategory = selected[0] ? categoryOf(selected[0].card) : null;
     const safePool = pipelineSource.filter((x) => {
@@ -1809,7 +2696,7 @@ function applySafetyAndDiversity(
       ...safePool,
     ];
     for (const item of supplement) {
-      if (selected.length >= RECOMMEND_DECK_SIZE) break;
+      if (selected.length >= cap) break;
       if (selected.some((s) => s.card.id === item.card.id)) continue;
       if (hardExcludeCafeTop3 && isCafeLike(item.card) && restaurantCandidates >= 2) continue;
       if (detectedIntent === "family_dining" && isCafeLike(item.card) && restaurantCandidates >= 2) continue;
@@ -1830,16 +2717,49 @@ function applySafetyAndDiversity(
   }
 
   const beforeFinalDeck = selected.map((x) => x.card.name);
-  const finalDeckResult = applyFinalDeckConstraint({
-    detectedIntent,
+  let finalDeckResult: FinalDeckConstraintResult = {
     selected,
-    candidates,
-    source: pipelineSource,
-    removedByGateIds,
-    unsafeIds,
-    kidsFamily,
-  });
-  selected = finalDeckResult.selected;
+    removedByFinalConstraint: [],
+    restaurantLikeCount: candidates.filter((x) => isRestaurantLike(x.card)).length,
+    activityLikeCount: candidates.filter((x) => isActivityLike(x.card)).length,
+  };
+  if (selected.length > 0) {
+    const beforeConstraintSelected = [...selected];
+    finalDeckResult = applyFinalDeckConstraint({
+      detectedIntent,
+      selected,
+      candidates,
+      source: pipelineSource,
+      removedByGateIds,
+      unsafeIds,
+      kidsFamily,
+      deckSize: cap,
+    });
+    selected = finalDeckResult.selected;
+    // final constraint가 0개를 만들면 constraint를 무시하고 fallback pool을 사용한다.
+    if (selected.length === 0) {
+      const fallbackPool = mergeUniqueById(candidates, pipelineSource).filter((item) => {
+        if (removedByGateIds.has(item.card.id)) return false;
+        if (unsafeIds.has(item.card.id)) return false;
+        if (kidsFamily && isUnsafeForKids(item.card)) return false;
+        return true;
+      });
+      selected =
+        fallbackPool.slice(0, cap).length > 0
+          ? fallbackPool.slice(0, cap)
+          : beforeConstraintSelected.slice(0, cap);
+      finalDeckResult.selected = selected;
+    }
+  } else {
+    const fallbackPool = mergeUniqueById(candidates, pipelineSource).filter((item) => {
+      if (removedByGateIds.has(item.card.id)) return false;
+      if (unsafeIds.has(item.card.id)) return false;
+      if (kidsFamily && isUnsafeForKids(item.card)) return false;
+      return true;
+    });
+    selected = fallbackPool.slice(0, cap);
+    finalDeckResult.selected = selected;
+  }
 
   const diningUnsafe = demoteAlcoholFromTopForGeneralMealBrowse(selected, candidates, query);
   selected = diningUnsafe.next;
@@ -1951,9 +2871,12 @@ function applySafetyAndDiversity(
     removedByFinalConstraint: finalDeckResult.removedByFinalConstraint,
     afterFinalDeck: selected.map((x) => x.card.name),
   });
+  hamaDevLog("[HAMA_RESULTS] beforeFinalDeck:", beforeFinalDeck.length);
+  hamaDevLog("[HAMA_RESULTS] afterFinalDeckConstraint:", selected.length);
+  hamaDevLog("[HAMA_RESULTS] finalDeck:", selected.length);
 
   const fastFoodAfter = selected.filter((x) => detectFastFoodBrand(x.card)).length;
-  const topAfter = selected.slice(0, RECOMMEND_DECK_SIZE).map((x) => x.card.name);
+  const topAfter = selected.slice(0, cap).map((x) => x.card.name);
   if (detectedIntent === "family_dining") {
     console.log("[recommend family dining adjustment]", {
       query,
@@ -2034,7 +2957,7 @@ function applySafetyAndDiversity(
       selectedNames: selected.map((x) => x.card.name),
     });
   }
-  return selected;
+  return { deck: selected, recentExposureReplacements: recentExposure.replacedNames.length };
 }
 
 async function buildExpandedRankedPool(
@@ -2110,8 +3033,169 @@ async function fetchRecommendPoolFallback(tab: HomeTabKey, count: number): Promi
   }
 }
 
+function applyNamedFoodPresetScoreBoost(
+  ranked: ScoredRecommendItem[],
+  preset: NamedFoodPreset | null | undefined
+): ScoredRecommendItem[] {
+  if (!preset?.keywords?.length) return ranked;
+  const scored = [...ranked].map((it) => {
+    const bump = namedFoodPresetCompositeRankingBoost(it.card, preset);
+    if (!bump) return it;
+    return {
+      ...it,
+      breakdown: {
+        ...it.breakdown,
+        finalScore: Math.min(999, it.breakdown.finalScore + bump),
+      },
+    };
+  });
+  scored.sort((a, b) => {
+    const d = b.breakdown.finalScore - a.breakdown.finalScore;
+    if (Math.abs(d) > 1e-9) return d;
+    return hashString(`${a.card.id}|nfp`) - hashString(`${b.card.id}|nfp`);
+  });
+  return reorderNamedFoodPresetRankingStrictPriority(scored, preset);
+}
+
+async function fetchNamedFoodPresetFallbackRestaurantCards(opts: {
+  preset: NamedFoodPreset;
+  excludeIds: ReadonlySet<string>;
+  query: string | null | undefined;
+  scenario: ScenarioObject | null | undefined;
+}): Promise<HomeCard[]> {
+  const seed = getOrCreateHamaSearchSeed();
+  const headers: Record<string, string> = {};
+  if (seed) headers["x-hama-search-seed"] = seed;
+  const seen = new Set<string>();
+  const out: HomeCard[] = [];
+
+  const acceptTonkatsuRelaxedBroad = (c: HomeCard): boolean =>
+    passesNamedFoodPresetFullCardGate(c, opts.preset, "broad") ||
+    (opts.preset.id === "tonkatsu" && passesTonkatsuJapaneseRelaxGate(c));
+
+  const tryTakeCard = (c: HomeCard) => {
+    const id = String(c.id ?? "").trim();
+    if (!id || opts.excludeIds.has(id) || seen.has(id)) return;
+    if (!acceptTonkatsuRelaxedBroad(c)) return;
+    seen.add(id);
+    out.push(c);
+  };
+
+  for (const c of await fetchRestaurantOnlyFoodPresetCards({
+    preset: opts.preset,
+    phase: "broad",
+    count: 450,
+  })) {
+    tryTakeCard(c);
+  }
+  if (opts.preset.id === "tonkatsu") {
+    for (const c of await fetchRestaurantOnlyFoodPresetCards({
+      preset: opts.preset,
+      phase: "tonkatsu_relax",
+      count: 420,
+    })) {
+      tryTakeCard(c);
+    }
+  }
+
+  const keywordSearchListBase = [...opts.preset.keywords];
+  const keywordHints =
+    opts.preset.id === "tonkatsu" ? ([] as string[]).concat(keywordSearchListBase, ["일식집", "일식", "라멘"]) : keywordSearchListBase;
+  const keywords = [...keywordHints].sort((a, b) => b.length - a.length);
+  for (const kw of keywords) {
+    if (out.length >= 52) break;
+    const token = String(kw ?? "").trim();
+    if (token.length < 2) continue;
+    const url = `/api/stores/search-by-name?${new URLSearchParams({ q: token }).toString()}`;
+    try {
+      const res = await fetch(url, {
+        cache: "no-store",
+        headers: Object.keys(headers).length ? headers : undefined,
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as { items?: StoreRow[] };
+      for (const row of json.items ?? []) tryTakeCard(toHomeCard(row));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return filterHomeCardsForScenarioSafety(out, opts.query ?? null, opts.scenario ?? null);
+}
+
+function guardNamedFoodPresetPickedDeck(
+  picked: ScoredRecommendItem[],
+  preset: NamedFoodPreset,
+  query: string | null | undefined
+): ScoredRecommendItem[] {
+  const beforeCount = picked.length;
+  const allowStrict = (it: ScoredRecommendItem): boolean =>
+    isNamedFoodPresetRestaurantDbCategoryOnly(it.card) &&
+    !blobFailsNamedFoodPresetHardExclude(it.card) &&
+    passesNamedFoodPresetFinalRestaurantLabel(it.card) &&
+    matchesNamedFoodPresetKeywords(it.card, preset, "strict");
+
+  const afterRestaurantOnlyCount = picked.filter(
+    (it) =>
+      isNamedFoodPresetRestaurantDbCategoryOnly(it.card) && !blobFailsNamedFoodPresetHardExclude(it.card)
+  ).length;
+
+  let next = picked.filter(allowStrict);
+
+  if (
+    next.length === 0 &&
+    beforeCount > 0 &&
+    !isConservativeAccuracyFirstFoodPreset(preset)
+  ) {
+    next = picked.filter(
+      (it) =>
+        isNamedFoodPresetRestaurantDbCategoryOnly(it.card) &&
+        !blobFailsNamedFoodPresetHardExclude(it.card) &&
+        passesNamedFoodPresetFinalRestaurantLabel(it.card) &&
+        (matchesNamedFoodPresetKeywords(it.card, preset, "broad") ||
+          (preset.id === "tonkatsu" && passesTonkatsuJapaneseRelaxGate(it.card)))
+    );
+  }
+
+  const afterKeywordMatchCount = next.length;
+  const keptIds = new Set(next.map((x) => String(x.card.id ?? "").trim()));
+  const removedNames = picked
+    .filter((p) => !keptIds.has(String(p.card.id ?? "").trim()))
+    .map((p) => p.card.name);
+  const finalNames = next.map((p) => p.card.name);
+  const strictMatchCount = next.filter((it) =>
+    matchesNamedFoodPresetKeywords(it.card, preset, "strict")
+  ).length;
+  const broadMatchCount = next.filter(
+    (it) =>
+      matchesNamedFoodPresetKeywords(it.card, preset, "broad") &&
+      !matchesNamedFoodPresetKeywords(it.card, preset, "strict")
+  ).length;
+
+  const guardPayload = {
+    query: query ?? null,
+    presetId: preset.id,
+    subIntent: presetSubIntentLabel(preset),
+    strictMatchCount,
+    broadMatchCount,
+    beforeCount,
+    afterRestaurantOnlyCount,
+    afterKeywordMatchCount,
+    removedNames,
+    finalNames,
+  };
+  hamaDevLog("[HAMA_FOOD_PRESET_GUARD]", guardPayload);
+
+  return next;
+}
+
 type Result = {
   cards: HomeCard[];
+  /**
+   * 음식 명시 프리셋 결과에서 RecommendationList 안정 덱/context 동기화용 —
+   * `presetId|searchAttempt|recentExposureSig`
+   */
+  deckRotationKey: string;
   /** 코스 생성 등 — 랭킹 전 후보 풀 */
   candidatePool: HomeCard[];
   /** intentType course_generation 시 — 탭과 무관한 역할별 혼합 풀(식사/카페/액티비티) */
@@ -2155,6 +3239,10 @@ export type UseHomeCardsOptions = {
   explicitCategory?: string | null;
   /** URL `mode` — 예: `course` 이면 코스 후보 풀 페치 */
   explicitMode?: string | null;
+  /** 직접 음식어 검색(/results 등) 프리셋 매칭 — 레스토랑 우선·랭킹 보강에 사용 */
+  namedFoodPreset?: NamedFoodPreset | null;
+  /** 프리셋 덱 크기 상한 (3~5) */
+  recommendedDeckCap?: number;
 };
 
 /**
@@ -2168,6 +3256,7 @@ export function useHomeCards(
   options: UseHomeCardsOptions = {}
 ): Result {
   const [cards, setCards] = useState<HomeCard[]>([]);
+  const [deckRotationKey, setDeckRotationKey] = useState("");
   const [pool, setPool] = useState<HomeCard[]>([]);
   const [coursePool, setCoursePool] = useState<HomeCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -2193,7 +3282,7 @@ export function useHomeCards(
   const profileOverrideKey = options.profileOverride
     ? JSON.stringify(options.profileOverride)
     : "";
-  const explicitKey = `${options.explicitIntent ?? ""}|${options.explicitCategory ?? ""}|${options.explicitMode ?? ""}`;
+  const explicitKey = `${options.explicitIntent ?? ""}|${options.explicitCategory ?? ""}|${options.explicitMode ?? ""}|${options.namedFoodPreset?.id ?? ""}|${options.recommendedDeckCap ?? ""}`;
 
   const effectiveUserProfile = useMemo(() => {
     return mergeUserProfile(userProfile ?? null, options.profileOverride ?? null);
@@ -2215,8 +3304,18 @@ export function useHomeCards(
   }, []);
 
   useEffect(() => {
+    const hookCheckPayload = {
+      deferRanking,
+      skipFetch,
+      searchQuery: options.searchQuery,
+      namedFoodPreset: options.namedFoodPreset,
+      presetId: options.namedFoodPreset?.id,
+    };
+    hamaDevLog("[HAMA_FOOD_PRESET_HOOK_CHECK]", hookCheckPayload);
+
     if (skipFetch) {
       setCards([]);
+      setDeckRotationKey("");
       setPool([]);
       setCoursePool([]);
       setIsLoading(false);
@@ -2283,10 +3382,73 @@ export function useHomeCards(
         let cultureMuseumDiag: { hintCount: number; anchorCount: number } | null = null;
         /** 푸드/식당/맛집 browse·final 가드용 통합 풀(필요 시 all 탭까지 merge) */
         let genericFoodMergedPool: HomeCard[] | null = null;
+        const preset = getSituationQueryPreset(options.searchQuery ?? null);
+        const searchAttempt = bumpAndReadSearchAttemptForQuery(options.searchQuery ?? "");
+        const namedFoodPresetForAttemptLog = options.namedFoodPreset ?? null;
+        if (namedFoodPresetForAttemptLog) {
+          hamaDevLog("[HAMA_NAMED_FOOD_SEARCH_ATTEMPT]", {
+            query: options.searchQuery ?? null,
+            searchAttempt,
+            presetId: namedFoodPresetForAttemptLog.id,
+          });
+        }
+        const scenarioBeautyBlockActive =
+          shouldBlockBeautySalonForListedScenarioQueries(options.searchQuery ?? null);
+        const exposureLogState = {
+          excludedByRecentCount: 0,
+          candidateCountBefore: 0,
+          candidateCountAfter: 0,
+          recentExposureReplacements: 0,
+        };
 
         const courseFetched = wantCourse ? await fetchHomeCourseCandidatePool() : [];
 
         let fetchedRaw: HomeCard[] = [];
+        const applySituationPresetEnrichment = async (base: HomeCard[]): Promise<HomeCard[]> => {
+          if (!preset) return base;
+          const presetFetchedByCategory = await fetchHomeCardsByStoreCategories(preset.categories, {
+            count: RECOMMEND_POOL_SINGLE_TAB,
+          });
+          // category-first pool
+          let merged = mergeHomeCardsUniqueById(base, presetFetchedByCategory);
+          // keyword OR pool (name/tags/mood/category/description blob)
+          let keywordPoolFromAll: HomeCard[] = [];
+          if (merged.length < 3) {
+            const allRows = await fetchHomeRecommendCandidates("all");
+            keywordPoolFromAll = allRows.filter((card) => {
+              const b = normalizeBlob(card);
+              return preset.keywords.some((kw) => b.includes(String(kw).toLowerCase()));
+            });
+            merged = mergeHomeCardsUniqueById(merged, keywordPoolFromAll);
+          }
+          const withKeywords = merged.filter((card) => {
+            const b = normalizeBlob(card);
+            return preset.keywords.some((kw) => b.includes(String(kw).toLowerCase()));
+          });
+          const pool = withKeywords.length >= 3 ? withKeywords : merged;
+          const kidsFamily = /아이|가족|키즈/.test(normalizeBrandQuery(String(options.searchQuery ?? "")));
+          const safePool = kidsFamily ? pool.filter((card) => !isUnsafeForKids(card)) : pool;
+          const shuffled = shuffleCardsBySeed(
+            safePool,
+            `${options.searchQuery ?? ""}|situation_preset|${getOrCreateHamaSearchSeed()}|a${searchAttempt}|t${(String(Date.now() % 1000000)).padStart(6, "0")}`
+          );
+          const fallbackMatchedCount = withKeywords.length;
+          hamaDevLog("[HAMA_SEARCH] fallbackQueryMode:", "category/tags/mood/name");
+          hamaDevLog("[HAMA_SEARCH] fallbackMatchedCount:", fallbackMatchedCount);
+          console.log("[situation query preset enrichment]", {
+            query: options.searchQuery ?? null,
+            presetCategories: preset.categories,
+            presetKeywords: preset.keywords,
+            baseCount: base.length,
+            presetFetchedCount: presetFetchedByCategory.length,
+            keywordPoolFromAllCount: keywordPoolFromAll.length,
+            mergedCount: merged.length,
+            keywordMatchedCount: withKeywords.length,
+            finalPoolCount: shuffled.length,
+            sampleNames: shuffled.slice(0, 12).map((c) => c.name),
+          });
+          return shuffled;
+        };
 
         if (strictTab) {
           fetchTabsTried.push(`strict:${strictTab}`);
@@ -2355,6 +3517,10 @@ export function useHomeCards(
           fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, apiHits);
         }
 
+        if (preset && fetchedRaw.length < 3) {
+          fetchedRaw = await applySituationPresetEnrichment(fetchedRaw);
+        }
+
         if (cancelled) return;
 
         if (!fetchedRaw.length && (strictTab || explicitTab) && exCatLower !== "culture") {
@@ -2416,7 +3582,7 @@ export function useHomeCards(
           explicitIntentLower === "food_general" ||
           strictTab === "restaurant";
 
-        if (foodPoolExplore) {
+        if (foodPoolExplore && !options.namedFoodPreset) {
           const allRowsFood = await fetchHomeRecommendCandidates("all");
           allFetchLastCount = allRowsFood.length;
           const foodSlurp = (c: HomeCard) =>
@@ -2437,7 +3603,17 @@ export function useHomeCards(
           }
         }
 
+        if (scenarioBeautyBlockActive) {
+          fetchedRaw = fetchedRaw.filter((c) => !homeCardMatchesScenarioBeautySalonBlock(c));
+        }
+        fetchedRaw = filterHomeCardsForScenarioSafety(
+          fetchedRaw,
+          options.searchQuery ?? null,
+          options.scenarioObject ?? null
+        );
+
         const fetchedPreGate = fetchedRaw;
+        hamaDevLog("[HAMA_RESULTS] rawFetchedCards.length:", fetchedPreGate.length);
         if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
           const restaurantLikeRows = fetchedPreGate.filter((c) => isRestaurantLike(c));
           const countsByCategory = restaurantLikeRows.reduce<Record<string, number>>((acc, card) => {
@@ -2498,6 +3674,37 @@ export function useHomeCards(
           fetched = fetched.filter((c) => passesExplicitCategoryDeck(c, gateCatRun));
           afterExplicitGateCount = fetched.length;
         }
+        hamaDevLog("[HAMA_RESULTS] enrichedCards.length:", fetched.length);
+
+        if (options.namedFoodPreset && !cancelled) {
+          const presetRef = options.namedFoodPreset;
+          const conservativeAccuracy = isConservativeAccuracyFirstFoodPreset(presetRef);
+          const basePool = fetched
+            .filter(isNamedFoodPresetRestaurantDbCategoryOnly)
+            .filter((c) => !blobFailsNamedFoodPresetHardExclude(c));
+          let pool = basePool.filter((c) => passesNamedFoodPresetFullCardGate(c, presetRef, "strict"));
+          if (!conservativeAccuracy && pool.length < 10) {
+            pool = basePool.filter((c) => passesNamedFoodPresetFullCardGate(c, presetRef, "broad"));
+          }
+          if (presetRef.id === "tonkatsu" && pool.length === 0) {
+            pool = basePool.filter((c) => passesTonkatsuJapaneseRelaxGate(c));
+          }
+          if (!conservativeAccuracy && (pool.length < 8 || basePool.length < 16) && !cancelled) {
+            const repoPhase =
+              presetRef.id === "tonkatsu" && pool.length === 0 ? ("tonkatsu_relax" as const) : ("broad" as const);
+            const fromRepo = await fetchRestaurantOnlyFoodPresetCards({
+              preset: presetRef,
+              phase: repoPhase,
+              count: 480,
+            });
+            const merged = mergeHomeCardsUniqueById(basePool, fromRepo);
+            pool =
+              repoPhase === "tonkatsu_relax"
+                ? merged.filter((c) => passesTonkatsuJapaneseRelaxGate(c))
+                : merged.filter((c) => passesNamedFoodPresetFullCardGate(c, presetRef, "broad"));
+          }
+          fetched = pool;
+        }
 
         const rankScenario = scenarioForHomeCardsRanking(
           options.scenarioObject ?? null,
@@ -2514,7 +3721,19 @@ export function useHomeCards(
           userProfile: effectiveUserProfile,
           relaxPersonalRules,
         };
+
+        const namedFoodPresetOpt = options.namedFoodPreset ?? null;
+        const deckCapDiag =
+          namedFoodPresetOpt != null
+            ? Math.min(5, Math.max(3, options.recommendedDeckCap ?? 5))
+            : undefined;
+        const namedFoodDeckBucketOpts =
+          namedFoodPresetOpt != null && deckCapDiag != null ?
+            ({ deckTarget: deckCapDiag, namedFoodPreset: namedFoodPresetOpt } as const)
+          : undefined;
+
         let rankedPrimary = await buildExpandedRankedPool(fetched, ctx, 50);
+        rankedPrimary = applyNamedFoodPresetScoreBoost(rankedPrimary, namedFoodPresetOpt);
         if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
           const top30 = rankedPrimary.slice(0, 30);
           console.log("[restaurant ranking diagnosis]", {
@@ -2558,13 +3777,43 @@ export function useHomeCards(
             afterShuffle: afterSliceNames,
           };
         }
+        if (namedFoodPresetOpt) {
+          rankedPrimary = applyNamedFoodSearchAttemptScoreBandShuffle(rankedPrimary, {
+            query: options.searchQuery ?? "",
+            presetId: namedFoodPresetOpt.id,
+            searchAttempt,
+          });
+        }
         const rankedFallback = await buildExpandedRankedPool(fetched, {
           ...ctx,
           excludeStoreIds: [],
         }, 50);
-        let picked = applySafetyAndDiversity(
+        let rankedFallbackBoosted = applyNamedFoodPresetScoreBoost(rankedFallback, namedFoodPresetOpt);
+        if (namedFoodPresetOpt) {
+          rankedFallbackBoosted = applyNamedFoodSearchAttemptScoreBandShuffle(rankedFallbackBoosted, {
+            query: options.searchQuery ?? "",
+            presetId: namedFoodPresetOpt.id,
+            searchAttempt,
+          });
+        }
+        let fallbackCandidates = [...rankedPrimary, ...rankedFallbackBoosted].filter(
+          (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
+        );
+        let cultureGuardCandidates: ScoredRecommendItem[] =
+          scenarioBeautyBlockActive ?
+            fallbackCandidates.filter((item) => !homeCardMatchesScenarioBeautySalonBlock(item.card))
+          : fallbackCandidates;
+        cultureGuardCandidates = filterScoredRecommendItemsForScenarioSafety(
+          cultureGuardCandidates,
+          options.searchQuery ?? null,
+          options.scenarioObject ?? null
+        );
+        exposureLogState.candidateCountBefore = fallbackCandidates.length;
+        exposureLogState.candidateCountAfter = fallbackCandidates.length;
+        hamaDevLog("[HAMA_RESULTS] fallbackCandidates.length:", fallbackCandidates.length);
+        let safetyDiversityOutcome = applySafetyAndDiversity(
           rankedPrimary,
-          rankedFallback,
+          rankedFallbackBoosted,
           options.searchQuery ?? null,
           rankScenario,
           options.explicitCategory ?? null,
@@ -2572,8 +3821,115 @@ export function useHomeCards(
             explicitIntent: options.explicitIntent ?? null,
             fetchedCount: fetched.length,
             rankedPoolCount: rankedPrimary.length,
+            searchAttempt,
+            ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
+            ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
           }
         );
+        let picked = safetyDiversityOutcome.deck;
+        exposureLogState.recentExposureReplacements = safetyDiversityOutcome.recentExposureReplacements;
+
+        if (preset && picked.length < 3 && !options.namedFoodPreset) {
+          const enrichedFetched = await applySituationPresetEnrichment(fetched);
+          if (enrichedFetched.length > fetched.length) {
+            fetched = enrichedFetched;
+            rankedPrimary = await buildExpandedRankedPool(fetched, ctx, 50);
+            rankedPrimary = applyNamedFoodPresetScoreBoost(rankedPrimary, namedFoodPresetOpt);
+            const rankedFallbackRetry = applyNamedFoodPresetScoreBoost(
+              await buildExpandedRankedPool(fetched, { ...ctx, excludeStoreIds: [] }, 50),
+              namedFoodPresetOpt
+            );
+            safetyDiversityOutcome = applySafetyAndDiversity(
+              rankedPrimary,
+              rankedFallbackRetry,
+              options.searchQuery ?? null,
+              rankScenario,
+              options.explicitCategory ?? null,
+              {
+                explicitIntent: options.explicitIntent ?? null,
+                fetchedCount: fetched.length,
+                rankedPoolCount: rankedPrimary.length,
+                searchAttempt,
+                ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
+                ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
+              }
+            );
+            picked = safetyDiversityOutcome.deck;
+            exposureLogState.recentExposureReplacements = safetyDiversityOutcome.recentExposureReplacements;
+          }
+        }
+
+        if (
+          namedFoodPresetOpt &&
+          picked.length < 3 &&
+          !cancelled &&
+          !isConservativeAccuracyFirstFoodPreset(namedFoodPresetOpt)
+        ) {
+          const extraFood = await fetchNamedFoodPresetFallbackRestaurantCards({
+            preset: namedFoodPresetOpt,
+            excludeIds: new Set(picked.map((x) => x.card.id)),
+            query: options.searchQuery ?? null,
+            scenario: rankScenario ?? options.scenarioObject ?? null,
+          });
+          if (extraFood.length && !cancelled) {
+            fetched = mergeHomeCardsUniqueById(fetched, extraFood);
+            rankedPrimary = await buildExpandedRankedPool(fetched, ctx, 50);
+            rankedPrimary = applyNamedFoodPresetScoreBoost(rankedPrimary, namedFoodPresetOpt);
+            if (shouldShuffleExplicitFoodPool(options)) {
+              rankedPrimary = shuffleFoodRestaurantTopSlice(rankedPrimary, {
+                q: options.searchQuery ?? null,
+                explicitCategory: options.explicitCategory ?? null,
+                explicitIntent: options.explicitIntent ?? null,
+              }).list;
+            }
+            if (namedFoodPresetOpt) {
+              rankedPrimary = applyNamedFoodSearchAttemptScoreBandShuffle(rankedPrimary, {
+                query: options.searchQuery ?? "",
+                presetId: namedFoodPresetOpt.id,
+                searchAttempt,
+              });
+            }
+            let rankedFbFood = applyNamedFoodPresetScoreBoost(
+              await buildExpandedRankedPool(fetched, { ...ctx, excludeStoreIds: [] }, 50),
+              namedFoodPresetOpt
+            );
+            if (namedFoodPresetOpt) {
+              rankedFbFood = applyNamedFoodSearchAttemptScoreBandShuffle(rankedFbFood, {
+                query: options.searchQuery ?? "",
+                presetId: namedFoodPresetOpt.id,
+                searchAttempt,
+              });
+            }
+            fallbackCandidates = [...rankedPrimary, ...rankedFbFood].filter(
+              (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
+            );
+            cultureGuardCandidates = scenarioBeautyBlockActive ?
+                fallbackCandidates.filter((item) => !homeCardMatchesScenarioBeautySalonBlock(item.card))
+              : fallbackCandidates;
+            cultureGuardCandidates = filterScoredRecommendItemsForScenarioSafety(
+              cultureGuardCandidates,
+              options.searchQuery ?? null,
+              options.scenarioObject ?? null
+            );
+            safetyDiversityOutcome = applySafetyAndDiversity(
+              rankedPrimary,
+              rankedFbFood,
+              options.searchQuery ?? null,
+              rankScenario,
+              options.explicitCategory ?? null,
+              {
+                explicitIntent: options.explicitIntent ?? null,
+                fetchedCount: fetched.length,
+                rankedPoolCount: rankedPrimary.length,
+                searchAttempt,
+                ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
+                ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
+              }
+            );
+            picked = safetyDiversityOutcome.deck;
+            exposureLogState.recentExposureReplacements = safetyDiversityOutcome.recentExposureReplacements;
+          }
+        }
 
         const cultureMuseumQuery = /박물관/i.test(String(options.searchQuery ?? "").trim());
 
@@ -2990,14 +4346,14 @@ export function useHomeCards(
           query: options.searchQuery ?? null,
           fetchedCount: fetched.length,
           rankedPoolCount: rankedPrimary.length,
-          safePoolCount: [...rankedPrimary, ...rankedFallback]
+          safePoolCount: [...rankedPrimary, ...rankedFallbackBoosted]
             .filter((item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx)
             .filter((item) => {
               const kidsFamily = isKidsFamilyIntent(options.searchQuery ?? null, options.scenarioObject ?? null);
               if (!kidsFamily) return true;
               return !isUnsafeForKids(item.card);
             }).length,
-          gatedPoolCount: [...rankedPrimary, ...rankedFallback]
+          gatedPoolCount: [...rankedPrimary, ...rankedFallbackBoosted]
             .filter((item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx)
             .filter((item) => {
               const detectedIntent = detectIntentFit(options.searchQuery ?? null, options.scenarioObject ?? null);
@@ -3016,6 +4372,320 @@ export function useHomeCards(
           finalTop3: picked.map((x) => x.card.name),
         });
 
+        const runNamedFoodPresetEmergencyDeck = async (tag: string): Promise<ScoredRecommendItem[]> => {
+          if (cancelled || !namedFoodPresetOpt) return [];
+          hamaDevLog("[HAMA_EMERGENCY_TRIGGERED]", {
+            query: options.searchQuery ?? null,
+            tag,
+            mode: "food_preset_restaurant_only",
+          });
+          let cards = await fetchRestaurantOnlyFoodPresetCards({
+            preset: namedFoodPresetOpt,
+            phase: "broad",
+            count: 520,
+          });
+          if (namedFoodPresetOpt.id === "tonkatsu" && cards.length < 16) {
+            const relaxCards = await fetchRestaurantOnlyFoodPresetCards({
+              preset: namedFoodPresetOpt,
+              phase: "tonkatsu_relax",
+              count: 520,
+            });
+            cards = mergeHomeCardsUniqueById(cards, relaxCards);
+          }
+          cards = filterHomeCardsForScenarioSafety(
+            cards,
+            options.searchQuery ?? null,
+            options.scenarioObject ?? null
+          );
+          cards = cards.filter(
+            (c) =>
+              passesNamedFoodPresetFullCardGate(c, namedFoodPresetOpt, "broad") ||
+              (namedFoodPresetOpt.id === "tonkatsu" && passesTonkatsuJapaneseRelaxGate(c))
+          );
+          if (cards.length === 0) return [];
+          const recentOrderedEmergency = readRecentExposedStoreIds();
+          const exposureSet = new Set(recentOrderedEmergency);
+          const nonRecentForced = cards.filter((c) => {
+            const id = getCardExposureId(c);
+            return Boolean(id) && !exposureSet.has(id);
+          });
+          let pool =
+            nonRecentForced.length >= Math.min(6, Math.max(cards.length - 1, 1)) ?
+              nonRecentForced
+            : cards;
+          const queryShuffleSeed = `${options.searchQuery ?? ""}|preset_emergency|${tag}|${getOrCreateHamaSearchSeed()}`;
+          pool = shuffleCardsBySeed(pool, queryShuffleSeed);
+          const deckCapEmergency = deckCapDiag ?? RECOMMEND_DECK_SIZE;
+          const scoredEmergency = pool.map((card, i) =>
+            homeCardToBrowseScoredItem(
+              card,
+              640 -
+                recentExposureSortPenalty(getCardExposureId(card), recentOrderedEmergency) -
+                (i % 11)
+            )
+          );
+          hamaDevLog("[HAMA_EMERGENCY_RESULT]", { tag, mode: "food_preset", count: scoredEmergency.length });
+          return scoredEmergency.slice(0, deckCapEmergency);
+        };
+
+        const runEmergencyFallbackDeck = async (tag: string): Promise<ScoredRecommendItem[]> => {
+          if (cancelled) return [];
+          hamaDevLog("[HAMA_EMERGENCY_TRIGGERED]", { query: options.searchQuery ?? null, tag });
+          const emergencyCategories = getResultsEmergencyFallbackCategories(options.searchQuery ?? null);
+          const fallbackCategories = emergencyCategories ?? ["cafe", "activity", "library", "restaurant"];
+          if (fallbackCategories.length === 0) return [];
+
+          const queryShuffleSeed = `${options.searchQuery ?? ""}|emergency|${tag}|${getOrCreateHamaSearchSeed()}|a${searchAttempt}|t${String(Date.now() % 1000000)}`;
+          const finalForced = await fetchEmergencySimpleCardsByCategories(fallbackCategories, {
+            count: 100,
+            query: options.searchQuery ?? null,
+            rngSeed: queryShuffleSeed,
+            scenarioStripBeautySalon: scenarioBeautyBlockActive,
+          });
+          exposureLogState.candidateCountBefore = finalForced.length;
+          const kidsFamilyQuery = /아이|가족|키즈/.test(normalizeBrandQuery(String(options.searchQuery ?? "")));
+          const safeForced =
+            scenarioBeautyBlockActive
+              ? finalForced.filter((card) => !homeCardMatchesScenarioBeautySalonBlock(card))
+              : finalForced;
+          const safetyFiltered =
+            kidsFamilyQuery ? safeForced.filter((card) => !isUnsafeForKids(card)) : safeForced;
+          const recentOrderedEmergency = readRecentExposedStoreIds();
+          const exposureSet = new Set(recentOrderedEmergency);
+          const nonRecentForced = safetyFiltered.filter((c) => {
+            const id = getCardExposureId(c);
+            return Boolean(id) && !exposureSet.has(id);
+          });
+          let pool = safetyFiltered;
+          if (nonRecentForced.length >= 8) {
+            pool = nonRecentForced;
+            exposureLogState.excludedByRecentCount = safetyFiltered.length - pool.length;
+          }
+          exposureLogState.candidateCountAfter = pool.length;
+
+          pool = shuffleCardsBySeed(pool, `${queryShuffleSeed}|poststrip`);
+          const scoredEmergency = pool.map((card, i) =>
+            homeCardToBrowseScoredItem(
+              card,
+              640 -
+                recentExposureSortPenalty(getCardExposureId(card), recentOrderedEmergency) -
+                (i % 11)
+            )
+          );
+          scoredEmergency.sort((a, b) => {
+            const d = b.breakdown.finalScore - a.breakdown.finalScore;
+            if (Math.abs(d) > 1e-9) return d;
+            const tie = hashString(`${queryShuffleSeed}|${a.card.id}|${b.card.id}`);
+            return tie % 2 === 0 ? -1 : 1;
+          });
+          let emergencyPicked = applyBucketDiversityToPicked(
+            scoredEmergency,
+            options.searchQuery ?? null,
+            namedFoodDeckBucketOpts ? { ...namedFoodDeckBucketOpts } : undefined
+          );
+          emergencyPicked = shuffleScoredItemsBySeed(
+            emergencyPicked,
+            `${queryShuffleSeed}|emergency_bucket_tie`
+          );
+          const scenarioSafetyEmerg = stripScenarioSafetyFromScoredRecommendDeck(
+            emergencyPicked,
+            options.searchQuery ?? null,
+            options.scenarioObject ?? null
+          );
+          emergencyPicked = scenarioSafetyEmerg.deck;
+          hamaDevLog("[HAMA_EMERGENCY_RESULT]", { tag, count: emergencyPicked.length });
+          return emergencyPicked;
+        };
+
+        // 최종 handoff 직전: 음식 프리셋 긴급은 식당+키워드 전용. 보수형(고기/닭갈비)은 긴급 채움 없음.
+        if (picked.length === 0) {
+          const emergencyDeck =
+            !namedFoodPresetOpt ? await runEmergencyFallbackDeck("initial_empty")
+            : isConservativeAccuracyFirstFoodPreset(namedFoodPresetOpt) ? []
+            : await runNamedFoodPresetEmergencyDeck("initial_empty");
+          if (emergencyDeck.length > 0) picked = emergencyDeck;
+        }
+
+        picked = applyCultureLifestyleTop3Guard({
+          selected: picked,
+          candidates: cultureGuardCandidates,
+          query: options.searchQuery ?? null,
+        });
+        picked = applyBucketDiversityToPicked(
+          picked,
+          options.searchQuery ?? null,
+          namedFoodDeckBucketOpts ? { ...namedFoodDeckBucketOpts } : undefined
+        );
+
+        const scenarioBeautyBlockedNames: string[] = [];
+        const scenarioBeautyRemovedExposureIds = new Set<string>();
+
+        const stripScenarioBeautyDeck = (deck: ScoredRecommendItem[]): ScoredRecommendItem[] => {
+          if (!scenarioBeautyBlockActive) return deck;
+          return deck.filter((item) => {
+            if (!homeCardMatchesScenarioBeautySalonBlock(item.card)) return true;
+            const exp = getCardExposureId(item.card) || item.card.id;
+            if (!scenarioBeautyRemovedExposureIds.has(exp)) {
+              scenarioBeautyRemovedExposureIds.add(exp);
+              scenarioBeautyBlockedNames.push(item.card.name);
+            }
+            return false;
+          });
+        };
+
+        picked = stripScenarioBeautyDeck(picked);
+
+        if (
+          scenarioBeautyBlockActive &&
+          picked.length < RECOMMEND_DECK_SIZE &&
+          !cancelled &&
+          !namedFoodPresetOpt
+        ) {
+          const refill = await runEmergencyFallbackDeck("beauty_strip_refill");
+          if (refill.length > 0) {
+            picked = refill;
+            picked = applyCultureLifestyleTop3Guard({
+              selected: picked,
+              candidates: cultureGuardCandidates,
+              query: options.searchQuery ?? null,
+            });
+            picked = applyBucketDiversityToPicked(
+              picked,
+              options.searchQuery ?? null,
+              namedFoodDeckBucketOpts ? { ...namedFoodDeckBucketOpts } : undefined
+            );
+          }
+        }
+
+        picked = stripScenarioBeautyDeck(picked);
+
+        if (scenarioBeautyBlockActive) {
+          hamaDevLog("[HAMA_BLOCK_BEAUTY_FOR_SCENARIO]", {
+            query: options.searchQuery ?? null,
+            removedCount: scenarioBeautyBlockedNames.length,
+            finalCount: picked.length,
+            removedNames: scenarioBeautyBlockedNames,
+          });
+        }
+
+        const scenarioSafetyActive =
+          scenarioQueryNeedsKidsNightlifeSafetyStrip(
+            options.searchQuery ?? null,
+            options.scenarioObject ?? null
+          ) || scenarioQueryNeedsRainyIndoorOutdoorStrip(options.searchQuery ?? null);
+
+        const scenarioSafetyFinal = stripScenarioSafetyFromScoredRecommendDeck(
+          picked,
+          options.searchQuery ?? null,
+          options.scenarioObject ?? null
+        );
+        picked = scenarioSafetyFinal.deck;
+
+        if (scenarioSafetyActive) {
+          hamaDevLog("[HAMA_SCENARIO_SAFETY_FILTER]", {
+            query: options.searchQuery ?? null,
+            removedCount: scenarioSafetyFinal.removedNames.length,
+            removedNames: scenarioSafetyFinal.removedNames,
+            finalCount: picked.length,
+          });
+        }
+
+        hamaDevLog(
+          "[HAMA_DIVERSITY_BUCKETS]",
+          picked.map((item) => ({
+            name: item.card.name,
+            category: item.card.category,
+            bucket: getDiversityBucket(item.card),
+          }))
+        );
+        hamaDevLog("[HAMA_RESULTS] finalCards.length:", picked.length);
+        hamaDevLog("[HAMA_FINAL_RETURN]", picked.length);
+
+        hamaDevLog("[HAMA_EXPOSURE_MEMORY]", {
+          recentIdsCount: readRecentExposedStoreIds().length,
+          excludedByRecentCount:
+            exposureLogState.excludedByRecentCount || exposureLogState.recentExposureReplacements,
+          candidateCountBefore: exposureLogState.candidateCountBefore,
+          candidateCountAfter: exposureLogState.candidateCountAfter,
+          picked: picked.map((c) => c.card.name),
+        });
+
+        // 오베 전 중식 통합: 짜장/짬뽕 동일 덱·반복 덱 허용 — 인위적 덱 회전만 생략
+        if (namedFoodPresetOpt && picked.length > 0 && namedFoodPresetOpt.id !== "chinese") {
+          picked = applyNamedFoodPresetDeckRotation(picked, cultureGuardCandidates, {
+            query: options.searchQuery ?? null,
+            preset: namedFoodPresetOpt,
+            searchAttempt,
+            deckCap: deckCapDiag ?? RECOMMEND_DECK_SIZE,
+            candidateCount: cultureGuardCandidates.length,
+          });
+        }
+
+        if (namedFoodPresetOpt) {
+          picked = guardNamedFoodPresetPickedDeck(picked, namedFoodPresetOpt, options.searchQuery ?? null);
+        }
+
+        if (namedFoodPresetOpt && picked.length > 0) {
+          writeNamedFoodPrevTop3Fingerprint(
+            options.searchQuery ?? null,
+            namedFoodPresetOpt.id,
+            top3ExposureFingerprintForDeck(picked)
+          );
+          commitNamedFoodTop1Streak(options.searchQuery ?? null, namedFoodPresetOpt.id, picked);
+        }
+
+        if (
+          namedFoodPresetOpt &&
+          isConservativeAccuracyFirstFoodPreset(namedFoodPresetOpt) &&
+          picked.length < 3
+        ) {
+          hamaDevLog("[HAMA_FOOD_PRESET_INSUFFICIENT]", {
+            query: options.searchQuery ?? null,
+            presetId: namedFoodPresetOpt.id,
+            threshold: 3,
+            beforeClear: picked.map((p) => p.card.name),
+          });
+          picked = [];
+        }
+
+        const soloChineseStripPool = [...cultureGuardCandidates, ...rankedPrimary, ...rankedFallbackBoosted].filter(
+          (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
+        );
+        const effectiveScenarioForSoloStrip = rankScenario ?? options.scenarioObject ?? null;
+        const soloStripQuery = options.searchQuery ?? null;
+        hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_ENTER]", {
+          tag: "callsite_before_apply",
+          query: soloStripQuery,
+          pickedLength: picked.length,
+          isSoloSituationQuery: isSoloSituationIntentQuery(soloStripQuery, effectiveScenarioForSoloStrip),
+          scenarioRawQuery: effectiveScenarioForSoloStrip?.rawQuery ?? null,
+          effectiveScenarioScenario: effectiveScenarioForSoloStrip?.scenario ?? null,
+          optionsSearchQuery: options.searchQuery ?? null,
+          soloChineseStripPoolLength: soloChineseStripPool.length,
+        });
+        picked = applySoloIntentChineseTop3HardStrip(
+          picked,
+          soloChineseStripPool,
+          soloStripQuery,
+          effectiveScenarioForSoloStrip
+        );
+
+        const pickedWithReasons = applyReasonTemplateEngine({
+          items: picked,
+          query: options.searchQuery ?? null,
+        });
+
+        if (options.namedFoodPreset) {
+          hamaDevLog("[HAMA_FOOD_PRESET]", {
+            query: options.searchQuery ?? null,
+            matchedFoodPreset: options.namedFoodPreset.id,
+            keywords: [...options.namedFoodPreset.keywords],
+            resultCount: pickedWithReasons.length,
+          });
+        }
+
+        saveRecentExposedStoreIds(pickedWithReasons.map((p) => getCardExposureId(p.card)).filter(Boolean));
+
         if (!cancelled) {
           if (
             isGenericFoodCategorySearchQuery(options.searchQuery) &&
@@ -3030,22 +4700,27 @@ export function useHomeCards(
               fetchTab: fetchTabLabel,
               fetchedCount: fetchedPreGate.length,
               rankedPoolCount: rankedPrimary.length,
-              finalDeckCount: picked.length,
-              finalTop3: picked.slice(0, 3).map((x) => x.card.name),
+              finalDeckCount: pickedWithReasons.length,
+              finalTop3: pickedWithReasons.slice(0, 3).map((x) => x.card.name),
             });
           }
           if (exCatLower === "culture") {
             console.log("[culture final handoff check]", {
               query: options.searchQuery ?? null,
-              finalDeckCount: picked.length,
-              finalTop3: picked.slice(0, 3).map((x) => x.card.name),
-              cardsPassedToResults: picked.slice(0, 3).map((x) => x.card.name),
+              finalDeckCount: pickedWithReasons.length,
+              finalTop3: pickedWithReasons.slice(0, 3).map((x) => x.card.name),
+              cardsPassedToResults: pickedWithReasons.slice(0, 3).map((x) => x.card.name),
             });
           }
           setPool(fetched);
           setCoursePool(wantCourse ? courseFetched : []);
+          setDeckRotationKey(
+            options.namedFoodPreset
+              ? `${options.namedFoodPreset.id}|${searchAttempt}|${getRecentExposureRotationSignature()}`
+              : ""
+          );
           setCards(
-            picked.map((p) => ({
+            pickedWithReasons.map((p) => ({
               ...p.card,
               recommendationScoreBreakdown: {
                 final: p.breakdown.finalScore,
@@ -3059,12 +4734,18 @@ export function useHomeCards(
               },
             }))
           );
-          setDeckIncomplete(!wantCourse && picked.length > 0 && picked.length < RECOMMEND_DECK_SIZE);
+          setDeckIncomplete(
+            !wantCourse &&
+              (options.namedFoodPreset
+                ? pickedWithReasons.length < 3
+                : pickedWithReasons.length > 0 && pickedWithReasons.length < RECOMMEND_DECK_SIZE)
+          );
         }
       } catch (e) {
         console.error("[useHomeCards]", e);
         if (!cancelled) {
           setCards([]);
+          setDeckRotationKey("");
           setCoursePool([]);
           setDeckIncomplete(false);
         }
@@ -3095,5 +4776,5 @@ export function useHomeCards(
     explicitKey,
   ]);
 
-  return { cards, candidatePool: pool, courseCandidatePool: coursePool, isLoading, deckIncomplete };
+  return { cards, deckRotationKey, candidatePool: pool, courseCandidatePool: coursePool, isLoading, deckIncomplete };
 }

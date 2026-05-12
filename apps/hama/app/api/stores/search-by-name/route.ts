@@ -167,6 +167,15 @@ function applyFoodAlcoholVenueGuard(items: StoreRow[], searchQuery: string, safe
 
 const FOOD_DINING_STRICT_FALLBACK_SAFE = new Set(["푸드", "식당"]);
 
+const SEARCH_ALIAS_DICTIONARY: Record<string, string[]> = {
+  문화생활: ["박물관", "전시", "미술관", "도서관", "체험", "문화"],
+  데이트: ["카페", "분위기 좋은", "레스토랑", "산책", "디저트"],
+  "아이랑 갈만한 곳": ["키즈카페", "공원", "도서관", "체험", "가족"],
+  "아이랑 밥": ["가족", "아이랑", "식당", "한식", "분식"],
+  "비오는날 실내": ["카페", "도서관", "박물관", "실내", "키즈카페"],
+  "조용한 카페": ["카페", "조용한", "감성"],
+};
+
 const FOOD_DINING_FALLBACK_NAME_PATTERNS = [
   "한식",
   "중식",
@@ -326,6 +335,40 @@ function searchDiversitySeed(safe: string, dayKey: string, headerSalt: string): 
 
 function shouldApplySearchDiversity(safe: string): boolean {
   return CULTURE_DIVERSITY_QUERIES.has(safe) || FOOD_CAFE_DIVERSITY_SINGLE.has(safe);
+}
+
+function getAliasKeywords(rawQuery: string): string[] {
+  const key = normalizeBrandQuery(rawQuery).trim();
+  return SEARCH_ALIAS_DICTIONARY[key] ?? [];
+}
+
+function isKidsFamilyLikeQuery(rawQuery: string): boolean {
+  const q = normalizeBrandQuery(rawQuery).toLowerCase();
+  return /아이|아이랑|가족|키즈|kids|family/.test(q);
+}
+
+function isKidsFamilyUnsafeRow(row: StoreRow): boolean {
+  const blob = normSearchText(
+    [String(row.name ?? ""), String(row.category ?? ""), ...(row.tags ?? []), ...(row.mood ?? [])].join(" ")
+  );
+  return /회\b|횟집|술집|포차|이자카야|호프|바\b|유흥/.test(blob);
+}
+
+function shuffleRowsWithSeed(rows: StoreRow[], seed: number): StoreRow[] {
+  if (rows.length < 2) return rows;
+  let rng = seed >>> 0;
+  const next = () => {
+    rng = (rng * 1103515245 + 12345) >>> 0;
+    return rng;
+  };
+  const out = [...rows];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = next() % (i + 1);
+    const t = out[i]!;
+    out[i] = out[j]!;
+    out[j] = t;
+  }
+  return out;
 }
 
 function isRestaurantOrCafeRow(row: StoreRow): boolean {
@@ -701,6 +744,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const searchQuery = String(url.searchParams.get("q") ?? "").trim();
     const safe = sanitizeToken(normalizeBrandQuery(searchQuery));
+    const aliasKeywords = getAliasKeywords(searchQuery);
     const explicitCategory = String(url.searchParams.get("category") ?? "").trim();
     const explicitIntent = String(url.searchParams.get("intent") ?? "").trim();
 
@@ -779,6 +823,28 @@ export async function GET(req: Request) {
       if (rows.length) stage = "halves";
     }
 
+    if (rows.length < 3 && aliasKeywords.length > 0) {
+      const aliasRows: StoreRow[] = [];
+      for (const kw of aliasKeywords) {
+        const sKw = sanitizeToken(normalizeBrandQuery(kw));
+        if (!sKw || sKw.length < 2) continue;
+        const patternsKw = buildNamePatterns(sKw);
+        const srKw = await fetchStoresByNamePatterns(supabase, patternsKw);
+        const prKw = await fetchPlacesByNamePatterns(supabase, patternsKw);
+        aliasRows.push(...mergeStoreRows(srKw.rows, prKw.rows));
+      }
+      if (aliasRows.length > 0) {
+        rows = mergeStoreRows(rows, aliasRows);
+        stage = `${stage}+alias` as typeof stage;
+      }
+      console.log("[search alias enrichment]", {
+        query: searchQuery,
+        aliasKeywords,
+        baseCount: patternRows.length,
+        enrichedCount: rows.length,
+      });
+    }
+
     rows = orderRowsServiceRegionFirst(rows);
     if (CULTURE_DIVERSITY_QUERIES.has(safe)) {
       rows = rows.filter((r) => !isRestaurantOrCafeRow(r));
@@ -852,14 +918,27 @@ export async function GET(req: Request) {
       });
     }
 
-    const diverse = pickDiverseCultureNameRows(pipelineFiltered, safe, 12);
+    const kidsFamilyQuery = isKidsFamilyLikeQuery(searchQuery);
+    const kidsSafePipeline = kidsFamilyQuery
+      ? pipelineFiltered.filter(({ row }) => !isKidsFamilyUnsafeRow(row))
+      : pipelineFiltered;
+    const basePoolForPick = aliasKeywords.length > 0
+      ? shuffleRowsWithSeed(
+          kidsSafePipeline.map((x) => x.row),
+          searchDiversitySeed(`${safe}|${searchQuery}|alias`, seoulDateKey(), "alias")
+        ).map((row) => {
+          const matched = kidsSafePipeline.find((x) => x.row.id === row.id);
+          return matched ?? { row, score: 0, tier: "sql_loose" as const };
+        })
+      : kidsSafePipeline;
+    const diverse = pickDiverseCultureNameRows(basePoolForPick, safe, 12);
     let items: StoreRow[] =
       diverse.length > 0
         ? diverse
         : (() => {
             const seen = new Set<string>();
             const acc: StoreRow[] = [];
-            for (const { row } of pipelineFiltered) {
+            for (const { row } of basePoolForPick) {
               if (!row.id || seen.has(row.id)) continue;
               seen.add(row.id);
               acc.push(row);

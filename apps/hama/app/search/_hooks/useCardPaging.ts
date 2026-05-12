@@ -9,6 +9,7 @@ import {
   parseSearchIntent,
   scoreStoreByIntent,
 } from "@/lib/searchIntent";
+import { hamaDevLog } from "@/lib/hamaDevLog";
 
 type Args = {
   stores: CardInfo[];
@@ -27,6 +28,36 @@ type Result = {
   pages: CardInfo[][];
   usedFallbackFar?: boolean;
   usedChineseFallback?: boolean;
+};
+
+const SITUATION_PRESET: Record<
+  string,
+  {
+    categories: Array<"activity" | "library" | "cafe" | "restaurant">;
+    tagKeywords: string[];
+    moodKeywords: string[];
+  }
+> = {
+  문화생활: {
+    categories: ["activity", "library"],
+    tagKeywords: ["문화", "박물관", "전시", "미술관", "역사관", "도서관", "체험"],
+    moodKeywords: ["문화", "지식", "실내", "전시"],
+  },
+  데이트: {
+    categories: ["cafe", "restaurant", "activity"],
+    tagKeywords: ["카페", "디저트", "레스토랑", "산책", "브런치"],
+    moodKeywords: ["분위기", "감성", "데이트", "조용"],
+  },
+  "아이랑 갈만한 곳": {
+    categories: ["activity", "library", "cafe"],
+    tagKeywords: ["아이", "가족", "키즈", "공원", "도서관", "체험", "실내"],
+    moodKeywords: ["가족", "아이", "키즈", "실내"],
+  },
+  "비오는날 실내": {
+    categories: ["cafe", "library", "activity"],
+    tagKeywords: ["실내", "카페", "도서관", "박물관", "전시", "키즈", "체험"],
+    moodKeywords: ["실내", "조용", "편안", "비오는날"],
+  },
 };
 
 function normText(v: unknown): string {
@@ -140,6 +171,54 @@ function extractKeywords(rawQuery: string, activeCategory: Category | null): str
 
   // 중복 제거
   return Array.from(new Set(keywords));
+}
+
+function getSituationPreset(query: string): {
+  categories: Array<"activity" | "library" | "cafe" | "restaurant">;
+  tagKeywords: string[];
+  moodKeywords: string[];
+} | null {
+  const q = String(query ?? "").trim();
+  return SITUATION_PRESET[q] ?? null;
+}
+
+function categoryMatchesPreset(
+  category: Category,
+  presetCategory: "activity" | "library" | "cafe" | "restaurant"
+): boolean {
+  if (presetCategory === "library") return category === "activity";
+  return category === presetCategory;
+}
+
+function isKidsFamilyQuery(rawQuery: string): boolean {
+  return /아이|아이랑|가족|키즈|kids|family/.test(String(rawQuery ?? "").toLowerCase());
+}
+
+function isKidsUnsafeName(name: string): boolean {
+  const n = String(name ?? "").toLowerCase();
+  return /회|횟집|술집|포차|이자카야|호프|바|유흥/.test(n);
+}
+
+function shuffleSeeded<T>(list: T[], seedText: string): T[] {
+  if (list.length < 2) return list;
+  let h = 2166136261;
+  for (let i = 0; i < seedText.length; i += 1) {
+    h ^= seedText.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  let rng = h >>> 0;
+  const next = () => {
+    rng = (rng * 1103515245 + 12345) >>> 0;
+    return rng;
+  };
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = next() % (i + 1);
+    const t = out[i]!;
+    out[i] = out[j]!;
+    out[j] = t;
+  }
+  return out;
 }
 
 type NormalizedCard = CardInfo & {
@@ -491,6 +570,8 @@ export function useCardPaging(args: Args): Result {
     }
 
     let categoryStores: CardInfo[] = scoped;
+    const preset = getSituationPreset(trimmedQuery);
+    const baseResultsCount = categoryStores.length;
 
     // 마지막 폴백: 결과 0개면 키워드만 적용
     // 시나리오 검색(회식/혼밥/한정식 등) 시 다른 카테고리(미용실/액티비티/카페) 노출 금지
@@ -510,10 +591,64 @@ export function useCardPaging(args: Args): Result {
       categoryStores = keywordFiltered.length > 0 ? keywordFiltered.slice(0, 200) : pool.slice(0, 200);
     }
 
-    // ✅ 검색어 없음: 추천 카드 랜덤 — 검색어 있음: 점수·거리 정렬 유지
-    const ordered = trimmedQuery
-      ? categoryStores
-      : [...categoryStores].sort(() => Math.random() - 0.5);
+    if (categoryStores.length < 3 && preset && normalized.length > 0) {
+      const baseIds = new Set(categoryStores.map((s) => String(s.id)));
+      const tagKwNorm = preset.tagKeywords.map((k) => normText(k));
+      const moodKwNorm = preset.moodKeywords.map((k) => normText(k));
+      const categoryMatched = normalized.filter((s) =>
+        preset.categories.some((cat) => categoryMatchesPreset(s.category, cat))
+      );
+      const tagsMatched = categoryMatched.filter((s) => {
+        const tagsBlob = Array.isArray((s as any).tags) ? normText((s as any).tags.join(" ")) : "";
+        return tagKwNorm.some((k) => tagsBlob.includes(k));
+      });
+      const moodMatched = categoryMatched.filter((s) => {
+        const moodBlob = Array.isArray((s as any).mood) ? normText((s as any).mood.join(" ")) : "";
+        return moodKwNorm.some((k) => moodBlob.includes(k));
+      });
+      const byId = new Map<string, NormalizedCard>();
+      for (const row of [...categoryMatched, ...tagsMatched, ...moodMatched]) {
+        byId.set(String(row.id), row);
+      }
+      let fallback = Array.from(byId.values());
+      if (isKidsFamilyQuery(trimmedQuery)) {
+        fallback = fallback.filter((s) => !isKidsUnsafeName(s.name));
+      }
+      const dedupFallback = fallback.filter((s) => !baseIds.has(String(s.id)));
+      const fallbackResultsCount = dedupFallback.length;
+      categoryStores = [...categoryStores, ...dedupFallback];
+      console.log("[search situation preset fallback]", {
+        query: trimmedQuery,
+        presetCategories: preset.categories,
+        presetTagKeywords: preset.tagKeywords,
+        presetMoodKeywords: preset.moodKeywords,
+        baseCount: baseIds.size,
+        fallbackCount: dedupFallback.length,
+        mergedCount: categoryStores.length,
+      });
+      hamaDevLog("[HAMA_SEARCH] fallbackQueryMode:", "category/tags/mood");
+      hamaDevLog("[HAMA_SEARCH] fallbackMatchedCount:", fallbackResultsCount);
+      hamaDevLog("[HAMA_SEARCH] fallbackPreset:", preset);
+      hamaDevLog("[HAMA_SEARCH] baseResults:", baseResultsCount);
+      hamaDevLog("[HAMA_SEARCH] fallbackResults:", fallbackResultsCount);
+      hamaDevLog("[HAMA_SEARCH] finalResults:", categoryStores.length);
+    }
+
+    if (isKidsFamilyQuery(trimmedQuery)) {
+      categoryStores = categoryStores.filter((s) => !isKidsUnsafeName(s.name));
+    }
+
+    // 최종 slice 전에 셔플 (검색어 있어도 동일 카드 고정 완화)
+    const ordered = shuffleSeeded(
+      trimmedQuery ? categoryStores : [...categoryStores].sort(() => Math.random() - 0.5),
+      `${trimmedQuery}|search_cards`
+    );
+    if (!preset || categoryStores.length >= 3) {
+      hamaDevLog("[HAMA_SEARCH] fallbackPreset:", preset);
+      hamaDevLog("[HAMA_SEARCH] baseResults:", baseResultsCount);
+      hamaDevLog("[HAMA_SEARCH] fallbackResults:", 0);
+      hamaDevLog("[HAMA_SEARCH] finalResults:", ordered.length);
+    }
     const pages: CardInfo[][] = [
       ordered.slice(0, 3),
       ordered.slice(3, 6),

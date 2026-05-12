@@ -26,6 +26,7 @@ import { fetchRecommendationPatternBoostMap } from "@/lib/recommend/getPatternBo
 import { applyRecommendationModeToScenario } from "@/lib/scenarioEngine/effectiveScenario";
 import type { RecommendationMode, ScenarioObject } from "@/lib/scenarioEngine/types";
 import type { IntentionType } from "@/lib/intention";
+import type { NamedFoodPreset } from "@/lib/recommend/namedFoodPresets";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { CoursePlan } from "@/lib/scenarioEngine/types";
 import {
@@ -38,6 +39,11 @@ import {
   RECOMMEND_DECK_SIZE,
   RECENT_EXCLUDE_LIMIT,
 } from "@/lib/recommend/recommendConstants";
+import {
+  isSoloSituationIntentQuery,
+  matchNamedFoodPreset,
+  matchesTonkatsuBetaDisabledQuery,
+} from "@/lib/recommend/namedFoodPresets";
 import { ResultsHeader } from "@/_components/results/ResultsHeader";
 import { ActiveConstraintChips } from "@/_components/results/ActiveConstraintChips";
 import { RecommendationList } from "@/_components/results/RecommendationList";
@@ -64,6 +70,7 @@ import { recordPwaEngagement } from "@/lib/pwa/pwaEngagement";
 import FeedbackFab from "@/components/FeedbackFab";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
 import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
+import { hamaDevLog } from "@/lib/hamaDevLog";
 
 /** 결과 페이지만: 고정 더미로 SearchResultSection/분기 검증 — `.env.local` 에 `NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION=1` */
 const DEBUG_FORCE_SEARCH_SECTION = process.env.NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION === "1";
@@ -75,6 +82,21 @@ const FAMILY_DINING_ALIAS_QUERIES = new Set([
   "가족이랑 외식",
   "가족이랑 밥",
   "가족이랑 식사",
+]);
+
+const QUERY_ALIAS_EXPANSION: Record<string, string> = {
+  문화생활: "박물관 전시 미술관 도서관 체험 문화",
+  데이트: "카페 분위기 좋은 레스토랑 산책 디저트",
+  "아이랑 갈만한 곳": "키즈카페 공원 도서관 체험 가족",
+  "아이랑 밥": "가족 아이랑 식당 한식 분식",
+  "비오는날 실내": "카페 도서관 박물관 실내 키즈카페",
+  "조용한 카페": "카페 조용한 감성",
+};
+const RESULTS_SITUATION_PRESET_QUERIES = new Set([
+  "문화생활",
+  "데이트",
+  "아이랑 갈만한 곳",
+  "비오는날 실내",
 ]);
 
 function intentCategoryToCategoryClicked(intentCategory: string | null | undefined): string | null {
@@ -380,11 +402,26 @@ function ResultsContent() {
 
   const rankingBootstrapReady = !isLocLoading && !recentLoading;
 
+  const qNormalizedForIntent = useMemo(() => normalizeBrandQuery(qRaw).trim(), [qRaw]);
+  const isSoloSituationQuery = useMemo(() => isSoloSituationIntentQuery(qRaw), [qRaw]);
+  /** URL q 직후 — 음식 세부 프리셋(파스타 등)은 시나리오보다 우선. 단, 혼밥/혼자/1인은 상황 intent 우선 */
+  const matchedNamedFoodPreset = useMemo(
+    () => (isSoloSituationQuery ? null : matchNamedFoodPreset(qRaw)),
+    [isSoloSituationQuery, qRaw]
+  );
+  const tonkatsuRecommendDisabled = matchesTonkatsuBetaDisabledQuery(qRaw);
+
   /** URL q가 단독 "박물관"일 때는 누적 대화(convCtx)가 searchQuery를 덮어쓰지 않음 — 홈 문화 타일과 히어로 직접 입력 경로 일치 */
   const searchQueryForHomeCards = useMemo(() => {
     const qTrim = qRaw.trim();
+    /** 혼밥/혼자/1인 — 누적 대화 텍스트가 `searchQuery`를 덮으면 useHomeCards solo guard가 전부 스킵됨 */
+    if (isSoloSituationQuery) return qTrim || null;
+    if (matchedNamedFoodPreset) return qTrim || null;
     if (qTrim === "박물관") return qTrim;
     if (qTrim === "도서관") return qTrim;
+    // /results 경로에서는 상황어 원문을 그대로 넘겨야 useHomeCards preset이 정확히 동작한다.
+    if (RESULTS_SITUATION_PRESET_QUERIES.has(qTrim)) return qTrim;
+    if (QUERY_ALIAS_EXPANSION[qTrim]) return QUERY_ALIAS_EXPANSION[qTrim];
     if ((explicitCategory ?? "").trim().toLowerCase() === "culture") return qRaw || null;
     const qNorm = normalizeBrandQuery(qRaw).trim();
     if (FAMILY_DINING_ALIAS_QUERIES.has(qTrim) || FAMILY_DINING_ALIAS_QUERIES.has(qNorm)) return "식당";
@@ -392,9 +429,38 @@ function ResultsContent() {
     if (qNorm === "푸드") return "식당";
     if (qNorm === "식당" || qNorm === "맛집") return qNorm;
     return (convCtx?.cumulativeText ?? qRaw) || null;
-  }, [qRaw, explicitCategory, convCtx?.cumulativeText]);
+  }, [qRaw, explicitCategory, convCtx?.cumulativeText, matchedNamedFoodPreset, isSoloSituationQuery]);
 
-  const qNormalizedForIntent = useMemo(() => normalizeBrandQuery(qRaw).trim(), [qRaw]);
+  /** 프리셋일 때 코스·데이트 시나리오가 랭킹/페치를 가로채지 않도록 단일 식당 맥락으로 고정 */
+  const scenarioObjectForHomeCards = useMemo((): ScenarioObject | undefined => {
+    if (!matchedNamedFoodPreset) return effectiveScenario ?? undefined;
+    const trimmed = qRaw.trim();
+    const base = effectiveScenario;
+    return {
+      scenario: "generic",
+      intentType: "scenario_recommendation",
+      recommendationMode: "single",
+      intentCategory: "FOOD",
+      rawQuery: trimmed || base?.rawQuery || "",
+      confidence: 0.86,
+      conversationExcludePlaceIds: base?.conversationExcludePlaceIds,
+    };
+  }, [matchedNamedFoodPreset, effectiveScenario, qRaw]);
+
+  const intentForHomeCards: IntentionType = matchedNamedFoodPreset ? "none" : intent;
+  /** TS가 showNameSearch 분기 안에서 매장명 전용이라 food preset을 never로 줄이므로 카드 렌더는 이 ref 사용 */
+  const namedFoodPresetIdForListRef: NamedFoodPreset | null = matchedNamedFoodPreset;
+
+  useEffect(() => {
+    const payload = {
+      qRaw,
+      matchedNamedFoodPreset,
+      presetId: matchedNamedFoodPreset?.id,
+      subIntent: matchedNamedFoodPreset?.subIntent,
+    };
+    hamaDevLog("[HAMA_FOOD_PRESET_ROUTE_CHECK]", payload);
+  }, [qRaw, matchedNamedFoodPreset]);
+
   const isFamilyDiningAliasQuery = useMemo(
     () => FAMILY_DINING_ALIAS_QUERIES.has(qRaw.trim()) || FAMILY_DINING_ALIAS_QUERIES.has(qNormalizedForIntent),
     [qRaw, qNormalizedForIntent]
@@ -404,10 +470,15 @@ function ResultsContent() {
     [qNormalizedForIntent]
   );
   const resolvedExplicitIntentForHome =
-    isFamilyDiningAliasQuery || isGenericFoodResultsQuery ? "food_general" : explicitIntent;
+    isFamilyDiningAliasQuery || isGenericFoodResultsQuery || Boolean(matchedNamedFoodPreset)
+      ? "food_general"
+      : explicitIntent;
   const resolvedExplicitCategoryForHome =
-    isFamilyDiningAliasQuery || isGenericFoodResultsQuery ? "restaurant" : explicitCategory;
-  const resolvedModeForHome = isFamilyDiningAliasQuery ? "single" : explicitMode;
+    isFamilyDiningAliasQuery || isGenericFoodResultsQuery || Boolean(matchedNamedFoodPreset)
+      ? "restaurant"
+      : explicitCategory;
+  const resolvedModeForHome =
+    isFamilyDiningAliasQuery || Boolean(matchedNamedFoodPreset) ? "single" : explicitMode;
 
   useEffect(() => {
     if (!isFamilyDiningAliasQuery) return;
@@ -450,12 +521,13 @@ function ResultsContent() {
   /** 푸드/식당/맛집: 시나리오가 코스로 잡히면 showRecommendationList가 false가 되어 카드가 숨겨짐 → 단일 모드 고정 */
   useEffect(() => {
     if (courseIdParam) return;
-    if (!isGenericFoodResultsQuery && !isFamilyDiningAliasQuery) return;
+    if (!isGenericFoodResultsQuery && !isFamilyDiningAliasQuery && !matchedNamedFoodPreset && !isSoloSituationQuery) return;
     setModeOverride("single");
-  }, [courseIdParam, isGenericFoodResultsQuery, isFamilyDiningAliasQuery, qRaw]);
+  }, [courseIdParam, isGenericFoodResultsQuery, isFamilyDiningAliasQuery, matchedNamedFoodPreset, isSoloSituationQuery, qRaw]);
 
   const placeNameGate = useMemo(() => explainPlaceNameSearchGate(qRaw), [qRaw]);
-  const placeSearchEnabled = placeNameGate.enabled;
+  /** 음식 세부 프리셋 쿼리는 "매장명 검색"으로 오인하지 않음 — deferRanking으로 페치가 막히는 것 방지 */
+  const placeSearchEnabled = !matchedNamedFoodPreset && !isSoloSituationQuery && placeNameGate.enabled;
   const { items: placeHits, loading: placeSearchLoading, meta: placeSearchMeta } = usePlaceNameSearchResults(
     qRaw,
     placeSearchEnabled,
@@ -463,7 +535,7 @@ function ResultsContent() {
     userLoc?.lng
   );
 
-  const deferRecForPlaceLookup = placeSearchEnabled && placeSearchLoading;
+  const deferRecForPlaceLookup = matchedNamedFoodPreset ? false : placeSearchEnabled && placeSearchLoading;
   const placeLookupDoneEarly = !placeSearchEnabled || !placeSearchLoading;
   /** 매장명 API 성공(1건 이상)이면 추천/코스 후보 페치를 하지 않음 → 리스트가 뒤에서 덮어쓰이지 않음 */
   const placeSearchDominant = placeSearchEnabled && placeLookupDoneEarly && placeHits.length > 0;
@@ -505,10 +577,11 @@ function ResultsContent() {
     resolvedExplicitCategoryForHome,
   ]);
 
-  const { cards, candidatePool, courseCandidatePool, isLoading, deckIncomplete } = useHomeCards(
+  const { cards, deckRotationKey, candidatePool, courseCandidatePool, isLoading, deckIncomplete } =
+    useHomeCards(
     "all",
     shuffleKey,
-    intent,
+    intentForHomeCards,
     {
       userLat: userLoc?.lat ?? null,
       userLng: userLoc?.lng ?? null,
@@ -517,11 +590,11 @@ function ResultsContent() {
       profileOverride,
       relaxPersonalRules,
       searchQuery: searchQueryForHomeCards,
-      scenarioObject: effectiveScenario ?? undefined,
+      scenarioObject: scenarioObjectForHomeCards,
       /** 매장명 검색이 끝날 때까지 추천 페치·랭킹 지연 — 첫 프레임 레이스 방지 */
       deferRanking: !rankingBootstrapReady || deferRecForPlaceLookup,
-      /** 세션에 고정된 코스로 돌아온 경우 재랭킹·재페치 없음 */
-      skipFetch: Boolean(courseIdParam),
+      /** 세션에 고정된 코스로 돌아온 경우 재랭킹·재페치 없음 · 돈까스 프리셋 오베 전 비활성화 시 추천 페치 생략 */
+      skipFetch: Boolean(courseIdParam) || tonkatsuRecommendDisabled,
       /**
        * 매장명 매칭 후에도 추천 풀은 가져온다. 메인 리스트는 `!showNameSearch`일 때만 그려서
        * 검색 카드가 덮어쓰이지 않고, `secondaryRecommendCards`로 "이런 곳도 있어"만 채운다.
@@ -529,6 +602,8 @@ function ResultsContent() {
       explicitIntent: resolvedExplicitIntentForHome,
       explicitCategory: resolvedExplicitCategoryForHome,
       explicitMode: resolvedModeForHome,
+      namedFoodPreset: matchedNamedFoodPreset ?? undefined,
+      recommendedDeckCap: matchedNamedFoodPreset ? 5 : undefined,
     }
   );
 
@@ -662,6 +737,35 @@ function ResultsContent() {
       : cards;
 
   useEffect(() => {
+    if (!isSoloSituationQuery) return;
+    const blockedFoodPreset = "named_food_presets";
+    const resolvedIntent =
+      effectiveScenario?.scenario ?? resolvedExplicitIntentForHome ?? intent ?? "solo";
+    const finalTop3 = primaryRecommendationCards.slice(0, 3).map((c) => ({
+      name: c.name,
+      category: String(c.category ?? c.categoryLabel ?? ""),
+    }));
+    hamaDevLog("[HAMA_SOLO_INTENT]", {
+      query: qRaw,
+      isSoloSituationQuery,
+      matchedNamedFoodPreset: matchedNamedFoodPreset ? { id: matchedNamedFoodPreset.id, label: matchedNamedFoodPreset.label } : null,
+      blockedFoodPreset,
+      resolvedIntent,
+      isLoading,
+      finalTop3NamesCategories: finalTop3,
+    });
+  }, [
+    isSoloSituationQuery,
+    qRaw,
+    matchedNamedFoodPreset,
+    effectiveScenario?.scenario,
+    resolvedExplicitIntentForHome,
+    intent,
+    primaryRecommendationCards,
+    isLoading,
+  ]);
+
+  useEffect(() => {
     if (!convCtx?.sessionId || bootstrapBusy) return;
     if (placeLookupBusy) return;
 
@@ -696,18 +800,32 @@ function ResultsContent() {
   const logBase = useMemo(() => analyticsFromScenario(effectiveScenario), [effectiveScenario]);
 
   const isCourseMode = effectiveMode === "course";
+  const isSituationResultsQuery = RESULTS_SITUATION_PRESET_QUERIES.has(qRaw.trim());
+  const isScenarioRecommendationIntent = scenarioObject?.intentType === "scenario_recommendation";
   const showCourseDeck = Boolean(
     !pageBusy && isCourseMode && coursePlans.length > 0 && !showNameSearch && !courseIdParam
   );
   const courseFallbackActive = Boolean(
     !pageBusy && isCourseMode && coursePlans.length === 0 && !courseIdParam
   );
-  const showRecommendationList = Boolean(
+  const baseShowRecommendationList = Boolean(
     !pageBusy &&
       !courseRestoreFailed &&
       (!isCourseMode || courseFallbackActive || isCourseFixedResults)
   );
-  const showEmptyState = Boolean(
+  const forceSituationRecommendationListVisible = Boolean(
+    !pageBusy &&
+      !courseRestoreFailed &&
+      isSituationResultsQuery &&
+      isScenarioRecommendationIntent &&
+      primaryRecommendationCards.length > 0
+  );
+  const forceShowListByCards = cards.length > 0;
+  const showRecommendationList =
+    baseShowRecommendationList || forceSituationRecommendationListVisible || forceShowListByCards;
+  const recommendationListVisible = showRecommendationList && primaryRecommendationCards.length > 0;
+  const recommendationMode = scenarioObject?.intentType ?? effectiveScenario?.recommendationMode ?? effectiveMode;
+  const baseShowEmptyState = Boolean(
     !bootstrapBusy &&
       !showNameSearch &&
       !pageBusy &&
@@ -715,6 +833,7 @@ function ResultsContent() {
       primaryRecommendationCards.length === 0 &&
       placeLookupDone
   );
+  const showEmptyState = forceShowListByCards ? false : baseShowEmptyState;
 
   useEffect(() => {
     console.log("[empty state conflict check]", {
@@ -722,13 +841,24 @@ function ResultsContent() {
       cardsCount: primaryRecommendationCards.length,
       placeSearchEnabled,
       showEmptyState,
-      recommendationListVisible: showRecommendationList && primaryRecommendationCards.length > 0,
+      recommendationListVisible,
+    });
+    hamaDevLog("[HAMA_UI] recommendationListVisible:", recommendationListVisible);
+    hamaDevLog("[HAMA_UI] cards.length:", cards.length);
+    hamaDevLog("[HAMA_UI] recommendationMode:", recommendationMode);
+    hamaDevLog("[HAMA_UI_FORCE]", {
+      cardsLength: cards.length,
+      showRecommendationList,
+      showEmptyState,
     });
   }, [
     qRaw,
+    cards.length,
     primaryRecommendationCards.length,
     placeSearchEnabled,
     showEmptyState,
+    recommendationListVisible,
+    recommendationMode,
     showRecommendationList,
   ]);
 
@@ -776,6 +906,8 @@ function ResultsContent() {
     const renderedSource = showNameSearch
       ? (cards.length > 0 ? "mixed" : "search-by-name")
       : "homecards";
+    hamaDevLog("[HAMA_SEARCH] route:", "results");
+    hamaDevLog("[HAMA_SEARCH] query:", qRaw);
     console.log("[recommend path diagnosis]", {
       query: qRaw,
       placeSearchEnabled,
@@ -1225,9 +1357,16 @@ function ResultsContent() {
               >
                 이런 곳도 있어
               </h2>
+              {namedFoodPresetIdForListRef?.id === "chinese" && (
+                <p style={{ fontSize: 13, color: colors.textSecondary, margin: "0 0 10px", lineHeight: 1.45 }}>
+                  중식으로 보기 좋은 곳을 골랐어요
+                </p>
+              )}
               <RecommendationList
                 cards={secondaryRecommendCards}
                 scenarioObject={effectiveScenario}
+                namedFoodPresetId={namedFoodPresetIdForListRef?.id}
+                deckRotationKey={matchedNamedFoodPreset ? deckRotationKey : null}
                 analyticsV2Click={analyticsV2Base ?? undefined}
                 showSoftFallbackCopy={false}
                 resultsSurface="secondary"
@@ -1269,11 +1408,15 @@ function ResultsContent() {
 
         {showEmptyState && (
             <p style={{ color: colors.textSecondary }}>
-              {strictBeautyEmpty
-                ? "이 지역에 매장이 적어요"
-                : placeSearchEnabled
-                ? "이름으로는 찾지 못했어. 다른 말로 한 번만 더 말해줄래?"
-                : "지금은 보여줄 카드가 없어. 다른 말로 한 번만 더 말해줄래?"}
+              {tonkatsuRecommendDisabled
+                ? "검색 결과가 부족해요. 검색어를 조금 바꿔 보거나 다른 지역으로 시도해 보세요."
+                : matchedNamedFoodPreset
+                  ? "조건에 맞는 식당을 찾기 어려워요. 검색 결과가 부족해요 — 검색어를 조금 바꿔 보거나 다른 지역으로 시도해 보세요."
+                  : strictBeautyEmpty
+                    ? "이 지역에 매장이 적어요"
+                    : placeSearchEnabled
+                      ? "이름으로는 찾지 못했어. 다른 말로 한 번만 더 말해줄래?"
+                      : "지금은 보여줄 카드가 없어. 다른 말로 한 번만 더 말해줄래?"}
             </p>
           )}
 
@@ -1292,29 +1435,38 @@ function ResultsContent() {
         )}
 
         {!pageBusy && !showNameSearch && showRecommendationList && primaryRecommendationCards.length > 0 && (
-          <RecommendationList
-            cards={primaryRecommendationCards}
-            scenarioObject={effectiveScenario}
-            analyticsV2Click={analyticsV2Base ?? undefined}
-            showSoftFallbackCopy={showSoftFallbackCopy}
-            isLoggedIn={isLoggedIn}
-            onRequireLogin={requireKakaoLogin}
-            onPlaceClick={(card, rank) => {
-              logEvent("place_click", mergeLogPayload(logBase, { place_id: card.id, name: card.name, card_rank: rank }));
-              stashPlaceForSession(card);
-              router.push(`/place/${encodeURIComponent(card.id)}`);
-            }}
-            onNavigate={(card, rank) => {
-              logEvent("navigate_click", mergeLogPayload(logBase, { place_id: card.id, card_rank: rank }));
-              const { lat, lng } = getLatLng(card);
-              openDirections({ name: card.name, lat: lat ?? null, lng: lng ?? null });
-            }}
-            onCall={(card, rank) => {
-              const tel = String(card.phone ?? "").replace(/[^0-9+]/g, "");
-              logEvent("call_click", mergeLogPayload(logBase, { place_id: card.id, card_rank: rank }));
-              if (tel) window.location.href = `tel:${tel}`;
-            }}
-          />
+          <>
+            {matchedNamedFoodPreset?.id === "chinese" && (
+              <p style={{ fontSize: 14, color: colors.textPrimary, margin: "0 0 10px", lineHeight: 1.5 }}>
+                중식으로 보기 좋은 곳을 골랐어요
+              </p>
+            )}
+            <RecommendationList
+              cards={primaryRecommendationCards}
+              scenarioObject={effectiveScenario}
+              namedFoodPresetId={namedFoodPresetIdForListRef?.id}
+              deckRotationKey={matchedNamedFoodPreset ? deckRotationKey : null}
+              analyticsV2Click={analyticsV2Base ?? undefined}
+              showSoftFallbackCopy={showSoftFallbackCopy}
+              isLoggedIn={isLoggedIn}
+              onRequireLogin={requireKakaoLogin}
+              onPlaceClick={(card, rank) => {
+                logEvent("place_click", mergeLogPayload(logBase, { place_id: card.id, name: card.name, card_rank: rank }));
+                stashPlaceForSession(card);
+                router.push(`/place/${encodeURIComponent(card.id)}`);
+              }}
+              onNavigate={(card, rank) => {
+                logEvent("navigate_click", mergeLogPayload(logBase, { place_id: card.id, card_rank: rank }));
+                const { lat, lng } = getLatLng(card);
+                openDirections({ name: card.name, lat: lat ?? null, lng: lng ?? null });
+              }}
+              onCall={(card, rank) => {
+                const tel = String(card.phone ?? "").replace(/[^0-9+]/g, "");
+                logEvent("call_click", mergeLogPayload(logBase, { place_id: card.id, card_rank: rank }));
+                if (tel) window.location.href = `tel:${tel}`;
+              }}
+            />
+          </>
         )}
 
         {!pageBusy &&

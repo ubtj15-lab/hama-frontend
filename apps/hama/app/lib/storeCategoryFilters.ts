@@ -8,15 +8,15 @@ export function categoriesForHomeTab(tab: HomeTabKey): string[] | null {
   if (tab === "all") return null;
   switch (tab) {
     case "cafe":
-      return ["cafe", "ce7", "CE7", "Cafe"];
+      return ["cafe"];
     case "salon":
-      return ["salon", "bk9", "BK9", "beauty", "Beauty"];
+      return ["salon"];
     case "restaurant":
-      return ["restaurant", "fd6", "FD6", "food", "Food", "meal", "Meal"];
+      return ["restaurant"];
     case "activity":
-      return ["activity", "at4", "AT4"];
+      return ["activity", "library"];
     case "museum":
-      return ["museum", "culture", "Culture", "gallery", "Gallery", "exhibition", "Exhibition"];
+      return ["library", "activity"];
     default:
       return [tab];
   }

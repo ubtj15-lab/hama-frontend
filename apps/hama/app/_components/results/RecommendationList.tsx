@@ -29,6 +29,10 @@ function hashDedupKey(s: string): string {
 type Props = {
   cards: HomeCard[];
   scenarioObject: ScenarioObject | null;
+  /** 결과 음식 세부 프리셋 id — contextKey에 넣어 동일 시나리오에서 덱이 안 바뀌는 문제 방지 */
+  namedFoodPresetId?: string | null;
+  /** 반복 검색 시 회차·최근 노출 시그니처 — 안정 카드/context가 덱 교체를 가릴 때 사용 */
+  deckRotationKey?: string | null;
   onPlaceClick: (card: HomeCard, rank: number) => void;
   onNavigate: (card: HomeCard, rank: number) => void;
   onCall: (card: HomeCard, rank: number) => void;
@@ -44,6 +48,8 @@ type Props = {
 export function RecommendationList({
   cards,
   scenarioObject,
+  namedFoodPresetId = null,
+  deckRotationKey = null,
   onPlaceClick,
   onNavigate,
   onCall,
@@ -71,8 +77,17 @@ export function RecommendationList({
         scenario: scenarioObject?.scenario ?? "",
         intentCategory: scenarioObject?.intentCategory ?? "",
         recommendationMode: scenarioObject?.recommendationMode ?? "single",
+        namedFoodPresetId: namedFoodPresetId ?? "",
+        deckRotationKey: deckRotationKey ?? "",
       }),
-    [scenarioObject?.rawQuery, scenarioObject?.scenario, scenarioObject?.intentCategory, scenarioObject?.recommendationMode]
+    [
+      scenarioObject?.rawQuery,
+      scenarioObject?.scenario,
+      scenarioObject?.intentCategory,
+      scenarioObject?.recommendationMode,
+      namedFoodPresetId,
+      deckRotationKey,
+    ]
   );
   const previousContextKeyRef = React.useRef<string | null>(null);
   /** 마지막으로 화면에 반영한 상위 덱 fingerprint (context 동일 시 cards만 바뀌어도 갱신) */

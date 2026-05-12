@@ -146,12 +146,19 @@ export function RecommendationCard({
   const rankOrder = rank + 1;
   const isTop = rankOrder === 1;
   const [postVisitOpen, setPostVisitOpen] = useState(false);
+  const [reasonShimmerActive, setReasonShimmerActive] = useState(true);
 
   useEffect(() => {
     if (selected && showVisitVerification) {
       setPostVisitOpen(true);
     }
   }, [selected, showVisitVerification]);
+
+  useEffect(() => {
+    if (!reasonShimmerActive) return;
+    const t = window.setTimeout(() => setReasonShimmerActive(false), 8200);
+    return () => window.clearTimeout(t);
+  }, [reasonShimmerActive]);
 
   useLayoutEffect(() => {
     if (impressOnce.current || !cardEl.current) return;
@@ -300,29 +307,34 @@ export function RecommendationCard({
 
             <div style={{ marginBottom: 12, borderRadius: 16, background: "rgba(255,237,213,0.6)", padding: "10px 12px" }}>
               <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 900, color: "#F97316" }}>✨ 추천 이유</div>
-              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 5 }}>
-                {cleanReasons.map((line, idx) => (
-                  <li key={`${line}-${idx}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 14, fontWeight: 700, color: "#1F2937", lineHeight: 1.35 }}>
-                    <span
-                      style={{
-                        marginTop: 2,
-                        width: 16,
-                        height: 16,
-                        borderRadius: 999,
-                        background: "#F97316",
-                        color: "#fff",
-                        fontSize: 10,
-                        display: "inline-grid",
-                        placeItems: "center",
-                        flexShrink: 0,
-                      }}
-                    >
-                      ✓
-                    </span>
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
+              <div
+                className="hama-reason-shimmer-wrap"
+                data-shimmer={reasonShimmerActive ? "on" : "off"}
+              >
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+                  {cleanReasons.map((line, idx) => (
+                    <li key={`${line}-${idx}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 14, fontWeight: 700, color: "#1F2937", lineHeight: 1.35 }}>
+                      <span
+                        style={{
+                          marginTop: 2,
+                          width: 16,
+                          height: 16,
+                          borderRadius: 999,
+                          background: "#F97316",
+                          color: "#fff",
+                          fontSize: 10,
+                          display: "inline-grid",
+                          placeItems: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        ✓
+                      </span>
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -771,6 +783,58 @@ export function RecommendationCard({
           </div>
         ) : null}
       </article>
+      <style jsx>{`
+        .hama-reason-shimmer-wrap {
+          position: relative;
+          overflow: hidden;
+          border-radius: 10px;
+        }
+
+        .hama-reason-shimmer-wrap[data-shimmer="on"]::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: -110%;
+          width: 62%;
+          pointer-events: none;
+          background: linear-gradient(
+            100deg,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 252, 233, 0.42) 40%,
+            rgba(255, 255, 255, 0.48) 52%,
+            rgba(255, 248, 220, 0.32) 66%,
+            rgba(255, 255, 255, 0) 100%
+          );
+          mix-blend-mode: screen;
+          animation: hamaReasonSweepOverlay 2.8s ease-in-out 2;
+          will-change: left, opacity;
+        }
+
+        @keyframes hamaReasonSweepOverlay {
+          0% {
+            left: -110%;
+            opacity: 0;
+          }
+          12% {
+            opacity: 1;
+          }
+          88% {
+            opacity: 1;
+          }
+          100% {
+            left: 120%;
+            opacity: 0;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .hama-reason-shimmer-wrap[data-shimmer="on"]::after {
+            animation: none;
+            display: none;
+          }
+        }
+      `}</style>
     </Touchable>
   );
 }
