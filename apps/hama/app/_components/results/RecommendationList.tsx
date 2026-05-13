@@ -17,6 +17,8 @@ import { getCardExposureId, saveRecentExposedStoreIds } from "@/lib/recommend/re
 import { RECOMMEND_DECK_SIZE } from "@/lib/recommend/recommendConstants";
 import { passesBeautyIndustryWhitelist, passesCultureIndustryWhitelist } from "@/lib/hamaResultCategoryCanonical";
 
+/** 예약 CTA는 `@/lib/reservationUiFlags`의 SHOW_RESERVATION_UI로 제어. 이 리스트에는 예약 전용 UI 없음. */
+
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
 
 /** 결과 리스트 실제 픽셀 출처 — 뷰티 v2 하드 모드는 항상 v2_direct */

@@ -18,6 +18,8 @@ import { Touchable } from "@ui/Touchable";
 import type { LogRecommendationEventInput } from "@/lib/analytics/types";
 import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT } from "@/lib/visitPlacePhotoClient";
 
+/** 예약 CTA는 `@/lib/reservationUiFlags`의 SHOW_RESERVATION_UI로 제어. 이 카드에는 예약 전용 UI 없음. */
+
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
 const SHOW_HAMA_PAY_MOCK =
   ENABLE_HAMA_PAY_UI &&

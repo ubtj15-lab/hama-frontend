@@ -25,6 +25,7 @@ import { getReservationPreviewForStore } from "@/lib/reservation/bookingDummy";
 import { buildReserveQueryFromPlace } from "@/lib/reservation/buildReserveSearchParams";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
 import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT } from "@/lib/visitPlacePhotoClient";
+import { SHOW_RESERVATION_UI } from "@/lib/reservationUiFlags";
 
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
 const SHOW_HAMA_PAY_MOCK =
@@ -181,10 +182,13 @@ export default function PlaceDetailPage() {
   );
   const suggests = getNextSuggestions(scenarioGuess).slice(0, 3);
 
-  const reservationPreview = getReservationPreviewForStore(card.id, card.category);
+  const reservationPreview = SHOW_RESERVATION_UI
+    ? getReservationPreviewForStore(card.id, card.category)
+    : null;
   const hamaPayEnabled = ENABLE_HAMA_PAY_UI && card.hama_pay_enabled === true;
 
   const goReserve = () => {
+    if (!SHOW_RESERVATION_UI) return;
     router.push(`/reserve?${buildReserveQueryFromPlace({ storeId: card.id, name: card.name, card }).toString()}`);
   };
 
@@ -503,34 +507,38 @@ export default function PlaceDetailPage() {
           </p>
         )}
 
-        <ReservationSummaryCard preview={reservationPreview} />
+        {SHOW_RESERVATION_UI && reservationPreview ? (
+          <>
+            <ReservationSummaryCard preview={reservationPreview} />
 
-        <p style={{ ...typo.caption, color: colors.textMuted, margin: "14px 0 0", lineHeight: 1.45 }}>
-          하마가 시간·예약금을 먼저 보여 주고, 바로 잡을 수 있게 이어줄게요.
-        </p>
+            <p style={{ ...typo.caption, color: colors.textMuted, margin: "14px 0 0", lineHeight: 1.45 }}>
+              하마가 시간·예약금을 먼저 보여 주고, 바로 잡을 수 있게 이어줄게요.
+            </p>
 
-        <button
-          type="button"
-          onClick={() => {
-            logEvent(HamaEvents.home_trust_reserve, { place_id: card.id, page: "place_detail", cta: "reserve_primary" });
-            goReserve();
-          }}
-          style={{
-            width: "100%",
-            height: 54,
-            marginTop: 14,
-            borderRadius: radius.button,
-            border: "none",
-            background: colors.accentPrimary,
-            color: colors.accentOnPrimary,
-            fontWeight: 900,
-            fontSize: 16,
-            cursor: "pointer",
-            boxShadow: shadow.cta,
-          }}
-        >
-          지금 예약하기
-        </button>
+            <button
+              type="button"
+              onClick={() => {
+                logEvent(HamaEvents.home_trust_reserve, { place_id: card.id, page: "place_detail", cta: "reserve_primary" });
+                goReserve();
+              }}
+              style={{
+                width: "100%",
+                height: 54,
+                marginTop: 14,
+                borderRadius: radius.button,
+                border: "none",
+                background: colors.accentPrimary,
+                color: colors.accentOnPrimary,
+                fontWeight: 900,
+                fontSize: 16,
+                cursor: "pointer",
+                boxShadow: shadow.cta,
+              }}
+            >
+              지금 예약하기
+            </button>
+          </>
+        ) : null}
         {hamaPayEnabled && SHOW_HAMA_PAY_MOCK ? (
           <button
             type="button"

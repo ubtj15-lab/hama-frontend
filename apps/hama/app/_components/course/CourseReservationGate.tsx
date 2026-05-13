@@ -7,6 +7,7 @@ import { logEvent } from "@/lib/logEvent";
 import { ReservationSummaryCard } from "@/_components/reservation/ReservationSummaryCard";
 import type { ReservationPreview } from "@/lib/reservation/bookingTypes";
 import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
+import { SHOW_RESERVATION_UI } from "@/lib/reservationUiFlags";
 
 type Props = {
   firstPlaceName: string;
@@ -30,6 +31,7 @@ export function CourseReservationGate({
   courseId,
   placeId,
 }: Props) {
+  if (!SHOW_RESERVATION_UI) return null;
   return (
     <div
       role="dialog"

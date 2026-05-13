@@ -3,6 +3,7 @@
 import React from "react";
 import type { ReservationPreview } from "@/lib/reservation/bookingTypes";
 import { colors, radius, shadow, typo } from "@/lib/designTokens";
+import { SHOW_RESERVATION_UI } from "@/lib/reservationUiFlags";
 
 type Props = {
   preview: ReservationPreview;
@@ -12,6 +13,8 @@ type Props = {
  * 매장 상단 — 예약 전에 “지금 잡을 수 있는지 / 예약금”을 먼저 보여 주는 카드.
  */
 export function ReservationSummaryCard({ preview }: Props) {
+  if (!SHOW_RESERVATION_UI) return null;
+
   const slots = preview.slotLabels.join(" · ");
   const hasDeposit = preview.depositWon != null && preview.depositWon > 0;
 

@@ -4,6 +4,7 @@ import React from "react";
 import type { ReservationPreview } from "@/lib/reservation/bookingTypes";
 import { ReservationSummaryCard } from "@/_components/reservation/ReservationSummaryCard";
 import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
+import { SHOW_RESERVATION_UI } from "@/lib/reservationUiFlags";
 
 type Props = {
   firstPlaceName: string;
@@ -13,6 +14,7 @@ type Props = {
 
 /** 코스 상단 — 실행 일정의 첫 식당 예약 요약 + 바로 예약 CTA */
 export function CourseReservationTopBlock({ firstPlaceName, preview, onReserveClick }: Props) {
+  if (!SHOW_RESERVATION_UI) return null;
   return (
     <section
       style={{
