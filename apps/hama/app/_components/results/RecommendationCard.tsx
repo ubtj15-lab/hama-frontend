@@ -16,6 +16,7 @@ import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
 import { Chip } from "@ui/Chip";
 import { Touchable } from "@ui/Touchable";
 import type { LogRecommendationEventInput } from "@/lib/analytics/types";
+import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT } from "@/lib/visitPlacePhotoClient";
 
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
 const SHOW_HAMA_PAY_MOCK =
@@ -92,11 +93,13 @@ type Props = {
   verificationSubmitted?: boolean;
   receiptFileName?: string | null;
   receiptPreviewUrl?: string | null;
+  visitPlacePhotoPreviewUrls?: string[];
   visitFeedbackTags?: string[];
   visitFeedbackText?: string;
   receiptVerifying?: boolean;
   receiptResult?: string | null;
   onReceiptFileChange?: (file: File | null) => void;
+  onVisitPlacePhotosChange?: (files: File[]) => void;
   onToggleVisitFeedbackTag?: (tag: string) => void;
   onVisitFeedbackTextChange?: (value: string) => void;
   onToggleVerification?: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -123,11 +126,13 @@ export function RecommendationCard({
   verificationSubmitted = false,
   receiptFileName = null,
   receiptPreviewUrl = null,
+  visitPlacePhotoPreviewUrls = [],
   visitFeedbackTags = [],
   visitFeedbackText = "",
   receiptVerifying = false,
   receiptResult = null,
   onReceiptFileChange,
+  onVisitPlacePhotosChange,
   onToggleVisitFeedbackTag,
   onVisitFeedbackTextChange,
   onToggleVerification,
@@ -660,6 +665,45 @@ export function RecommendationCard({
                       resize: "vertical",
                     }}
                   />
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>
+                    방문 사진 (선택, 최대 3장 · jpg/png/webp · 장당 5MB)
+                  </div>
+                  <input
+                    type="file"
+                    accept={VISIT_PLACE_PHOTO_ACCEPT}
+                    multiple
+                    onChange={(e) => {
+                      const list = e.currentTarget.files;
+                      const picked = pickVisitPlacePhotosFromFileList(list);
+                      onVisitPlacePhotosChange?.(picked);
+                      e.currentTarget.value = "";
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    style={{ width: "100%", maxWidth: 360 }}
+                  />
+                  {visitPlacePhotoPreviewUrls.length > 0 ? (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {visitPlacePhotoPreviewUrls.map((url) => (
+                        <img
+                          key={url}
+                          src={url}
+                          alt=""
+                          style={{
+                            width: 56,
+                            height: 56,
+                            objectFit: "cover",
+                            borderRadius: 8,
+                            border: "1px solid #CBD5E1",
+                            background: "#fff",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button

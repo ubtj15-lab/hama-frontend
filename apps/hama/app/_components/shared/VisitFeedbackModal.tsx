@@ -1,12 +1,15 @@
 "use client";
 
 import React from "react";
+import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT } from "@/lib/visitPlacePhotoClient";
 
 export type VisitSatisfaction = "good" | "neutral" | "bad";
 export type VisitFeedbackPayload = {
   satisfaction: VisitSatisfaction;
   feedback_tags: string[];
   memo: string | null;
+  /** multipart 업로드용 — 있으면 클라이언트가 FormData로 전송 */
+  visitPhotos?: File[];
 };
 
 function tagOptions(satisfaction: VisitSatisfaction | null): string[] {
@@ -35,13 +38,24 @@ export default function VisitFeedbackModal({
   const [satisfaction, setSatisfaction] = React.useState<VisitSatisfaction | null>(null);
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
   const [memoText, setMemoText] = React.useState("");
+  const [visitPhotos, setVisitPhotos] = React.useState<File[]>([]);
+  const [visitPhotoPreviewUrls, setVisitPhotoPreviewUrls] = React.useState<string[]>([]);
 
   React.useEffect(() => {
     if (!open) return;
     setSatisfaction(null);
     setSelectedTags([]);
     setMemoText("");
+    setVisitPhotos([]);
   }, [open]);
+
+  React.useEffect(() => {
+    const urls = visitPhotos.map((f) => URL.createObjectURL(f));
+    setVisitPhotoPreviewUrls(urls);
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [visitPhotos]);
 
   if (!open) return null;
 
@@ -145,6 +159,41 @@ export default function VisitFeedbackModal({
           }}
         />
 
+        <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>
+            방문 사진 (선택, 최대 3장 · jpg/png/webp)
+          </div>
+          <input
+            type="file"
+            accept={VISIT_PLACE_PHOTO_ACCEPT}
+            multiple
+            onChange={(e) => {
+              const picked = pickVisitPlacePhotosFromFileList(e.currentTarget.files);
+              setVisitPhotos(picked);
+              e.currentTarget.value = "";
+            }}
+            style={{ fontSize: 13 }}
+          />
+          {visitPhotoPreviewUrls.length > 0 ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {visitPhotoPreviewUrls.map((url) => (
+                <img
+                  key={url}
+                  src={url}
+                  alt=""
+                  style={{
+                    width: 64,
+                    height: 64,
+                    objectFit: "cover",
+                    borderRadius: 8,
+                    border: "1px solid #CBD5E1",
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <button
             type="button"
@@ -170,8 +219,8 @@ export default function VisitFeedbackModal({
                 satisfaction,
                 feedback_tags: selectedTags,
                 memo: memoText.trim() || null,
+                visitPhotos: visitPhotos.length > 0 ? visitPhotos : undefined,
               };
-              console.log("[visit-feedback-modal] submit payload:", submitPayload);
               void onSubmit(submitPayload);
             }}
             style={{

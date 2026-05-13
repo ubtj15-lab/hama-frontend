@@ -53,6 +53,11 @@ export async function PATCH(
       return NextResponse.json({ ok: false, error: "verification_update_failed", detail: update.error.message }, { status: 200 });
     }
 
+    await supabase
+      .from("user_place_photos")
+      .update({ status: nextStatus })
+      .eq("receipt_verification_id", verificationId);
+
     let visitCount = 0;
     let isRewarded = false;
     let incremented = false;
@@ -102,16 +107,6 @@ export async function PATCH(
       if (upsert.error) {
         return NextResponse.json({ ok: false, error: "beta_state_upsert_failed", detail: upsert.error.message }, { status: 200 });
       }
-      console.log("admin_receipt_approved", {
-        verification_id: verificationId,
-        user_id: current.user_id,
-        selected_place_id: current.selected_place_id,
-        visit_count: visitCount,
-        incremented,
-      });
-      if (isRewarded) {
-        console.log("beta_reward_completed", { user_id: current.user_id, visit_count: visitCount });
-      }
     } else {
       // reject 시에는 카운트 변경 없음
       const upsert = await supabase.from("beta_user_state").upsert(
@@ -126,11 +121,6 @@ export async function PATCH(
       if (upsert.error) {
         return NextResponse.json({ ok: false, error: "beta_state_keep_failed", detail: upsert.error.message }, { status: 200 });
       }
-      console.log("admin_receipt_rejected", {
-        verification_id: verificationId,
-        user_id: current.user_id,
-        selected_place_id: current.selected_place_id,
-      });
     }
 
     return NextResponse.json({
@@ -143,8 +133,7 @@ export async function PATCH(
       is_rewarded: isRewarded,
       incremented,
     });
-  } catch (e) {
-    console.error("[admin beta-verification patch] fatal", e);
+  } catch {
     return NextResponse.json({ ok: false, error: "unexpected_error" }, { status: 500 });
   }
 }

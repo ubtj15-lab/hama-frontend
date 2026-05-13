@@ -12,6 +12,8 @@ const INTENT_LABEL: Record<IntentCategory, string> = {
   CAFE: "카페",
   ACTIVITY: "액티비티",
   BEAUTY: "미용",
+  FITNESS: "운동",
+  LIFE: "생활",
 };
 
 const SUB_LABEL: Record<FoodSubCategory, string> = {

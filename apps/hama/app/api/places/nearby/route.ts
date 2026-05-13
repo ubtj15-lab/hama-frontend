@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
 
-type HomeTabKey = "all" | "restaurant" | "cafe" | "salon" | "activity";
+type HomeTabKey = "all" | "restaurant" | "cafe" | "salon" | "activity" | "museum" | "fitness" | "life";
 
 type StoreUpsert = {
   id?: string; // supabase가 기본키 자동이면 없어도 됨
@@ -244,7 +244,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "invalid lat/lng" }, { status: 400 });
     }
 
-    const safeTab: HomeTabKey[] = ["all", "restaurant", "cafe", "salon", "activity"];
+    const safeTab: HomeTabKey[] = ["all", "restaurant", "cafe", "salon", "activity", "museum", "fitness", "life"];
     if (!safeTab.includes(tab)) {
       return NextResponse.json({ ok: false, error: "invalid tab" }, { status: 400 });
     }

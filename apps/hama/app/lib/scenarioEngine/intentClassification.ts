@@ -106,11 +106,46 @@ export function detectStrictCategory(rawQuery: string): IntentCategory | null {
     CAFE: countHintHits(q, CAFE_HINTS),
     ACTIVITY: countHintHits(q, ACTIVITY_HINTS),
     BEAUTY: countHintHits(q, BEAUTY_HINTS),
+    FITNESS: countHintHits(q, [
+      "헬스",
+      "gym",
+      "필라테스",
+      "요가",
+      "수영",
+      "클라이밍",
+      "운동",
+      "체육",
+      "pt",
+      "풋살",
+      "축구",
+      "배드민턴",
+      "피트니스",
+      "골프",
+      "복싱",
+      "태권도",
+      "체육관",
+      "체육센터",
+    ]),
+    LIFE: countHintHits(q, [
+      "병원",
+      "약국",
+      "세탁",
+      "편의점",
+      "마트",
+      "은행",
+      "우체국",
+      "생활",
+      "의원",
+      "치과",
+      "주차",
+      "종합병원",
+      "드럭스토어",
+    ]),
   };
   if (hasAnyFoodSubKeyword(q)) scores.FOOD += 3;
   if (BEAUTY_HAIR_CONTEXT.test(q)) scores.BEAUTY += 2;
 
-  const max = Math.max(scores.FOOD, scores.CAFE, scores.ACTIVITY, scores.BEAUTY);
+  const max = Math.max(scores.FOOD, scores.CAFE, scores.ACTIVITY, scores.BEAUTY, scores.FITNESS, scores.LIFE);
   if (max === 0) return null;
 
   const ties = (Object.entries(scores) as [IntentCategory, number][])
@@ -123,6 +158,8 @@ export function detectStrictCategory(rawQuery: string): IntentCategory | null {
   if (ties.includes("FOOD") && /점심|저녁|아침|브런치|맛집|식사|식당|레스토랑|밥|먹|점메추|저메추|뭐\s*먹|뭐먹/.test(q))
     return "FOOD";
   if (ties.includes("BEAUTY")) return "BEAUTY";
+  if (ties.includes("FITNESS")) return "FITNESS";
+  if (ties.includes("LIFE")) return "LIFE";
   if (ties.includes("ACTIVITY")) return "ACTIVITY";
 
   return ties[0] ?? null;
@@ -225,7 +262,37 @@ export function intentCategoryToHomeTab(cat: IntentCategory): HomeTabKey {
       return "activity";
     case "BEAUTY":
       return "salon";
+    case "FITNESS":
+      return "fitness";
+    case "LIFE":
+      return "life";
   }
+}
+
+function homeCardBlobLower(card: HomeCard): string {
+  const tags = Array.isArray(card.tags) ? card.tags.join(" ") : String(card.tags ?? "");
+  return `${card.name ?? ""} ${tags} ${String(card.categoryLabel ?? "")}`.toLowerCase();
+}
+
+function blobMatchesFitnessStore(card: HomeCard): boolean {
+  const b = homeCardBlobLower(card);
+  if (/(보드게임|boardgame|방탈출|키즈카페|키즈\s*카페|놀이카페)/.test(b)) return false;
+  if (
+    /(음식점|맛집|레스토랑|브런치|베이커리|한식|중식|일식|카페|coffee)/.test(b) &&
+    !/(헬스|gym|체육|수영|\bpt\b|요가|필라테스|클라이밍)/.test(b)
+  ) {
+    return false;
+  }
+  return /(헬스|피트니스|fitness|\bpt\b|퍼스널트레이닝|필라테스|요가|클라이밍|수영|체육관|체육센터|운동|복싱|태권도|골프|풋살|축구|배드민턴|gym|pilates|yoga|swimming)/i.test(
+    b
+  );
+}
+
+function blobMatchesLifeStore(card: HomeCard): boolean {
+  const b = homeCardBlobLower(card);
+  return /(동물병원|수의과|병원|종합병원|의원|치과|내과|소아과|약국|드럭스토어|세탁|크리닝|laundry|편의점|마트|슈퍼마켓|이마트|롯데마트|홈플러스|코스트코|생활편의|공공시설|주차장|주차|은행|우체국|수리|에이에스|생활서비스|편의서비스)/.test(
+    b
+  );
 }
 
 export function storeCategoryMatchesIntentCategory(
@@ -242,6 +309,13 @@ export function storeCategoryMatchesIntentCategory(
       return c === "activity" || c === "at4" || c.includes("activity");
     case "BEAUTY":
       return c === "salon" || c === "bk9" || c === "beauty" || c.includes("salon") || c.includes("beauty");
+    case "FITNESS": {
+      if (c.includes("fitness") || c.includes("gym")) return true;
+      if (c === "activity" || c === "at4" || c.includes("activity")) return blobMatchesFitnessStore(card);
+      return blobMatchesFitnessStore(card);
+    }
+    case "LIFE":
+      return blobMatchesLifeStore(card);
     default:
       return false;
   }

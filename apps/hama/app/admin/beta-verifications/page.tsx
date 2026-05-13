@@ -12,12 +12,27 @@ type PendingItem = {
   receipt_place_name: string | null;
   receipt_image_url: string | null;
   receipt_image_signed_url: string | null;
+  visit_place_photos?: {
+    id: string;
+    photo_storage_path: string;
+    visit_photo_signed_url: string | null;
+  }[];
   feedback_tags?: string[];
   feedback_text?: string | null;
   created_at: string;
   status: "pending" | "approved" | "rejected";
   matched: boolean;
   visit_count: number;
+};
+
+type FeedbackOnlyVisitPhoto = {
+  id: string;
+  user_id: string;
+  store_id: string | null;
+  store_name: string | null;
+  visit_feedback_id: string | null;
+  created_at: string;
+  visit_photo_signed_url: string | null;
 };
 
 type RewardTarget = {
@@ -31,6 +46,7 @@ type RewardTarget = {
 type Res = {
   ok: boolean;
   pending: PendingItem[];
+  feedback_only_visit_photos?: FeedbackOnlyVisitPhoto[];
   rewards?: RewardTarget[];
   reward_targets: RewardTarget[];
   error?: string;
@@ -59,6 +75,7 @@ export default function AdminBetaVerificationsPage() {
   const [msg, setMsg] = React.useState("");
   const [debugMessage, setDebugMessage] = React.useState("");
   const [pending, setPending] = React.useState<PendingItem[]>([]);
+  const [feedbackOnlyVisitPhotos, setFeedbackOnlyVisitPhotos] = React.useState<FeedbackOnlyVisitPhoto[]>([]);
   const [rewardTargets, setRewardTargets] = React.useState<RewardTarget[]>([]);
   const [lastLoadStatus, setLastLoadStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle");
   const [lastLoadInfo, setLastLoadInfo] = React.useState<{ ok: boolean; error?: string; detail?: string } | null>(null);
@@ -77,16 +94,14 @@ export default function AdminBetaVerificationsPage() {
         return;
       }
       const nextPending = Array.isArray(json.pending) ? json.pending : [];
+      const nextFeedbackPhotos = Array.isArray(json.feedback_only_visit_photos) ? json.feedback_only_visit_photos : [];
       const rewardSource = json.rewards ?? json.reward_targets ?? [];
       const nextRewards = Array.isArray(rewardSource) ? rewardSource : [];
       setPending(nextPending);
+      setFeedbackOnlyVisitPhotos(nextFeedbackPhotos);
       setRewardTargets(nextRewards);
       setLastLoadStatus("success");
       setLastLoadInfo({ ok: true });
-      console.log("[admin beta verifications loaded]", {
-        pendingCount: nextPending.length,
-        rewardCount: nextRewards.length,
-      });
     } catch {
       setLastLoadStatus("error");
       setLastLoadInfo({ ok: false, error: "fetch_failed" });
@@ -101,7 +116,6 @@ export default function AdminBetaVerificationsPage() {
   }, [load]);
 
   const act = async (verificationId: string, action: AdminAction) => {
-    console.log("[admin verification action clicked]", { verificationId, action });
     if (action !== "approve" && action !== "reject") {
       setDebugMessage(`invalid action: ${String(action)}`);
       return;
@@ -124,10 +138,6 @@ export default function AdminBetaVerificationsPage() {
         updatedVerification?: { id: string; status: string; matched: boolean };
       };
       if (!res.ok || !json.ok) {
-        console.error("[admin verification action response failed]", {
-          status: res.status,
-          data: json,
-        });
         setMsg(`${action === "approve" ? "승인" : "거절"} 실패: ${json.error ?? "unknown"}`);
         alert(`${action === "approve" ? "승인" : "거절"} 실패: ${json.error ?? "unknown"}`);
         return;
@@ -140,7 +150,6 @@ export default function AdminBetaVerificationsPage() {
       router.refresh();
     } catch {
       setMsg(`${action === "approve" ? "승인" : "거절"} 중 오류`);
-      console.error("[admin verification action request failed]", { verificationId, action });
       alert(`${action === "approve" ? "승인" : "거절"} 중 오류`);
     } finally {
       setSavingId(null);
@@ -181,7 +190,8 @@ export default function AdminBetaVerificationsPage() {
           color: "#334155",
         }}
       >
-        lastLoadStatus: <b>{lastLoadStatus}</b> · pendingCount: <b>{pending.length}</b> · rewardCount: <b>{rewardTargets.length}</b>
+        lastLoadStatus: <b>{lastLoadStatus}</b> · pendingCount: <b>{pending.length}</b> · 피드백만 사진:{" "}
+        <b>{feedbackOnlyVisitPhotos.length}</b> · rewardCount: <b>{rewardTargets.length}</b>
         <br />
         lastApi: <b>{lastLoadInfo ? (lastLoadInfo.ok ? "ok:true" : `ok:false (${lastLoadInfo.error ?? "unknown"})`) : "n/a"}</b>
         {debugMessage ? (
@@ -272,6 +282,47 @@ export default function AdminBetaVerificationsPage() {
                   </div>
                 </div>
 
+                {(p.visit_place_photos ?? []).length > 0 ? (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      borderRadius: 8,
+                      border: "1px solid #E9D5FF",
+                      background: "#FAF5FF",
+                      padding: "8px 10px",
+                      fontSize: 12,
+                      color: "#334155",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, color: "#581C87", marginBottom: 6 }}>방문 사진 (대기 · 비공개 버킷)</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {(p.visit_place_photos ?? []).map((ph) =>
+                        ph.visit_photo_signed_url ? (
+                          <a key={ph.id} href={ph.visit_photo_signed_url} target="_blank" rel="noreferrer">
+                            <img
+                              src={ph.visit_photo_signed_url}
+                              alt="방문 사진"
+                              style={{
+                                width: 96,
+                                height: 96,
+                                borderRadius: 8,
+                                objectFit: "cover",
+                                border: "1px solid #E9D5FF",
+                                background: "#fff",
+                                cursor: "zoom-in",
+                              }}
+                            />
+                          </a>
+                        ) : (
+                          <span key={ph.id} style={{ color: "#94A3B8" }}>
+                            서명 URL 생성 실패 ({ph.photo_storage_path})
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
                   <button
                     type="button"
@@ -305,6 +356,57 @@ export default function AdminBetaVerificationsPage() {
                   >
                     {savingId === p.id ? "처리중..." : "거절"}
                   </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section style={{ border: "1px solid #E2E8F0", borderRadius: 12, background: "#fff", padding: 12, marginBottom: 14 }}>
+        <div style={{ fontWeight: 900, marginBottom: 6 }}>방문 피드백만 첨부된 사진 (대기)</div>
+        <div style={{ fontSize: 13, color: "#334155", marginBottom: 8 }}>
+          영수증 인증과 별도로 저장된 사진이에요. 서명 URL로만 열람됩니다.
+        </div>
+        {feedbackOnlyVisitPhotos.length === 0 ? (
+          <div style={{ color: "#64748B", fontSize: 13 }}>대기 중인 항목이 없어요.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {feedbackOnlyVisitPhotos.map((row) => (
+              <article key={row.id} style={{ border: "1px solid #E2E8F0", borderRadius: 10, padding: 10, background: "#fff" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 12, color: "#334155" }}>
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#0F172A" }}>user_id</div>
+                    <div>{row.user_id}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#0F172A" }}>store</div>
+                    <div>{row.store_name ?? row.store_id ?? "-"}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#0F172A" }}>created_at</div>
+                    <div>{formatKstDateTime(row.created_at)}</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  {row.visit_photo_signed_url ? (
+                    <a href={row.visit_photo_signed_url} target="_blank" rel="noreferrer">
+                      <img
+                        src={row.visit_photo_signed_url}
+                        alt="visit feedback photo"
+                        style={{
+                          width: 120,
+                          height: 120,
+                          objectFit: "cover",
+                          borderRadius: 8,
+                          border: "1px solid #E2E8F0",
+                          background: "#fff",
+                        }}
+                      />
+                    </a>
+                  ) : (
+                    <div style={{ color: "#94A3B8", fontSize: 12 }}>서명 URL 없음</div>
+                  )}
                 </div>
               </article>
             ))}

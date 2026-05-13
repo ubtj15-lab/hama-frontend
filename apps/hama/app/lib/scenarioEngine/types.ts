@@ -19,8 +19,8 @@ export type UserIntentType =
 /** 결과 UI: 단일 장소 3장 vs 코스(동선) 3안 */
 export type RecommendationMode = "single" | "course";
 
-/** DB category / 역할 매핑용 (FOOD → restaurant, BEAUTY → salon) */
-export type IntentCategory = "FOOD" | "CAFE" | "ACTIVITY" | "BEAUTY";
+/** DB category / 역할 매핑용 (FOOD → restaurant, BEAUTY → salon, FITNESS/LIFE → URL 퀵 탭) */
+export type IntentCategory = "FOOD" | "CAFE" | "ACTIVITY" | "BEAUTY" | "FITNESS" | "LIFE";
 
 /** FOOD 세부 장르(태그/랭킹 보조용). intentCategory가 FOOD일 때 주로 설정 */
 export type FoodSubCategory =

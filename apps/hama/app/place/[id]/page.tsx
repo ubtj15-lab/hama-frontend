@@ -24,6 +24,7 @@ import { ReservationSummaryCard } from "@/_components/reservation/ReservationSum
 import { getReservationPreviewForStore } from "@/lib/reservation/bookingDummy";
 import { buildReserveQueryFromPlace } from "@/lib/reservation/buildReserveSearchParams";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
+import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT } from "@/lib/visitPlacePhotoClient";
 
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
 const SHOW_HAMA_PAY_MOCK =
@@ -67,6 +68,8 @@ export default function PlaceDetailPage() {
   const [betaReceiptPreviewUrl, setBetaReceiptPreviewUrl] = useState<string | null>(null);
   const [betaFeedbackTags, setBetaFeedbackTags] = useState<string[]>([]);
   const [betaFeedbackText, setBetaFeedbackText] = useState("");
+  const [betaVisitPlacePhotos, setBetaVisitPlacePhotos] = useState<File[]>([]);
+  const [betaVisitPhotoPreviewUrls, setBetaVisitPhotoPreviewUrls] = useState<string[]>([]);
   const [betaSubmitting, setBetaSubmitting] = useState(false);
   const [betaMessage, setBetaMessage] = useState<string | null>(null);
   const { isSaved, toggleSaved } = useSaved();
@@ -75,6 +78,14 @@ export default function PlaceDetailPage() {
     if (!id) return;
     setCard(readPlaceFromSession(id));
   }, [id]);
+
+  useEffect(() => {
+    const urls = betaVisitPlacePhotos.map((f) => URL.createObjectURL(f));
+    setBetaVisitPhotoPreviewUrls(urls);
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [betaVisitPlacePhotos]);
 
   useEffect(() => {
     if (!id) return;
@@ -284,10 +295,17 @@ export default function PlaceDetailPage() {
           fd.set("receipt_image", betaReceiptFile);
           fd.set("feedback_tags", JSON.stringify(betaFeedbackTags));
           fd.set("feedback_text", betaFeedbackText.trim());
+          betaVisitPlacePhotos.slice(0, 3).forEach((f, i) => {
+            fd.set(`visit_photo_${i}`, f);
+          });
           return fd;
         })(),
       });
-      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        message?: string;
+        visit_photos?: { uploaded: number; failed: number };
+      };
       if (!res.ok || !json.ok) {
         setBetaMessage("인증 제출에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;
@@ -295,9 +313,14 @@ export default function PlaceDetailPage() {
       logEvent("receipt_verification_submitted", { source: "place_detail", selected_place_id: card.id });
       setBetaSubmitted(true);
       setBetaVerifyOpen(false);
-      setBetaMessage(json.message ?? "인증이 제출됐어요. 관리자가 확인 후 참여 횟수에 반영돼요.");
-    } catch (e) {
-      console.error("[place detail beta verify] failed", e);
+      setBetaVisitPlacePhotos([]);
+      let msg = json.message ?? "인증이 제출됐어요. 관리자가 확인 후 참여 횟수에 반영돼요.";
+      const vp = json.visit_photos;
+      if (vp && vp.failed > 0) {
+        msg += " 사진 업로드에 실패한 항목이 있지만 인증은 정상 제출됐어요.";
+      }
+      setBetaMessage(msg);
+    } catch {
       setBetaMessage("인증 제출 중 오류가 발생했어요.");
     } finally {
       setBetaSubmitting(false);
@@ -305,27 +328,48 @@ export default function PlaceDetailPage() {
   };
 
   const submitVisitFeedback = async (payload: VisitFeedbackPayload) => {
-    if (feedbackSaving) return;
+    if (feedbackSaving || !card) return;
     setFeedbackSaving(true);
     try {
-      const reqBody = {
-        place_id: card.id,
-        place_name: card.name,
-        source: "hama_pay",
-        satisfaction: payload.satisfaction,
-        feedback_tags: Array.isArray(payload.feedback_tags) ? payload.feedback_tags : [],
-        memo: typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : null,
+      const visitPhotos = payload.visitPhotos?.length ? payload.visitPhotos.slice(0, 3) : [];
+      let res: Response;
+      if (visitPhotos.length > 0) {
+        const fd = new FormData();
+        fd.set("place_id", card.id);
+        fd.set("place_name", card.name);
+        fd.set("source", "hama_pay");
+        fd.set("satisfaction", payload.satisfaction);
+        fd.set(
+          "memo",
+          typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : ""
+        );
+        fd.set("feedback_tags", JSON.stringify(Array.isArray(payload.feedback_tags) ? payload.feedback_tags : []));
+        visitPhotos.forEach((f, i) => {
+          fd.set(`visit_photo_${i}`, f);
+        });
+        res = await fetch("/api/visit-feedback", { method: "POST", body: fd });
+      } else {
+        const reqBody = {
+          place_id: card.id,
+          place_name: card.name,
+          source: "hama_pay",
+          satisfaction: payload.satisfaction,
+          feedback_tags: Array.isArray(payload.feedback_tags) ? payload.feedback_tags : [],
+          memo: typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : null,
+        };
+        res = await fetch("/api/visit-feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(reqBody),
+        });
+      }
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        detail?: string;
+        visit_photos?: { uploaded: number; failed: number };
       };
-      console.log("[visit-feedback] request(place_detail):", reqBody);
-      const res = await fetch("/api/visit-feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reqBody),
-      });
-      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: string };
-      console.log("[visit-feedback] response(place_detail):", { status: res.status, ...json });
       if (!res.ok || !json.ok) {
-        console.error("[visit-feedback] failed(place_detail):", { status: res.status, ...json, reqBody });
         alert(`피드백 저장에 실패했어요.\n${json.error ?? "unknown_error"}${json.detail ? `: ${json.detail}` : ""}`);
         return;
       }
@@ -336,10 +380,16 @@ export default function PlaceDetailPage() {
         satisfaction: payload.satisfaction,
         tags: payload.feedback_tags,
       });
-      console.log("visit_feedback_saved");
+      const vp = json.visit_photos;
+      if (vp && vp.failed > 0) {
+        alert(
+          vp.uploaded > 0
+            ? "일부 사진 업로드에 실패했지만 피드백은 저장됐어요."
+            : "사진 업로드에 실패했지만 피드백은 제출할 수 있어요. 피드백은 저장됐어요."
+        );
+      }
       setFeedbackOpen(false);
-    } catch (e) {
-      console.error("[place detail visit feedback] failed", e);
+    } catch {
       alert("피드백 저장 중 오류가 발생했어요.");
     } finally {
       setFeedbackSaving(false);
@@ -762,6 +812,41 @@ export default function PlaceDetailPage() {
                     resize: "vertical",
                   }}
                 />
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ ...typo.caption, color: colors.textPrimary, fontWeight: 900 }}>
+                  방문 사진 (선택, 최대 3장 · jpg/png/webp)
+                </div>
+                <input
+                  type="file"
+                  accept={VISIT_PLACE_PHOTO_ACCEPT}
+                  multiple
+                  onChange={(e) => {
+                    const picked = pickVisitPlacePhotosFromFileList(e.currentTarget.files);
+                    setBetaVisitPlacePhotos(picked);
+                    e.currentTarget.value = "";
+                  }}
+                  style={{ width: "100%", maxWidth: 360 }}
+                />
+                {betaVisitPhotoPreviewUrls.length > 0 ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {betaVisitPhotoPreviewUrls.map((url) => (
+                      <img
+                        key={url}
+                        src={url}
+                        alt=""
+                        style={{
+                          width: 64,
+                          height: 64,
+                          objectFit: "cover",
+                          borderRadius: 10,
+                          border: "1px solid #CBD5E1",
+                          background: "#fff",
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button

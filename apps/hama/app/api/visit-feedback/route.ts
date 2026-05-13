@@ -1,90 +1,132 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
+import { resolveUserIdFromRequest } from "@/lib/server/userResolver";
+import {
+  parseVisitPhotoFilesFromForm,
+  persistVisitPlacePhotos,
+} from "@/lib/server/visitPlacePhotoUpload";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
-const supabaseKey =
-  (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as
-    | string
-    | undefined;
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-function getSupabase() {
-  if (!supabaseUrl || !supabaseKey) return null;
-  return createClient(supabaseUrl, supabaseKey);
-}
+type Satisfaction = "good" | "neutral" | "bad";
 
-function normalizeClientUserId(v: string | null | undefined): string | null {
-  if (!v) return null;
-  const t = String(v).trim();
-  if (!t || t.startsWith("session_")) return null;
-  if (t.startsWith("user_")) return t.slice(5);
-  return t;
-}
-
-async function resolveUserId(
-  req: NextRequest,
-  supabase: ReturnType<typeof getSupabase>,
-  incoming: string | null | undefined
-): Promise<string | null> {
-  const normalized = normalizeClientUserId(incoming);
-  if (normalized) return normalized;
-  const cookieUserId = req.cookies.get("hama_user_id")?.value?.trim();
-  if (cookieUserId) return cookieUserId;
-  const kakaoId = req.cookies.get("hama_kakao_id")?.value?.trim();
-  if (!kakaoId || !supabase) return null;
+function parseFeedbackTagsFromString(raw: string | null): string[] {
+  if (!raw || raw.trim().length === 0) return [];
   try {
-    const { data, error } = await supabase.from("users").select("id").eq("kakao_id", kakaoId).single();
-    if (error) return null;
-    return data?.id ?? null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((x) => String(x ?? "").trim())
+      .filter(Boolean);
   } catch {
-    return null;
+    return [];
   }
 }
-
-type Body = {
-  user_id?: string | null;
-  place_id?: string;
-  place_name?: string | null;
-  source?: string | null;
-  satisfaction?: "good" | "neutral" | "bad";
-  feedback_tags?: string[] | null;
-  memo?: string | null;
-};
 
 export async function POST(req: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) return NextResponse.json({ ok: false, error: "supabase_unavailable" }, { status: 500 });
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json({ ok: false, error: "supabase_unavailable" }, { status: 500 });
+  }
 
-  let body: Body = {};
+  const contentType = req.headers.get("content-type") ?? "";
+
+  if (contentType.includes("multipart/form-data")) {
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return NextResponse.json({ ok: false, error: "invalid_form_data" }, { status: 400 });
+    }
+    const userId = await resolveUserIdFromRequest(req, String(form.get("user_id") ?? "").trim() || null);
+    if (!userId) {
+      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    }
+    const placeId = String(form.get("place_id") ?? "").trim();
+    const satisfaction = String(form.get("satisfaction") ?? "").trim() as Satisfaction;
+    const placeNameRaw = form.get("place_name");
+    const placeName =
+      typeof placeNameRaw === "string" && placeNameRaw.trim().length > 0 ? placeNameRaw.trim() : null;
+    const sourceRaw = form.get("source");
+    const source =
+      typeof sourceRaw === "string" && sourceRaw.trim().length > 0 ? sourceRaw.trim() : "hama_pay";
+    const memoRaw = form.get("memo");
+    const memo =
+      typeof memoRaw === "string" && memoRaw.trim().length > 0 ? memoRaw.trim().slice(0, 2000) : null;
+    const tagsRaw = form.get("feedback_tags");
+    const tags =
+      typeof tagsRaw === "string" ? parseFeedbackTagsFromString(tagsRaw) : [];
+    const visitFiles = parseVisitPhotoFilesFromForm(form);
+
+    if (!placeId) {
+      return NextResponse.json({ ok: false, error: "place_id_required" }, { status: 400 });
+    }
+    if (!satisfaction || !["good", "neutral", "bad"].includes(satisfaction)) {
+      return NextResponse.json({ ok: false, error: "invalid_satisfaction" }, { status: 400 });
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("visit_feedback")
+        .insert({
+          user_id: userId,
+          place_id: placeId,
+          place_name: placeName,
+          source,
+          satisfaction,
+          feedback_tags: tags,
+          memo,
+        })
+        .select("id")
+        .single();
+      if (error) {
+        return NextResponse.json({ ok: false, error: "insert_failed", detail: error.message }, { status: 200 });
+      }
+      const vfId = data?.id ? String(data.id) : null;
+      let visitPhotos = { uploaded: 0, failed: 0 };
+      if (vfId && visitFiles.length > 0) {
+        visitPhotos = await persistVisitPlacePhotos(supabase, visitFiles, {
+          userId,
+          storeId: placeId,
+          storeName: placeName,
+          receiptVerificationId: null,
+          visitFeedbackId: vfId,
+          source: "visit_feedback",
+        });
+      }
+      return NextResponse.json({ ok: true, visit_photos: visitPhotos });
+    } catch {
+      return NextResponse.json({ ok: false, error: "unexpected_error" }, { status: 500 });
+    }
+  }
+
+  let body: {
+    user_id?: string | null;
+    place_id?: string;
+    place_name?: string | null;
+    source?: string | null;
+    satisfaction?: Satisfaction;
+    feedback_tags?: string[] | null;
+    memo?: string | null;
+  } = {};
   try {
-    body = (await req.json()) as Body;
+    body = (await req.json()) as typeof body;
   } catch {
-    console.error("[visit-feedback] invalid_json");
     return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
-  console.log("[visit-feedback] body:", body);
 
-  const userId = await resolveUserId(req, supabase, body.user_id ?? null);
+  const userId = await resolveUserIdFromRequest(req, body.user_id ?? null);
   if (!userId) {
-    console.error("[visit-feedback] unauthorized: no user_id resolved", {
-      incoming_user_id: body.user_id ?? null,
-      has_cookie_user_id: Boolean(req.cookies.get("hama_user_id")?.value),
-      has_cookie_kakao_id: Boolean(req.cookies.get("hama_kakao_id")?.value),
-    });
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
   const placeId = String(body.place_id ?? "").trim();
   if (!placeId) {
-    console.error("[visit-feedback] place_id_required", { body });
     return NextResponse.json({ ok: false, error: "place_id_required" }, { status: 400 });
   }
 
   if (!body.satisfaction || !["good", "neutral", "bad"].includes(body.satisfaction)) {
-    console.error("[visit-feedback] invalid_satisfaction", {
-      satisfaction: body.satisfaction ?? null,
-      place_id: placeId,
-      user_id: userId,
-    });
     return NextResponse.json({ ok: false, error: "invalid_satisfaction" }, { status: 400 });
   }
 
@@ -104,31 +146,12 @@ export async function POST(req: NextRequest) {
       feedback_tags: normalizedTags,
       memo: normalizedMemo,
     };
-    console.log("[visit-feedback] normalized row:", row);
-    const { data, error } = await supabase.from("visit_feedback").insert(row).select("id").single();
+    const { error } = await supabase.from("visit_feedback").insert(row).select("id").single();
     if (error) {
-      console.error("[visit-feedback] insert failed:", {
-        message: error.message,
-        code: (error as any).code,
-        details: (error as any).details,
-        hint: (error as any).hint,
-        row,
-      });
       return NextResponse.json({ ok: false, error: "insert_failed", detail: error.message }, { status: 200 });
     }
-    console.log("visit_feedback_saved", {
-      visit_feedback_id: data?.id ?? null,
-      user_id: userId,
-      place_id: placeId,
-      place_name: body.place_name ?? null,
-      satisfaction: body.satisfaction,
-      feedback_tags: normalizedTags,
-      memo: normalizedMemo,
-      source: body.source ?? "hama_pay",
-    });
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error("[visit-feedback] fatal:", e, { body, user_id: userId, place_id: placeId });
+    return NextResponse.json({ ok: true, visit_photos: { uploaded: 0, failed: 0 } });
+  } catch {
     return NextResponse.json({ ok: false, error: "unexpected_error" }, { status: 500 });
   }
 }

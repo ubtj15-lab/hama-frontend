@@ -1,6 +1,14 @@
 // app/lib/storeTypes.ts
 
-export type HomeTabKey = "all" | "restaurant" | "cafe" | "salon" | "activity" | "museum";
+export type HomeTabKey =
+  | "all"
+  | "restaurant"
+  | "cafe"
+  | "salon"
+  | "activity"
+  | "museum"
+  | "fitness"
+  | "life";
 
 // DB category 값이 restaurant/cafe/salon/activity 라는 전제
 export type Category = Exclude<HomeTabKey, "all">;

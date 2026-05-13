@@ -22,6 +22,8 @@ export type NamedFoodPresetRepoPhase = "strict" | "broad" | "tonkatsu_relax";
 /** ---------- Options ---------- */
 export type FetchHomeOptions = {
   count?: number;
+  /** 살롱 탭에서 `bk9`/`beauty` 코드까지 함께 조회(뷰티 후보 풀 확장) */
+  useBeautySalonCategoryCodes?: boolean;
 };
 
 export type FetchNearbyOptions = {
@@ -257,7 +259,7 @@ const STORES_HOME_CARD_SELECT_FALLBACK = `
     `;
 const STORES_EMERGENCY_SIMPLE_SELECT = "id,name,category,area,address,lat,lng,tags,mood";
 
-const VALID_STORE_CATEGORIES = new Set(["restaurant", "cafe", "salon", "activity", "library"]);
+const VALID_STORE_CATEGORIES = new Set(["restaurant", "cafe", "salon", "activity", "library", "bk9", "beauty"]);
 
 function fetchTabAuditSamples(cards: HomeCard[]) {
   return cards.slice(0, 10).map((card) => ({
@@ -274,7 +276,10 @@ export async function fetchHomeCardsByTab(
   options: FetchHomeOptions = {}
 ): Promise<HomeCard[]> {
   const count = options.count ?? (tab === "all" ? 12 : 6);
-  const categoriesRaw = categoriesForHomeTab(tab);
+  let categoriesRaw = categoriesForHomeTab(tab);
+  if (options.useBeautySalonCategoryCodes && tab === "salon") {
+    categoriesRaw = ["salon", "bk9", "beauty"];
+  }
   const categories = categoriesRaw?.filter((c) => VALID_STORE_CATEGORIES.has(String(c ?? "").toLowerCase())) ?? null;
 
   let q = supabase.from("stores").select(STORES_HOME_CARD_SELECT).limit(count);
@@ -754,5 +759,7 @@ function homeTabCount(tab: HomeTabKey): number {
   if (tab === "cafe") return 4;
   if (tab === "salon") return 2;
   if (tab === "activity") return 2;
+  if (tab === "fitness") return 2;
+  if (tab === "life") return 12;
   return 12; // all
 }

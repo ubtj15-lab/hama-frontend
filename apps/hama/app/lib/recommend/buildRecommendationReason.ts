@@ -3,6 +3,7 @@
  * 사용자 요청 시나리오(requestedScenario)가 있으면 카드 recommendationVoice보다 우선한다.
  */
 import type { HomeCard } from "@/lib/storeTypes";
+import type { IntentCategory } from "@/lib/scenarioEngine/types";
 import type { RecommendScenarioKey } from "@/lib/recommend/scenarioWeights";
 import { businessStateFromCard, type BusinessState } from "@/lib/recommend/scoreParts";
 import {
@@ -114,7 +115,7 @@ export type BuildRecommendationReasonOptions = {
   /** 온보딩 companions — 상단 라벨(복수 가능) */
   profileCompanions?: string[];
   /** strict intent category 보조 */
-  intentCategory?: "FOOD" | "CAFE" | "ACTIVITY" | "BEAUTY";
+  intentCategory?: IntentCategory;
   beautySubCategory?: "hair" | "nail" | "eyelash" | "waxing";
 };
 

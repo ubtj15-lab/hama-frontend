@@ -16,6 +16,7 @@ function toInt(v: string | null, fallback: number) {
 function normalizeTab(tab: string) {
   const t = (tab || "all").toLowerCase().trim();
   if (t === "beauty") return "salon";
+  if (t === "fitness" || t === "life") return t;
   return t;
 }
 

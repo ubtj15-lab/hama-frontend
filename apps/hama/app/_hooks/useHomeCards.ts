@@ -22,6 +22,15 @@ import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassificati
 import { RECOMMEND_DECK_SIZE, RECOMMEND_POOL_SINGLE_TAB } from "@/lib/recommend/recommendConstants";
 import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 import { explicitCategoryToFetchTab } from "@/lib/homeResultsNavParams";
+import {
+  normalizeResultsExplicitCategory,
+  strictExplicitGateCategoryFromUrl,
+  passesBeautyIndustryWhitelist,
+  explainBeautyIndustryWhitelist,
+  evaluateCultureStrictWhitelist,
+} from "@/lib/hamaResultCategoryCanonical";
+import { USE_RECOMMEND_V2 } from "@/lib/recommend-v2/recommendV2Flags";
+import { getRecommendationsV2 } from "@/lib/recommend-v2/recommendV2";
 import { normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
 import { isAlcoholNightlifeVenue } from "@/lib/recommend/childFriendlyScore";
 import {
@@ -178,6 +187,15 @@ function shouldBlockBeautySalonForListedScenarioQueries(q: string | null | undef
     t.includes("실내") ||
     t.includes("비오는날")
   );
+}
+
+/** `/results` 뷰티 명시 — 업종 화이트리스트가 있으므로 시나리오 기반 살롱/안전 필터를 중복 적용하지 않음 */
+function isExplicitBeautyResultsNavigation(
+  explicitCategory: string | null | undefined,
+  explicitIntent: string | null | undefined
+): boolean {
+  if (normalizeResultsExplicitCategory(explicitCategory) === "beauty") return true;
+  return (explicitIntent ?? "").trim().toLowerCase().startsWith("beauty");
 }
 
 function isCultureLifestyleQuery(q: string | null | undefined): boolean {
@@ -733,16 +751,12 @@ function isCafeLike(card: HomeCard): boolean {
 }
 
 function isBeautyLike(card: HomeCard): boolean {
-  const blob = normalizeBlob(card);
-  const raw = String((card as any)?.category ?? "").toLowerCase();
-  if (categoryOf(card) === "salon") return true;
-  if (raw === "bk9" || raw === "beauty" || raw.includes("salon") || raw.includes("beauty")) return true;
-  return includesAny(blob, ["미용실", "헤어", "네일", "뷰티", "관리", "왁싱", "살롱", "헤어샵"]);
+  return passesBeautyIndustryWhitelist(card);
 }
 
 /** beauty_hair — 살롱·BK9 등은 텍스트 없어도 허용, 네일·속눈썹 전문은 헤어 풀이 넉넉할 때 후순위 */
 function isBeautyHairPreferredCandidate(card: HomeCard): boolean {
-  if (!isBeautyLike(card)) return false;
+  if (!passesBeautySalonDbCategoryOnly(card)) return false;
   const raw = String((card as any)?.category ?? "").toLowerCase();
   if (raw === "salon" || raw === "bk9" || raw === "beauty" || raw.includes("salon") || raw.includes("bk9")) return true;
   const b = normalizeBlob(card);
@@ -893,6 +907,16 @@ function isFitnessLike(card: HomeCard): boolean {
     "yoga",
     "크로스핏",
     "trx",
+    "축구",
+    "풋살",
+    "futsal",
+    "배드민턴",
+    "테니스",
+    "스쿼시",
+    "배구",
+    "농구",
+    "족구",
+    "야구",
   ]);
 }
 
@@ -1074,9 +1098,10 @@ function cultureRescueSoftBlock(card: HomeCard): boolean {
   return false;
 }
 
-/** 문화 탐색 덱 — isCultureLike 또는 문화 키워드 blob; 식당/카페/뷰티/운동은 제외(이름에 문화 앵커 있으면 activity 등 허용) */
+/** 문화 탐색 덱 — strict 문화 화이트리스트 후 isCultureLike·문화 blob */
 function cultureBrowseFilter(cards: HomeCard[]): HomeCard[] {
   return cards.filter((c) => {
+    if (!evaluateCultureStrictWhitelist(c).ok) return false;
     if (cultureBrowseHardBlocked(c)) return false;
     return isCultureLike(c) || cultureBrowseBlobHint(c);
   });
@@ -1922,12 +1947,201 @@ function demoteAlcoholFromTopForGeneralMealBrowse(
   return { next: out, removedUnsafeNames };
 }
 
-function normalizeStrictExplicitGateCategory(
-  c: string | null | undefined
-): "life" | "culture" | "fitness" | null {
-  const x = (c ?? "").trim().toLowerCase();
-  if (x === "life" || x === "culture" || x === "fitness") return x;
-  return null;
+/** 명시 URL 카테고리·뷰티 서브 intent → strict gate용 카테고리 키(문화 포함) */
+function getStrictExplicitGateCategory(
+  explicitCategory: string | null | undefined,
+  explicitIntent: string | null | undefined
+): "life" | "culture" | "fitness" | "beauty" | null {
+  return strictExplicitGateCategoryFromUrl(explicitCategory, explicitIntent);
+}
+
+/** 오픈베타: 운동·생활·뷰티만 타 카테고리 페치·긴급·교차 fallback 금지 */
+function openBetaAccuracyFirstExplicit(
+  explicitCategory: string | null | undefined,
+  explicitIntent: string | null | undefined
+): boolean {
+  const i = (explicitIntent ?? "").trim().toLowerCase();
+  if (i.startsWith("beauty_")) return true;
+  const canon = normalizeResultsExplicitCategory(explicitCategory);
+  return canon === "fitness" || canon === "life" || canon === "beauty";
+}
+
+/** 뷰티: 업종 화이트리스트만 허용(일반 "관리/케어/스타일" 오탐 없음) — `passesBeautyIndustryWhitelist` */
+function passesBeautySalonDbCategoryOnly(card: HomeCard): boolean {
+  return passesBeautyIndustryWhitelist(card);
+}
+
+type StrictExplicitEval = { ok: true } | { ok: false; reason: string };
+
+/** 뷰티 서브 탭: 기본·헤어는 살롱 풀 허용, 네일/속눈썹/제모는 키워드 없으면 제외 */
+function evalBeautySubIntent(card: HomeCard, intentLower: string): StrictExplicitEval {
+  const intent = intentLower.trim();
+  const b = normalizeBlob(card);
+  const raw = String((card as any)?.category ?? "").trim().toLowerCase();
+  const salonFamily = raw === "salon" || raw === "bk9" || raw === "beauty" || categoryOf(card) === "salon";
+
+  if (!intent || intent === "beauty" || !intent.startsWith("beauty_")) {
+    return { ok: true };
+  }
+  if (intent === "beauty_hair") {
+    const nailOnly =
+      /(네일|nail\s*art|nailart)/.test(b) &&
+      !/(헤어|hair|미용실|barber|바버|이발|헤어샵|살롱|펌|컷|커트|두피)/.test(b);
+    if (nailOnly) return { ok: false, reason: "hair_tab_nail_only" };
+    const lashOnly =
+      /(속눈썹|래쉬|lash|eyelash|extension)/.test(b) &&
+      !/(헤어|hair|미용실|헤어샵|살롱|barber|바버|펌|컷)/.test(b);
+    if (lashOnly) return { ok: false, reason: "hair_tab_lash_only" };
+    const waxOnly =
+      /(왁싱|waxing|제모)/.test(b) && !/(헤어|hair|미용실|헤어샵|살롱|barber|바버|펌|컷)/.test(b);
+    if (waxOnly) return { ok: false, reason: "hair_tab_wax_only" };
+    const hairBlob = /(미용실|헤어|헤어샵|hair|barber|바버|이발|살롱|펌|염색|컷|커트|두피|클리닉)/.test(b);
+    if (hairBlob || salonFamily) return { ok: true };
+    return { ok: false, reason: "hair_tab_no_hair_signal" };
+  }
+  if (intent === "beauty_nail") {
+    return /(네일|nail|nailart|젤네일|gel\s*nail|manicure|페디)/.test(b)
+      ? { ok: true }
+      : { ok: false, reason: "nail_keywords_missing" };
+  }
+  if (intent === "beauty_lash") {
+    return /(속눈썹|래쉬|lash|eyelash|extension|속눈)/.test(b)
+      ? { ok: true }
+      : { ok: false, reason: "lash_keywords_missing" };
+  }
+  if (intent === "beauty_waxing") {
+    return /(왁싱|wax|제모|브라질리언|\bvio\b)/.test(b)
+      ? { ok: true }
+      : { ok: false, reason: "wax_keywords_missing" };
+  }
+  return { ok: true };
+}
+
+/** 뷰티 요청: strict gate 이전 후보 풀 — `passesBeautySalonDbCategoryOnly`로 하드 제한 */
+function applyBeautyCandidateCategoryHardFilterIfNeeded(
+  cards: HomeCard[],
+  ctx: {
+    exCatLower: string;
+    strictGateRun: ReturnType<typeof getStrictExplicitGateCategory>;
+    explicitIntentLower: string;
+  }
+): HomeCard[] {
+  const active =
+    ctx.exCatLower === "beauty" ||
+    ctx.strictGateRun === "beauty" ||
+    ctx.explicitIntentLower.startsWith("beauty_");
+  if (!active) return cards;
+  const before = cards.length;
+  const removed: {
+    name: string;
+    category: string | null;
+    categoryLabel: string | null;
+    rejectedReason: string;
+  }[] = [];
+  const out = cards.filter((c) => {
+    const ex = explainBeautyIndustryWhitelist(c);
+    if (!ex.ok && removed.length < 30) {
+      removed.push({
+        name: String(c.name ?? ""),
+        category: c.category ?? null,
+        categoryLabel: c.categoryLabel ?? null,
+        rejectedReason: ex.reason,
+      });
+    }
+    return ex.ok;
+  });
+  const acceptedExamples = out.slice(0, 10).map((c) => {
+    const ex = explainBeautyIndustryWhitelist(c);
+    return {
+      name: String(c.name ?? ""),
+      category: c.category ?? null,
+      categoryLabel: c.categoryLabel ?? null,
+      acceptedReason: ex.reason,
+    };
+  });
+  console.log("[HAMA_CANDIDATE_FILTER_DEBUG]", {
+    requestedCategory: "beauty",
+    beforeCandidateCount: before,
+    afterCategoryRestrictionCount: out.length,
+    removedExamples: removed.slice(0, 10),
+    acceptedExamples,
+    acceptedReason: acceptedExamples[0]?.acceptedReason ?? null,
+    rejectedReason: removed[0]?.rejectedReason ?? null,
+  });
+  return out;
+}
+
+/** 운동 오픈베타: 허용 키워드 화이트리스트 + 보드게임/키즈카페/공원·식음료 오탐 제외 (`passesExplicitCategoryDeck` 이중 적용 없음) */
+function passesFitnessWhitelistVenue(card: HomeCard): boolean {
+  const b = normalizeBlob(card);
+  const name = String((card as any)?.name ?? "").trim();
+  if (includesAny(b, ["보드게임", "boardgame", "방탈출", "escape", "키즈카페", "키즈 카페", "놀이카페"])) {
+    return false;
+  }
+  const foodCafeStrong =
+    /(음식점|맛집|레스토랑|브런치|베이커리|한식|중식|일식|카페|coffee|디저트|맥주|포차)/.test(b);
+  const fitnessSignal =
+    /(헬스|피트니스|fitness|\bpt\b|퍼스널트레이닝|필라테스|요가|클라이밍|수영|체육관|체육센터|운동|복싱|태권도|골프|풋살|축구|배드민턴|gym|pilates|yoga|swimming)/i.test(
+      b
+    );
+  if (foodCafeStrong && !fitnessSignal) return false;
+  const parkish =
+    (/공원|산책|놀이터/.test(b) || /^공원$/i.test(name)) &&
+    !/(헬스|gym|수영|클라이밍|\bpt\b|요가|필라테스|체육관|체육센터|풋살|축구|배드민턴|피트니스|fitness)/i.test(b);
+  if (parkish) return false;
+  if (fitnessSignal) return true;
+  const raw = String((card as any)?.category ?? "").toLowerCase();
+  if (raw.includes("fitness") || raw.includes("gym")) return true;
+  return false;
+}
+
+function evalStrictExplicitCategoryCard(
+  card: HomeCard,
+  cat: "life" | "culture" | "fitness" | "beauty",
+  intentLower: string
+): StrictExplicitEval {
+  if (cat === "beauty") {
+    if (!passesBeautySalonDbCategoryOnly(card)) return { ok: false, reason: "beauty_not_salon_category" };
+    if (isFoodLike(card) || isCafeLike(card)) return { ok: false, reason: "beauty_food_or_cafe" };
+    const co = categoryOf(card);
+    if (co === "restaurant" || co === "activity" || co === "cafe") {
+      return { ok: false, reason: `beauty_categoryOf_${co}` };
+    }
+    return evalBeautySubIntent(card, intentLower);
+  }
+  if (cat === "fitness") {
+    if (isFoodLike(card) || isCafeLike(card) || isBeautyLike(card) || isLifeLike(card) || isCultureLike(card)) {
+      return { ok: false, reason: "fitness_blocked_vertical" };
+    }
+    if (isDessertLike(card)) return { ok: false, reason: "fitness_dessert" };
+    if (!passesFitnessWhitelistVenue(card)) return { ok: false, reason: "fitness_whitelist_or_venue_block" };
+    return { ok: true };
+  }
+  if (!passesExplicitCategoryDeck(card, cat)) return { ok: false, reason: `${cat}_explicit_deck_gate` };
+  return { ok: true };
+}
+
+function passesStrictExplicitCategoryCard(
+  card: HomeCard,
+  cat: "life" | "culture" | "fitness" | "beauty",
+  intentLower: string
+): boolean {
+  return evalStrictExplicitCategoryCard(card, cat, intentLower).ok;
+}
+
+function collectStrictRejectExamples(
+  cards: HomeCard[],
+  cat: "life" | "culture" | "fitness" | "beauty",
+  intentLower: string,
+  limit: number
+): { name: string; reason: string }[] {
+  const out: { name: string; reason: string }[] = [];
+  for (const card of cards) {
+    if (out.length >= limit) break;
+    const ev = evalStrictExplicitCategoryCard(card, cat, intentLower);
+    if (!ev.ok) out.push({ name: String(card.name ?? "(이름없음)"), reason: ev.reason });
+  }
+  return out;
 }
 
 function isRecentExposureTargetQuery(
@@ -2441,17 +2655,7 @@ function passesExplicitCategoryDeck(card: HomeCard, cat: "life" | "culture" | "f
     return isLifeLike(card);
   }
   if (cat === "culture") {
-    if (
-      isFoodLike(card) ||
-      isCafeLike(card) ||
-      isDessertLike(card) ||
-      isBeautyLike(card) ||
-      isFitnessLike(card) ||
-      isLifeLike(card)
-    ) {
-      return false;
-    }
-    return isCultureLike(card) || hasCultureAnchor(card);
+    return evaluateCultureStrictWhitelist(card).ok;
   }
   if (cat === "fitness") {
     if (isFoodLike(card) || isCafeLike(card) || isDessertLike(card) || isBeautyLike(card) || isLifeLike(card) || isCultureLike(card)) {
@@ -2482,6 +2686,10 @@ function applySafetyAndDiversity(
     /** 명시 음식 프리셋 등 — 덱 최대 5까지 */
     deckCap?: number;
     namedFoodPresetId?: string | null;
+    /** 운동·생활·뷰티: 타 카테고리 보충·final constraint fallback 금지 */
+    openBetaAccuracyFirst?: boolean;
+    /** 명시 뷰티 URL — strict no-cross·STRICT_EMPTY 로그·교차 폴백 완화 */
+    explicitBeautyScenarioBypass?: boolean;
   }
 ): SafetyDiversityOutcome {
   const cap = Math.min(5, Math.max(3, diagnostics?.deckCap ?? RECOMMEND_DECK_SIZE));
@@ -2502,15 +2710,30 @@ function applySafetyAndDiversity(
   const source = [...picked, ...allRanked].filter(
     (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
   );
-  const gateCat = normalizeStrictExplicitGateCategory(explicitCategory);
+  const strictGate = getStrictExplicitGateCategory(explicitCategory, diagnostics?.explicitIntent);
+  const strictAccuracyLanes =
+    strictGate === "fitness" || strictGate === "life" || strictGate === "beauty";
+  const strictNoCrossFallback = Boolean(
+    diagnostics?.openBetaAccuracyFirst &&
+      strictAccuracyLanes &&
+      !diagnostics?.explicitBeautyScenarioBypass
+  );
+  const intentLowerGate = String(diagnostics?.explicitIntent ?? "").trim().toLowerCase();
   const explicitCategoryGateBefore = source.length;
   const explicitCategoryRemovedNames: string[] = [];
-  const pipelineSource = gateCat
-    ? source.filter((item) => {
-        const ok = passesExplicitCategoryDeck(item.card, gateCat);
-        if (!ok) explicitCategoryRemovedNames.push(item.card.name);
-        return ok;
-      })
+  const rejectedExamples: { name: string; reason: string }[] = [];
+  const pipelineSource = strictGate
+    ? source.reduce<ScoredRecommendItem[]>((acc, item) => {
+        const ev = evalStrictExplicitCategoryCard(item.card, strictGate, intentLowerGate);
+        if (ev.ok) acc.push(item);
+        else {
+          explicitCategoryRemovedNames.push(item.card.name);
+          if (rejectedExamples.length < 5) {
+            rejectedExamples.push({ name: String(item.card.name ?? "(이름없음)"), reason: ev.reason });
+          }
+        }
+        return acc;
+      }, [])
     : source;
 
   const topBefore = pipelineSource.slice(0, cap).map((x) => x.card.name);
@@ -2625,7 +2848,12 @@ function applySafetyAndDiversity(
       if (hasGeneralCafe) continue;
     }
     const cat = String(item.card.category ?? "");
-    if (selected.length === 2 && usedCategories.size === 1 && usedCategories.has(cat)) {
+    if (
+      !strictNoCrossFallback &&
+      selected.length === 2 &&
+      usedCategories.size === 1 &&
+      usedCategories.has(cat)
+    ) {
       // 3번째 카드는 가능하면 다른 카테고리를 우선
       const altExists = candidates.some((x) => !usedCategories.has(String(x.card.category ?? "")));
       if (altExists) continue;
@@ -2662,6 +2890,7 @@ function applySafetyAndDiversity(
   }
 
   if (
+    !strictNoCrossFallback &&
     intentWantsActivity &&
     hasActivityCandidate &&
     !selected.some((x) => categoryOf(x.card) === "activity")
@@ -2673,7 +2902,7 @@ function applySafetyAndDiversity(
     }
   }
 
-  if (selected.length < cap) {
+  if (selected.length < cap && !strictNoCrossFallback) {
     fallbackUsed = true;
     const topCategory = selected[0] ? categoryOf(selected[0].card) : null;
     const safePool = pipelineSource.filter((x) => {
@@ -2737,7 +2966,7 @@ function applySafetyAndDiversity(
     });
     selected = finalDeckResult.selected;
     // final constraint가 0개를 만들면 constraint를 무시하고 fallback pool을 사용한다.
-    if (selected.length === 0) {
+    if (selected.length === 0 && !strictNoCrossFallback) {
       const fallbackPool = mergeUniqueById(candidates, pipelineSource).filter((item) => {
         if (removedByGateIds.has(item.card.id)) return false;
         if (unsafeIds.has(item.card.id)) return false;
@@ -2750,7 +2979,7 @@ function applySafetyAndDiversity(
           : beforeConstraintSelected.slice(0, cap);
       finalDeckResult.selected = selected;
     }
-  } else {
+  } else if (!strictNoCrossFallback) {
     const fallbackPool = mergeUniqueById(candidates, pipelineSource).filter((item) => {
       if (removedByGateIds.has(item.card.id)) return false;
       if (unsafeIds.has(item.card.id)) return false;
@@ -2940,10 +3169,10 @@ function applySafetyAndDiversity(
       });
     }
   }
-  if (gateCat) {
+  if (strictGate) {
     console.log("[recommend explicit category gate]", {
       query,
-      explicitCategory: gateCat,
+      explicitCategory: strictGate,
       beforeCount: explicitCategoryGateBefore,
       afterCount: pipelineSource.length,
       removedNames: explicitCategoryRemovedNames,
@@ -2951,10 +3180,21 @@ function applySafetyAndDiversity(
     });
     console.log("[recommend explicit category fallback]", {
       query,
-      explicitCategory: gateCat,
+      explicitCategory: strictGate,
       fallbackUsed,
       blockedFoodFallback: !selected.some((x) => isFoodLike(x.card) || isCafeLike(x.card)),
       selectedNames: selected.map((x) => x.card.name),
+    });
+  }
+  if (strictNoCrossFallback && selected.length === 0 && !diagnostics?.explicitBeautyScenarioBypass) {
+    hamaDevLog("[HAMA_CATEGORY_STRICT_EMPTY]", {
+      category: explicitCategory ?? null,
+      subCategory: diagnostics?.explicitIntent ?? null,
+      candidateCount: explicitCategoryGateBefore,
+      strictPassCount: pipelineSource.length,
+      rejectedExamples,
+      fallbackBlockedReason:
+        pipelineSource.length === 0 ? "explicit_strict_gate_zero" : "post_rank_pipeline_empty_deck",
     });
   }
   return { deck: selected, recentExposureReplacements: recentExposure.replacedNames.length };
@@ -3196,6 +3436,8 @@ type Result = {
    * `presetId|searchAttempt|recentExposureSig`
    */
   deckRotationKey: string;
+  /** 마지막으로 반영된 추천 엔진 — 렌더 직전 로그와 교차 검증용 */
+  recommendEngine: "v1" | "v2" | null;
   /** 코스 생성 등 — 랭킹 전 후보 풀 */
   candidatePool: HomeCard[];
   /** intentType course_generation 시 — 탭과 무관한 역할별 혼합 풀(식사/카페/액티비티) */
@@ -3257,6 +3499,7 @@ export function useHomeCards(
 ): Result {
   const [cards, setCards] = useState<HomeCard[]>([]);
   const [deckRotationKey, setDeckRotationKey] = useState("");
+  const [recommendEngine, setRecommendEngine] = useState<"v1" | "v2" | null>(null);
   const [pool, setPool] = useState<HomeCard[]>([]);
   const [coursePool, setCoursePool] = useState<HomeCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -3283,6 +3526,11 @@ export function useHomeCards(
     ? JSON.stringify(options.profileOverride)
     : "";
   const explicitKey = `${options.explicitIntent ?? ""}|${options.explicitCategory ?? ""}|${options.explicitMode ?? ""}|${options.namedFoodPreset?.id ?? ""}|${options.recommendedDeckCap ?? ""}`;
+  const canonicalExplicitCategoryDep =
+    normalizeResultsExplicitCategory(options.explicitCategory) ?? "";
+  const strictGateCategoryDep =
+    strictExplicitGateCategoryFromUrl(options.explicitCategory, options.explicitIntent) ?? "";
+  const scenarioIntentCategoryDep = options.scenarioObject?.intentCategory ?? "";
 
   const effectiveUserProfile = useMemo(() => {
     return mergeUserProfile(userProfile ?? null, options.profileOverride ?? null);
@@ -3314,6 +3562,31 @@ export function useHomeCards(
     hamaDevLog("[HAMA_FOOD_PRESET_HOOK_CHECK]", hookCheckPayload);
 
     if (skipFetch) {
+      setRecommendEngine(null);
+      console.log("[HAMA_USE_HOME_CARDS_DEBUG]", {
+        willFetch: false,
+        reasonIfNotFetch: "skipFetch",
+        fetchTab: tab,
+        apiUrl: null,
+        supabaseCategories: null,
+        searchQuery: options.searchQuery ?? null,
+        explicitCategory: options.explicitCategory ?? null,
+        explicitIntent: options.explicitIntent ?? null,
+        canonicalExplicitCategory: normalizeResultsExplicitCategory(options.explicitCategory),
+        strictGateCategory: strictExplicitGateCategoryFromUrl(
+          options.explicitCategory,
+          options.explicitIntent
+        ),
+        contextTab: options.scenarioObject?.intentCategory ?? null,
+        namedFoodPreset: options.namedFoodPreset?.id ?? null,
+        openBetaAccuracyFirstExplicit: openBetaAccuracyFirstExplicit(
+          options.explicitCategory,
+          options.explicitIntent
+        ),
+        skipFetch: true,
+        deferRanking,
+        homeCardsTab: tab,
+      });
       setCards([]);
       setDeckRotationKey("");
       setPool([]);
@@ -3323,7 +3596,42 @@ export function useHomeCards(
       return;
     }
 
-    if (deferRanking) {
+    const wantCourseForV2DeferBypass =
+      (options.scenarioObject?.recommendationMode ??
+        (options.scenarioObject?.intentType === "course_generation" ? "course" : "single")) === "course" ||
+      options.explicitMode === "course";
+    const recommendV2EligibleWhileDeferred =
+      USE_RECOMMEND_V2 &&
+      isExplicitBeautyResultsNavigation(options.explicitCategory, options.explicitIntent) &&
+      !skipFetch &&
+      !options.namedFoodPreset &&
+      !wantCourseForV2DeferBypass;
+
+    if (deferRanking && !recommendV2EligibleWhileDeferred) {
+      console.log("[HAMA_USE_HOME_CARDS_DEBUG]", {
+        willFetch: false,
+        reasonIfNotFetch: "deferRanking",
+        fetchTab: tab,
+        apiUrl: null,
+        supabaseCategories: null,
+        searchQuery: options.searchQuery ?? null,
+        explicitCategory: options.explicitCategory ?? null,
+        explicitIntent: options.explicitIntent ?? null,
+        canonicalExplicitCategory: normalizeResultsExplicitCategory(options.explicitCategory),
+        strictGateCategory: strictExplicitGateCategoryFromUrl(
+          options.explicitCategory,
+          options.explicitIntent
+        ),
+        contextTab: options.scenarioObject?.intentCategory ?? null,
+        namedFoodPreset: options.namedFoodPreset?.id ?? null,
+        openBetaAccuracyFirstExplicit: openBetaAccuracyFirstExplicit(
+          options.explicitCategory,
+          options.explicitIntent
+        ),
+        skipFetch,
+        deferRanking: true,
+        homeCardsTab: tab,
+      });
       setIsLoading(true);
       return;
     }
@@ -3353,6 +3661,66 @@ export function useHomeCards(
         const wantCourse =
           (scenarioObj?.recommendationMode ?? (scenarioObj?.intentType === "course_generation" ? "course" : "single")) ===
             "course" || options.explicitMode === "course";
+
+        const usingRecommendV2Beauty =
+          USE_RECOMMEND_V2 &&
+          isExplicitBeautyResultsNavigation(options.explicitCategory, options.explicitIntent) &&
+          !skipFetch &&
+          !options.namedFoodPreset &&
+          !wantCourse;
+
+        if (usingRecommendV2Beauty) {
+          const searchAttemptV2 = bumpAndReadSearchAttemptForQuery(options.searchQuery ?? "");
+          console.log("[HAMA_RECOMMEND_ENGINE_SELECTED]", {
+            engine: "v2",
+            reason: "beauty_url_v2_hard_no_v1_recovery",
+            category: options.explicitCategory ?? null,
+            intent: options.explicitIntent ?? null,
+          });
+          try {
+            const v2 = await getRecommendationsV2({
+              query: options.searchQuery ?? "",
+              category: options.explicitCategory ?? null,
+              intent: options.explicitIntent ?? null,
+              userLat: options.userLat ?? null,
+              userLng: options.userLng ?? null,
+              poolCap: 300,
+            });
+            if (!cancelled) {
+              setRecommendEngine("v2");
+              setPool(v2.pool);
+              setCoursePool([]);
+              setDeckRotationKey(`v2|${searchAttemptV2}|${getOrCreateHamaSearchSeed()}`);
+              setCards(v2.deck);
+              setDeckIncomplete(v2.deck.length > 0 && v2.deck.length < RECOMMEND_DECK_SIZE);
+              console.log("[HAMA_V2_HARD_MODE]", {
+                beautyUrl: true,
+                blockV1Recovery: true,
+                finalDeckCount: v2.deck.length,
+                usedFallback: false,
+              });
+            }
+          } catch (e) {
+            console.error("[useHomeCards] recommend v2", e);
+            if (!cancelled) {
+              setRecommendEngine("v2");
+              setPool([]);
+              setCoursePool([]);
+              setDeckRotationKey(`v2|${searchAttemptV2}|error`);
+              setCards([]);
+              setDeckIncomplete(true);
+              console.log("[HAMA_V2_HARD_MODE]", {
+                beautyUrl: true,
+                blockV1Recovery: true,
+                finalDeckCount: 0,
+                usedFallback: false,
+                error: true,
+              });
+            }
+          }
+          return;
+        }
+
         const strict =
           scenarioObj?.intentType === "search_strict" && scenarioObj.intentCategory != null;
 
@@ -3360,7 +3728,7 @@ export function useHomeCards(
           strict && scenarioObj?.intentCategory ? intentCategoryToHomeTab(scenarioObj.intentCategory) : null;
         const explicitTab =
           !strictTab && options.explicitCategory ? explicitCategoryToFetchTab(options.explicitCategory) : null;
-        const gateCatRun = normalizeStrictExplicitGateCategory(options.explicitCategory);
+        const strictGateRun = getStrictExplicitGateCategory(options.explicitCategory, options.explicitIntent);
 
         console.log("[recommend explicit hints]", {
           query: options.searchQuery ?? null,
@@ -3369,8 +3737,28 @@ export function useHomeCards(
           explicitMode: options.explicitMode ?? null,
         });
 
-        const exCatLower = (options.explicitCategory ?? "").trim().toLowerCase();
+        const exCatLower =
+          normalizeResultsExplicitCategory(options.explicitCategory) ??
+          (options.explicitCategory ?? "").trim().toLowerCase();
         const explicitIntentLower = (options.explicitIntent ?? "").trim().toLowerCase();
+        const explicitBeautyScenarioBypass = isExplicitBeautyResultsNavigation(
+          options.explicitCategory,
+          options.explicitIntent
+        );
+        if (explicitBeautyScenarioBypass) {
+          console.log("[HAMA_BEAUTY_SCENARIO_BYPASS]", {
+            explicitCategory: options.explicitCategory ?? null,
+            explicitIntent: options.explicitIntent ?? null,
+            reason: "explicit_beauty_skip_scenario_safety_and_salon_block",
+          });
+        }
+        const scenarioBeautyBlockActive =
+          !explicitBeautyScenarioBypass &&
+          shouldBlockBeautySalonForListedScenarioQueries(options.searchQuery ?? null);
+        const openBetaAccuracyFirst = openBetaAccuracyFirstExplicit(
+          options.explicitCategory,
+          options.explicitIntent
+        );
         const isExplicitOrStrictCafe =
           exCatLower === "cafe" || strictTab === "cafe" || explicitTab === "cafe";
 
@@ -3392,14 +3780,29 @@ export function useHomeCards(
             presetId: namedFoodPresetForAttemptLog.id,
           });
         }
-        const scenarioBeautyBlockActive =
-          shouldBlockBeautySalonForListedScenarioQueries(options.searchQuery ?? null);
         const exposureLogState = {
           excludedByRecentCount: 0,
           candidateCountBefore: 0,
           candidateCountAfter: 0,
           recentExposureReplacements: 0,
         };
+
+        const recommendEngineReason = (() => {
+          if (!USE_RECOMMEND_V2) return "recommend_v2_master_flag_off";
+          if (!explicitBeautyScenarioBypass) return "not_beauty_url_scope";
+          if (skipFetch) return "skipFetch";
+          if (deferRanking) return "deferRanking";
+          if (options.namedFoodPreset) return "named_food_preset";
+          if (wantCourse) return "course_mode";
+          return "legacy_pipeline";
+        })();
+
+        console.log("[HAMA_RECOMMEND_ENGINE_SELECTED]", {
+          engine: "v1",
+          reason: recommendEngineReason,
+          category: options.explicitCategory ?? null,
+          intent: options.explicitIntent ?? null,
+        });
 
         const courseFetched = wantCourse ? await fetchHomeCourseCandidatePool() : [];
 
@@ -3517,7 +3920,7 @@ export function useHomeCards(
           fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, apiHits);
         }
 
-        if (preset && fetchedRaw.length < 3) {
+        if (preset && fetchedRaw.length < 3 && !openBetaAccuracyFirst) {
           fetchedRaw = await applySituationPresetEnrichment(fetchedRaw);
         }
 
@@ -3529,10 +3932,12 @@ export function useHomeCards(
           fetchedRaw = await fetchRecommendPoolFallback(apiTab, RECOMMEND_POOL_SINGLE_TAB);
           countsByTab[`fallbackApi:${apiTab}`] = fetchedRaw.length;
         }
-        if (!fetchedRaw.length && (strictTab || explicitTab) && !gateCatRun && exCatLower !== "culture") {
-          fetchTabsTried.push("fallback:all");
-          fetchedRaw = await fetchRecommendPoolFallback("all", 48);
-          countsByTab["fallbackApi:all"] = fetchedRaw.length;
+        if (!fetchedRaw.length && (strictTab || explicitTab) && !strictGateRun && exCatLower !== "culture") {
+          if (exCatLower !== "beauty" && !explicitIntentLower.startsWith("beauty_")) {
+            fetchTabsTried.push("fallback:all");
+            fetchedRaw = await fetchRecommendPoolFallback("all", 48);
+            countsByTab["fallbackApi:all"] = fetchedRaw.length;
+          }
         }
 
         if (isExplicitOrStrictCafe) {
@@ -3549,23 +3954,36 @@ export function useHomeCards(
         }
 
         if (exCatLower === "beauty") {
-          const beautyish = (c: HomeCard) => isBeautyLike(c);
-          if (!fetchedRaw.length || fetchedRaw.filter(beautyish).length < 6) {
-            fetchTabsTried.push("beauty_enrich:salon");
-            const salonRows = await fetchHomeCardsByTab("salon", { count: RECOMMEND_POOL_SINGLE_TAB });
-            countsByTab.salon_beauty_enrich = salonRows.length;
-            fetchTabsTried.push("beauty_enrich:all");
-            const allRows = await fetchHomeRecommendCandidates("all");
-            allFetchLastCount = allRows.length;
-            countsByTab.all_beauty_enrich_total = allRows.length;
-            countsByTab.all_beauty_enrich_beautyish = allRows.filter(beautyish).length;
-            fetchedRaw = mergeHomeCardsUniqueById(
-              fetchedRaw,
-              mergeHomeCardsUniqueById(salonRows, allRows.filter(beautyish))
+          const beautyPoolPass = (c: HomeCard) => passesBeautySalonDbCategoryOnly(c);
+          if (openBetaAccuracyFirst) {
+            if (!fetchedRaw.length || fetchedRaw.filter(beautyPoolPass).length < 6) {
+              fetchTabsTried.push("beauty_strict:salon_only");
+              const salonRows = await fetchHomeCardsByTab("salon", {
+                count: RECOMMEND_POOL_SINGLE_TAB,
+                useBeautySalonCategoryCodes: true,
+              });
+              countsByTab.salon_beauty_strict = salonRows.length;
+              fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, salonRows);
+            }
+            fetchedRaw = fetchedRaw.filter((c) =>
+              passesStrictExplicitCategoryCard(c, "beauty", explicitIntentLower)
             );
-            recoveredFromTab = recoveredFromTab ?? "beauty_salon_all";
+            if (explicitIntentLower === "beauty_hair") {
+              const pref = fetchedRaw.filter((c) => isBeautyHairPreferredCandidate(c));
+              const rest = fetchedRaw.filter((c) => !pref.some((p) => p.id === c.id));
+              fetchedRaw = [...pref, ...rest];
+            }
+          } else if (!fetchedRaw.length || fetchedRaw.filter(beautyPoolPass).length < 6) {
+            fetchTabsTried.push("beauty_enrich:salon_only");
+            const salonRows = await fetchHomeCardsByTab("salon", {
+              count: RECOMMEND_POOL_SINGLE_TAB,
+              useBeautySalonCategoryCodes: true,
+            });
+            countsByTab.salon_beauty_enrich = salonRows.length;
+            fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, salonRows);
+            recoveredFromTab = recoveredFromTab ?? "beauty_salon_only";
           }
-          if (explicitIntentLower === "beauty_hair") {
+          if (!openBetaAccuracyFirst && explicitIntentLower === "beauty_hair") {
             const pref = fetchedRaw.filter((c) => isBeautyHairPreferredCandidate(c));
             const rest = fetchedRaw.filter((c) => !pref.some((p) => p.id === c.id));
             fetchedRaw = [...pref, ...rest];
@@ -3606,13 +4024,53 @@ export function useHomeCards(
         if (scenarioBeautyBlockActive) {
           fetchedRaw = fetchedRaw.filter((c) => !homeCardMatchesScenarioBeautySalonBlock(c));
         }
-        fetchedRaw = filterHomeCardsForScenarioSafety(
-          fetchedRaw,
-          options.searchQuery ?? null,
-          options.scenarioObject ?? null
-        );
+        if (!explicitBeautyScenarioBypass) {
+          fetchedRaw = filterHomeCardsForScenarioSafety(
+            fetchedRaw,
+            options.searchQuery ?? null,
+            options.scenarioObject ?? null
+          );
+        }
+
+        fetchedRaw = applyBeautyCandidateCategoryHardFilterIfNeeded(fetchedRaw, {
+          exCatLower,
+          strictGateRun,
+          explicitIntentLower,
+        });
 
         const fetchedPreGate = fetchedRaw;
+        const fetchTabResolved: HomeTabKey = strictTab ?? explicitTab ?? tab;
+        const supabaseCategories = categoriesForHomeTab(fetchTabResolved);
+        const fetchPathJoined = fetchTabsTried.join(" → ");
+        const apiPrimaryDesc =
+          strictTab || explicitTab ?
+            `fetchHomeCardsByTab(tab=${fetchTabResolved})`
+          : tab === "all" ?
+            "fetchHomeRecommendCandidates(all)"
+          : `fetchHomeRecommendCandidates(${tab})`;
+        const apiUrlResolved =
+          fetchPathJoined.includes("fallback") ?
+            `/api/home-recommend?tab=${encodeURIComponent(String(fetchTabResolved))}`
+          : apiPrimaryDesc;
+        console.log("[HAMA_USE_HOME_CARDS_DEBUG]", {
+          willFetch: true,
+          reasonIfNotFetch: null,
+          fetchTab: fetchTabResolved,
+          fetchPath: fetchPathJoined || apiPrimaryDesc,
+          apiUrl: apiUrlResolved,
+          supabaseCategories,
+          searchQuery: options.searchQuery ?? null,
+          explicitCategory: options.explicitCategory ?? null,
+          explicitIntent: options.explicitIntent ?? null,
+          canonicalExplicitCategory: normalizeResultsExplicitCategory(options.explicitCategory),
+          strictGateCategory: strictGateRun,
+          contextTab: options.scenarioObject?.intentCategory ?? null,
+          namedFoodPreset: options.namedFoodPreset?.id ?? null,
+          openBetaAccuracyFirstExplicit: openBetaAccuracyFirst,
+          skipFetch,
+          deferRanking,
+          homeCardsTab: tab,
+        });
         hamaDevLog("[HAMA_RESULTS] rawFetchedCards.length:", fetchedPreGate.length);
         if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
           const restaurantLikeRows = fetchedPreGate.filter((c) => isRestaurantLike(c));
@@ -3660,19 +4118,74 @@ export function useHomeCards(
             : isExplicitOrStrictCafe
               ? fetchedPreGate.filter((c) => isCafeLike(c) || isDessertLike(c)).length
               : exCatLower === "beauty"
-                ? fetchedPreGate.filter((c) => isBeautyLike(c)).length
+                ? fetchedPreGate.filter((c) => passesBeautySalonDbCategoryOnly(c)).length
                 : fetchedPreGate.length;
 
         let sampleRejectedNames: string[] = [];
         let fetched = fetchedPreGate;
         let afterExplicitGateCount = fetched.length;
-        if (gateCatRun) {
-          sampleRejectedNames = fetched
-            .filter((c) => !passesExplicitCategoryDeck(c, gateCatRun))
+        if (strictGateRun) {
+          sampleRejectedNames = fetchedPreGate
+            .filter((c) => !passesStrictExplicitCategoryCard(c, strictGateRun, explicitIntentLower))
             .slice(0, 12)
             .map((c) => c.name);
-          fetched = fetched.filter((c) => passesExplicitCategoryDeck(c, gateCatRun));
-          afterExplicitGateCount = fetched.length;
+          const strictFiltered = fetchedPreGate.filter((c) =>
+            passesStrictExplicitCategoryCard(c, strictGateRun, explicitIntentLower)
+          );
+          afterExplicitGateCount = strictFiltered.length;
+          let strictBypassedForDiag = false;
+          if (fetchedPreGate.length > 0 && strictFiltered.length === 0) {
+            strictBypassedForDiag = true;
+            fetched =
+              strictGateRun === "beauty" ?
+                fetchedPreGate.filter((c) => passesBeautySalonDbCategoryOnly(c))
+              : fetchedPreGate;
+            afterExplicitGateCount = fetched.length;
+            console.warn("[HAMA_STRICT_GATE_BYPASSED_FOR_DIAG]", {
+              category: strictGateRun,
+              explicitCategory: options.explicitCategory ?? null,
+              explicitIntent: options.explicitIntent ?? null,
+              beforeCount: fetchedPreGate.length,
+              sampleRejectedNames,
+            });
+          } else {
+            fetched = strictFiltered;
+          }
+          console.log("[HAMA_STRICT_GATE_DEBUG]", {
+            category: strictGateRun,
+            explicitCategory: options.explicitCategory ?? null,
+            explicitIntent: options.explicitIntent ?? null,
+            canonicalExplicitCategory: normalizeResultsExplicitCategory(options.explicitCategory),
+            contextTab: options.scenarioObject?.intentCategory ?? null,
+            beforeCount: fetchedPreGate.length,
+            afterCount: strictFiltered.length,
+            strictBypassedForDiag,
+            effectiveAfterCount: fetched.length,
+            firstBefore: fetchedPreGate.slice(0, 5).map((c) => ({
+              name: c.name,
+              category: c.category,
+              categoryLabel: (c as { categoryLabel?: string | null }).categoryLabel ?? null,
+            })),
+            firstAfter: fetched.slice(0, 5).map((c) => ({
+              name: c.name,
+              category: c.category,
+              categoryLabel: (c as { categoryLabel?: string | null }).categoryLabel ?? null,
+            })),
+          });
+        }
+        if (openBetaAccuracyFirst && fetched.length === 0 && !explicitBeautyScenarioBypass) {
+          const rejectedExamples =
+            strictGateRun ?
+              collectStrictRejectExamples(fetchedPreGate, strictGateRun, explicitIntentLower, 5)
+            : [];
+          hamaDevLog("[HAMA_CATEGORY_STRICT_EMPTY]", {
+            category: options.explicitCategory ?? null,
+            subCategory: options.explicitIntent ?? null,
+            candidateCount: fetchedPreGate.length,
+            strictPassCount: afterExplicitGateCount,
+            rejectedExamples,
+            fallbackBlockedReason: "fetch_post_strict_gate_zero",
+          });
         }
         hamaDevLog("[HAMA_RESULTS] enrichedCards.length:", fetched.length);
 
@@ -3803,11 +4316,13 @@ export function useHomeCards(
           scenarioBeautyBlockActive ?
             fallbackCandidates.filter((item) => !homeCardMatchesScenarioBeautySalonBlock(item.card))
           : fallbackCandidates;
-        cultureGuardCandidates = filterScoredRecommendItemsForScenarioSafety(
-          cultureGuardCandidates,
-          options.searchQuery ?? null,
-          options.scenarioObject ?? null
-        );
+        if (!explicitBeautyScenarioBypass) {
+          cultureGuardCandidates = filterScoredRecommendItemsForScenarioSafety(
+            cultureGuardCandidates,
+            options.searchQuery ?? null,
+            options.scenarioObject ?? null
+          );
+        }
         exposureLogState.candidateCountBefore = fallbackCandidates.length;
         exposureLogState.candidateCountAfter = fallbackCandidates.length;
         hamaDevLog("[HAMA_RESULTS] fallbackCandidates.length:", fallbackCandidates.length);
@@ -3822,6 +4337,8 @@ export function useHomeCards(
             fetchedCount: fetched.length,
             rankedPoolCount: rankedPrimary.length,
             searchAttempt,
+            openBetaAccuracyFirst,
+            ...(explicitBeautyScenarioBypass ? { explicitBeautyScenarioBypass: true as const } : {}),
             ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
             ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
           }
@@ -3829,7 +4346,7 @@ export function useHomeCards(
         let picked = safetyDiversityOutcome.deck;
         exposureLogState.recentExposureReplacements = safetyDiversityOutcome.recentExposureReplacements;
 
-        if (preset && picked.length < 3 && !options.namedFoodPreset) {
+        if (preset && picked.length < 3 && !options.namedFoodPreset && !openBetaAccuracyFirst) {
           const enrichedFetched = await applySituationPresetEnrichment(fetched);
           if (enrichedFetched.length > fetched.length) {
             fetched = enrichedFetched;
@@ -3850,6 +4367,8 @@ export function useHomeCards(
                 fetchedCount: fetched.length,
                 rankedPoolCount: rankedPrimary.length,
                 searchAttempt,
+                openBetaAccuracyFirst,
+                ...(explicitBeautyScenarioBypass ? { explicitBeautyScenarioBypass: true as const } : {}),
                 ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
                 ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
               }
@@ -3906,11 +4425,13 @@ export function useHomeCards(
             cultureGuardCandidates = scenarioBeautyBlockActive ?
                 fallbackCandidates.filter((item) => !homeCardMatchesScenarioBeautySalonBlock(item.card))
               : fallbackCandidates;
-            cultureGuardCandidates = filterScoredRecommendItemsForScenarioSafety(
-              cultureGuardCandidates,
-              options.searchQuery ?? null,
-              options.scenarioObject ?? null
-            );
+            if (!explicitBeautyScenarioBypass) {
+              cultureGuardCandidates = filterScoredRecommendItemsForScenarioSafety(
+                cultureGuardCandidates,
+                options.searchQuery ?? null,
+                options.scenarioObject ?? null
+              );
+            }
             safetyDiversityOutcome = applySafetyAndDiversity(
               rankedPrimary,
               rankedFbFood,
@@ -3922,6 +4443,8 @@ export function useHomeCards(
                 fetchedCount: fetched.length,
                 rankedPoolCount: rankedPrimary.length,
                 searchAttempt,
+                openBetaAccuracyFirst,
+                ...(explicitBeautyScenarioBypass ? { explicitBeautyScenarioBypass: true as const } : {}),
                 ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
                 ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
               }
@@ -3976,19 +4499,26 @@ export function useHomeCards(
             if (note) browseSourceNote = note;
           } else if (exCatLower === "beauty") {
             browseMode = "beauty";
-            let raw = fetchedPreGate.filter((c) => isBeautyLike(c));
-            let note = "";
-            if (raw.length === 0) {
-              const [salonRows, allRows] = await Promise.all([
-                fetchHomeCardsByTab("salon", { count: RECOMMEND_POOL_SINGLE_TAB }),
-                fetchHomeRecommendCandidates("all"),
-              ]);
-              allFetchLastCount = allRows.length;
-              raw = mergeHomeCardsUniqueById(salonRows, allRows).filter((c) => isBeautyLike(c));
-              note = "enriched:salon+all";
+            if (openBetaAccuracyFirst) {
+              const raw = fetchedPreGate.filter((c) =>
+                passesStrictExplicitCategoryCard(c, "beauty", explicitIntentLower)
+              );
+              browseSorted = sortCardsForBeautyBrowse(raw, explicitIntentLower === "beauty_hair");
+              browseSourceNote = "beauty_strict_pregate_only";
+            } else {
+              let raw = fetchedPreGate.filter((c) => passesBeautySalonDbCategoryOnly(c));
+              let note = "";
+              if (raw.length === 0) {
+                const salonRows = await fetchHomeCardsByTab("salon", {
+                  count: RECOMMEND_POOL_SINGLE_TAB,
+                  useBeautySalonCategoryCodes: true,
+                });
+                raw = salonRows.filter((c) => passesBeautySalonDbCategoryOnly(c));
+                note = "enriched:salon_only";
+              }
+              browseSorted = sortCardsForBeautyBrowse(raw, explicitIntentLower === "beauty_hair");
+              if (note) browseSourceNote = note;
             }
-            browseSorted = sortCardsForBeautyBrowse(raw, explicitIntentLower === "beauty_hair");
-            if (note) browseSourceNote = note;
           } else if (exCatLower === "culture") {
             browseMode = "culture";
             const hintPack = await fetchCultureStoresByNameHintsChained({
@@ -4430,6 +4960,17 @@ export function useHomeCards(
 
         const runEmergencyFallbackDeck = async (tag: string): Promise<ScoredRecommendItem[]> => {
           if (cancelled) return [];
+          if (openBetaAccuracyFirst && !explicitBeautyScenarioBypass) {
+            hamaDevLog("[HAMA_CATEGORY_STRICT_EMPTY]", {
+              category: options.explicitCategory ?? null,
+              subCategory: options.explicitIntent ?? null,
+              candidateCount: 0,
+              strictPassCount: 0,
+              rejectedExamples: [],
+              fallbackBlockedReason: `emergency_deck_blocked:${tag}`,
+            });
+            return [];
+          }
           hamaDevLog("[HAMA_EMERGENCY_TRIGGERED]", { query: options.searchQuery ?? null, tag });
           const emergencyCategories = getResultsEmergencyFallbackCategories(options.searchQuery ?? null);
           const fallbackCategories = emergencyCategories ?? ["cafe", "activity", "library", "restaurant"];
@@ -4487,12 +5028,14 @@ export function useHomeCards(
             emergencyPicked,
             `${queryShuffleSeed}|emergency_bucket_tie`
           );
-          const scenarioSafetyEmerg = stripScenarioSafetyFromScoredRecommendDeck(
-            emergencyPicked,
-            options.searchQuery ?? null,
-            options.scenarioObject ?? null
-          );
-          emergencyPicked = scenarioSafetyEmerg.deck;
+          if (!explicitBeautyScenarioBypass) {
+            const scenarioSafetyEmerg = stripScenarioSafetyFromScoredRecommendDeck(
+              emergencyPicked,
+              options.searchQuery ?? null,
+              options.scenarioObject ?? null
+            );
+            emergencyPicked = scenarioSafetyEmerg.deck;
+          }
           hamaDevLog("[HAMA_EMERGENCY_RESULT]", { tag, count: emergencyPicked.length });
           return emergencyPicked;
         };
@@ -4539,7 +5082,8 @@ export function useHomeCards(
           scenarioBeautyBlockActive &&
           picked.length < RECOMMEND_DECK_SIZE &&
           !cancelled &&
-          !namedFoodPresetOpt
+          !namedFoodPresetOpt &&
+          !openBetaAccuracyFirst
         ) {
           const refill = await runEmergencyFallbackDeck("beauty_strip_refill");
           if (refill.length > 0) {
@@ -4574,20 +5118,28 @@ export function useHomeCards(
             options.scenarioObject ?? null
           ) || scenarioQueryNeedsRainyIndoorOutdoorStrip(options.searchQuery ?? null);
 
-        const scenarioSafetyFinal = stripScenarioSafetyFromScoredRecommendDeck(
-          picked,
-          options.searchQuery ?? null,
-          options.scenarioObject ?? null
-        );
-        picked = scenarioSafetyFinal.deck;
-
-        if (scenarioSafetyActive) {
-          hamaDevLog("[HAMA_SCENARIO_SAFETY_FILTER]", {
-            query: options.searchQuery ?? null,
-            removedCount: scenarioSafetyFinal.removedNames.length,
-            removedNames: scenarioSafetyFinal.removedNames,
-            finalCount: picked.length,
+        if (explicitBeautyScenarioBypass) {
+          console.log("[HAMA_BEAUTY_SCENARIO_BYPASS]", {
+            explicitCategory: options.explicitCategory ?? null,
+            explicitIntent: options.explicitIntent ?? null,
+            reason: "final_scenario_safety_strip_skipped",
           });
+        } else {
+          const scenarioSafetyFinal = stripScenarioSafetyFromScoredRecommendDeck(
+            picked,
+            options.searchQuery ?? null,
+            options.scenarioObject ?? null
+          );
+          picked = scenarioSafetyFinal.deck;
+
+          if (scenarioSafetyActive) {
+            hamaDevLog("[HAMA_SCENARIO_SAFETY_FILTER]", {
+              query: options.searchQuery ?? null,
+              removedCount: scenarioSafetyFinal.removedNames.length,
+              removedNames: scenarioSafetyFinal.removedNames,
+              finalCount: picked.length,
+            });
+          }
         }
 
         hamaDevLog(
@@ -4648,27 +5200,35 @@ export function useHomeCards(
           picked = [];
         }
 
-        const soloChineseStripPool = [...cultureGuardCandidates, ...rankedPrimary, ...rankedFallbackBoosted].filter(
-          (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
-        );
-        const effectiveScenarioForSoloStrip = rankScenario ?? options.scenarioObject ?? null;
-        const soloStripQuery = options.searchQuery ?? null;
-        hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_ENTER]", {
-          tag: "callsite_before_apply",
-          query: soloStripQuery,
-          pickedLength: picked.length,
-          isSoloSituationQuery: isSoloSituationIntentQuery(soloStripQuery, effectiveScenarioForSoloStrip),
-          scenarioRawQuery: effectiveScenarioForSoloStrip?.rawQuery ?? null,
-          effectiveScenarioScenario: effectiveScenarioForSoloStrip?.scenario ?? null,
-          optionsSearchQuery: options.searchQuery ?? null,
-          soloChineseStripPoolLength: soloChineseStripPool.length,
-        });
-        picked = applySoloIntentChineseTop3HardStrip(
-          picked,
-          soloChineseStripPool,
-          soloStripQuery,
-          effectiveScenarioForSoloStrip
-        );
+        if (!explicitBeautyScenarioBypass) {
+          const soloChineseStripPool = [...cultureGuardCandidates, ...rankedPrimary, ...rankedFallbackBoosted].filter(
+            (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
+          );
+          const effectiveScenarioForSoloStrip = rankScenario ?? options.scenarioObject ?? null;
+          const soloStripQuery = options.searchQuery ?? null;
+          hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_ENTER]", {
+            tag: "callsite_before_apply",
+            query: soloStripQuery,
+            pickedLength: picked.length,
+            isSoloSituationQuery: isSoloSituationIntentQuery(soloStripQuery, effectiveScenarioForSoloStrip),
+            scenarioRawQuery: effectiveScenarioForSoloStrip?.rawQuery ?? null,
+            effectiveScenarioScenario: effectiveScenarioForSoloStrip?.scenario ?? null,
+            optionsSearchQuery: options.searchQuery ?? null,
+            soloChineseStripPoolLength: soloChineseStripPool.length,
+          });
+          picked = applySoloIntentChineseTop3HardStrip(
+            picked,
+            soloChineseStripPool,
+            soloStripQuery,
+            effectiveScenarioForSoloStrip
+          );
+        } else {
+          console.log("[HAMA_BEAUTY_SCENARIO_BYPASS]", {
+            explicitCategory: options.explicitCategory ?? null,
+            explicitIntent: options.explicitIntent ?? null,
+            reason: "solo_top3_hard_strip_skipped",
+          });
+        }
 
         const pickedWithReasons = applyReasonTemplateEngine({
           items: picked,
@@ -4719,6 +5279,7 @@ export function useHomeCards(
               ? `${options.namedFoodPreset.id}|${searchAttempt}|${getRecentExposureRotationSignature()}`
               : ""
           );
+          setRecommendEngine("v1");
           setCards(
             pickedWithReasons.map((p) => ({
               ...p.card,
@@ -4744,6 +5305,7 @@ export function useHomeCards(
       } catch (e) {
         console.error("[useHomeCards]", e);
         if (!cancelled) {
+          setRecommendEngine(null);
           setCards([]);
           setDeckRotationKey("");
           setCoursePool([]);
@@ -4774,7 +5336,10 @@ export function useHomeCards(
     deferRanking,
     skipFetch,
     explicitKey,
+    canonicalExplicitCategoryDep,
+    strictGateCategoryDep,
+    scenarioIntentCategoryDep,
   ]);
 
-  return { cards, deckRotationKey, candidatePool: pool, courseCandidatePool: coursePool, isLoading, deckIncomplete };
+  return { cards, deckRotationKey, recommendEngine, candidatePool: pool, courseCandidatePool: coursePool, isLoading, deckIncomplete };
 }

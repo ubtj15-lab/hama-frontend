@@ -44,7 +44,7 @@ export function runCourseEngineScenarioChecks(): string[] {
     card("a2", "activity"),
   ];
 
-  const tabs: HomeTabKey[] = ["all", "restaurant", "cafe", "salon", "activity"];
+  const tabs: HomeTabKey[] = ["all", "restaurant", "cafe", "salon", "activity", "fitness", "life"];
   for (const homeTab of tabs) {
     const plans = generateCourses(mixed, obj, cfg, 8, { homeTab });
     for (const plan of plans) {

@@ -14,7 +14,6 @@ import {
 import {
   loadConversationContext,
   processConversationTurn,
-  mergeResultsScenario,
   summarizeActiveConstraints,
   patchLastRecommendations,
   type ConversationContext,
@@ -71,6 +70,10 @@ import FeedbackFab from "@/components/FeedbackFab";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
 import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 import { hamaDevLog } from "@/lib/hamaDevLog";
+import { mergeResultsScenarioWithExplicitNav, normalizeResultsExplicitCategory, passesBeautyIndustryWhitelist, passesCultureIndustryWhitelist, strictExplicitGateCategoryFromUrl } from "@/lib/hamaResultCategoryCanonical";
+import { USE_RECOMMEND_V2 } from "@/lib/recommend-v2/recommendV2Flags";
+import { isBeautyUrlFromExplicitNav, isBeautyV2HardMode } from "@/lib/recommend-v2/beautyV2HardMode";
+import { shouldApplyCultureStrictWhitelist } from "@/lib/recommend-v2/normalizeRequest";
 
 /** 결과 페이지만: 고정 더미로 SearchResultSection/분기 검증 — `.env.local` 에 `NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION=1` */
 const DEBUG_FORCE_SEARCH_SECTION = process.env.NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION === "1";
@@ -104,6 +107,8 @@ function intentCategoryToCategoryClicked(intentCategory: string | null | undefin
   if (intentCategory === "FOOD") return "푸드";
   if (intentCategory === "CAFE") return "카페";
   if (intentCategory === "BEAUTY") return "미용실";
+  if (intentCategory === "FITNESS") return "운동";
+  if (intentCategory === "LIFE") return "생활";
   if (intentCategory === "ACTIVITY") return "액티비티";
   return intentCategory;
 }
@@ -117,6 +122,13 @@ function ResultsContent() {
   const explicitIntent = searchParams.get("intent")?.trim() || null;
   const explicitCategory = searchParams.get("category")?.trim() || null;
   const explicitMode = searchParams.get("mode")?.trim() || null;
+  const resultsUrlPrimitiveKey = useMemo(
+    () =>
+      [qRaw, explicitIntent ?? "", explicitCategory ?? "", explicitMode ?? "", courseIdFromSearch, courseSnapFromSearch].join(
+        "\u001f"
+      ),
+    [qRaw, explicitIntent, explicitCategory, explicitMode, courseIdFromSearch, courseSnapFromSearch]
+  );
   /** Chrome 등 첫 프레임에서 searchParams와 window.location 불일치 방지 */
   const [courseIdSynced, setCourseIdSynced] = useState(courseIdFromSearch);
   const [hashCourseSnap, setHashCourseSnap] = useState<string | null>(null);
@@ -313,7 +325,12 @@ function ResultsContent() {
   const fixedCourseFromSession = fixedPlan;
 
   const scenarioObject = useMemo(() => {
-    const base = mergeResultsScenario(queryForScenario, convCtx);
+    const base = mergeResultsScenarioWithExplicitNav(
+      queryForScenario,
+      convCtx,
+      explicitCategory,
+      explicitIntent
+    );
     if (!base) return null;
     let out: ScenarioObject = scenarioPatch ? { ...base, ...scenarioPatch } : base;
     if (explicitMode === "course") {
@@ -324,7 +341,7 @@ function ResultsContent() {
       };
     }
     return out;
-  }, [queryForScenario, convCtx, scenarioPatch, explicitMode]);
+  }, [queryForScenario, convCtx, scenarioPatch, explicitMode, explicitCategory, explicitIntent]);
 
   const effectiveMode: RecommendationMode = useMemo(() => {
     const inferred = scenarioObject?.recommendationMode ?? "single";
@@ -480,6 +497,21 @@ function ResultsContent() {
   const resolvedModeForHome =
     isFamilyDiningAliasQuery || Boolean(matchedNamedFoodPreset) ? "single" : explicitMode;
 
+  const beautyUrlFinalGuard = useMemo(
+    () => isBeautyUrlFromExplicitNav(resolvedExplicitCategoryForHome, resolvedExplicitIntentForHome),
+    [resolvedExplicitCategoryForHome, resolvedExplicitIntentForHome]
+  );
+
+  const cultureUrlFinalGuard = useMemo(
+    () =>
+      shouldApplyCultureStrictWhitelist(
+        resolvedExplicitCategoryForHome,
+        resolvedExplicitIntentForHome,
+        qRaw
+      ),
+    [resolvedExplicitCategoryForHome, resolvedExplicitIntentForHome, qRaw]
+  );
+
   useEffect(() => {
     if (!isFamilyDiningAliasQuery) return;
     console.log("[family dining alias route]", {
@@ -497,6 +529,29 @@ function ResultsContent() {
     resolvedExplicitIntentForHome,
     resolvedExplicitCategoryForHome,
     resolvedModeForHome,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    console.log("[HAMA_TAB_ROUTE_DEBUG]", {
+      qRaw,
+      explicitCategory,
+      explicitIntent,
+      canonicalExplicitCategory: normalizeResultsExplicitCategory(explicitCategory),
+      strictGateCategory: strictExplicitGateCategoryFromUrl(explicitCategory, explicitIntent),
+      contextTab: scenarioObjectForHomeCards?.intentCategory ?? effectiveScenario?.intentCategory ?? null,
+      tab: "all",
+      fab: true,
+      routePrimitiveKey: resultsUrlPrimitiveKey,
+    });
+  }, [
+    resultsUrlPrimitiveKey,
+    qRaw,
+    explicitCategory,
+    explicitIntent,
+    explicitMode,
+    scenarioObjectForHomeCards?.intentCategory,
+    effectiveScenario?.intentCategory,
   ]);
 
   /** q=푸드 → q=식당 으로 완전 동일 경로(시나리오·렌더·추천). intent/category 없으면 식당 직접 진입과 맞춤 */
@@ -577,7 +632,7 @@ function ResultsContent() {
     resolvedExplicitCategoryForHome,
   ]);
 
-  const { cards, deckRotationKey, candidatePool, courseCandidatePool, isLoading, deckIncomplete } =
+  const { cards, deckRotationKey, recommendEngine, candidatePool, courseCandidatePool, isLoading, deckIncomplete } =
     useHomeCards(
     "all",
     shuffleKey,
@@ -660,9 +715,10 @@ function ResultsContent() {
   ]);
 
   const placeHitIds = useMemo(() => new Set(placeHits.map((c) => c.id)), [placeHits]);
+  /** 뷰티 URL: 매장명 검색 히트 제외·primary/secondary 분리 없이 홈 카드 전체를 후보로 쓴다 */
   const secondaryRecommendCards = useMemo(
-    () => cards.filter((c) => !placeHitIds.has(c.id)),
-    [cards, placeHitIds]
+    () => (beautyUrlFinalGuard ? cards : cards.filter((c) => !placeHitIds.has(c.id))),
+    [beautyUrlFinalGuard, cards, placeHitIds]
   );
 
   const [recommendationPatternBoostMap, setRecommendationPatternBoostMap] = useState(
@@ -730,11 +786,102 @@ function ResultsContent() {
   }, [courseRestoreFailed, courseIdParam, restoreSource]);
 
   const isCourseFixedResults = Boolean(courseFixedCards?.length) && !courseRestoreFailed;
-  const primaryRecommendationCards: HomeCard[] = courseRestoreFailed
-    ? []
-    : isCourseFixedResults && courseFixedCards
-      ? courseFixedCards
-      : cards;
+  /**
+   * 뷰티 URL: 코스 복원 실패/세션 고정 코스 등으로 `cards`를 덮어쓰지 않고 항상 `useHomeCards` 결과만 사용.
+   * 그 외: 기존 코스·복원 분기 유지.
+   */
+  const primaryRecommendationCards: HomeCard[] = beautyUrlFinalGuard
+    ? cards
+    : courseRestoreFailed
+      ? []
+      : isCourseFixedResults && courseFixedCards
+        ? courseFixedCards
+        : cards;
+
+  const primaryListCards = useMemo(() => {
+    if (beautyUrlFinalGuard) {
+      const whitelisted = primaryRecommendationCards.filter((c) => passesBeautyIndustryWhitelist(c));
+      return whitelisted.length > 0 ? whitelisted : primaryRecommendationCards;
+    }
+    if (cultureUrlFinalGuard) {
+      const whitelisted = primaryRecommendationCards.filter((c) => passesCultureIndustryWhitelist(c));
+      return whitelisted.length > 0 ? whitelisted : primaryRecommendationCards;
+    }
+    return primaryRecommendationCards;
+  }, [beautyUrlFinalGuard, cultureUrlFinalGuard, primaryRecommendationCards]);
+
+  const secondaryListCards = useMemo(() => {
+    if (beautyUrlFinalGuard) {
+      const whitelisted = secondaryRecommendCards.filter((c) => passesBeautyIndustryWhitelist(c));
+      return whitelisted.length > 0 ? whitelisted : secondaryRecommendCards;
+    }
+    if (cultureUrlFinalGuard) {
+      const whitelisted = secondaryRecommendCards.filter((c) => passesCultureIndustryWhitelist(c));
+      return whitelisted.length > 0 ? whitelisted : secondaryRecommendCards;
+    }
+    return secondaryRecommendCards;
+  }, [beautyUrlFinalGuard, cultureUrlFinalGuard, secondaryRecommendCards]);
+
+  const beautyV2HardMode = useMemo(
+    () =>
+      isBeautyV2HardMode({
+        explicitCategory: resolvedExplicitCategoryForHome,
+        explicitIntent: resolvedExplicitIntentForHome,
+        recommendEngine,
+        useRecommendV2Flag: USE_RECOMMEND_V2,
+      }),
+    [resolvedExplicitCategoryForHome, resolvedExplicitIntentForHome, recommendEngine]
+  );
+
+  useLayoutEffect(() => {
+    const mapLite = (arr: HomeCard[]) =>
+      arr.slice(0, 30).map((c) => ({
+        name: c.name,
+        category: c.category ?? null,
+        categoryLabel: c.categoryLabel ?? null,
+      }));
+    const removedExamples = beautyUrlFinalGuard
+      ? cards
+          .filter((c) => !passesBeautyIndustryWhitelist(c))
+          .slice(0, 8)
+          .map((c) => ({
+            name: c.name,
+            category: c.category ?? null,
+            categoryLabel: c.categoryLabel ?? null,
+          }))
+      : cultureUrlFinalGuard
+        ? cards
+            .filter((c) => !passesCultureIndustryWhitelist(c))
+            .slice(0, 8)
+            .map((c) => ({
+              name: c.name,
+              category: c.category ?? null,
+              categoryLabel: c.categoryLabel ?? null,
+            }))
+        : [];
+    console.log("[HAMA_RESULTS_LIST_FILTER_DEBUG]", {
+      beautyUrlFinalGuard,
+      cultureUrlFinalGuard,
+      inputCards: mapLite(cards),
+      afterPrimaryFilter: mapLite(primaryListCards),
+      afterSecondaryFilter: mapLite(secondaryListCards),
+      removedExamples,
+    });
+    console.log("[HAMA_RESULTS_TO_LIST]", {
+      beautyV2HardMode,
+      recommendEngine,
+      primaryListCards,
+      secondaryListCards,
+    });
+  }, [
+    beautyUrlFinalGuard,
+    cultureUrlFinalGuard,
+    beautyV2HardMode,
+    recommendEngine,
+    cards,
+    primaryListCards,
+    secondaryListCards,
+  ]);
 
   useEffect(() => {
     if (!isSoloSituationQuery) return;
@@ -810,27 +957,27 @@ function ResultsContent() {
   );
   const baseShowRecommendationList = Boolean(
     !pageBusy &&
-      !courseRestoreFailed &&
-      (!isCourseMode || courseFallbackActive || isCourseFixedResults)
+      (beautyUrlFinalGuard ||
+        (!courseRestoreFailed && (!isCourseMode || courseFallbackActive || isCourseFixedResults)))
   );
   const forceSituationRecommendationListVisible = Boolean(
     !pageBusy &&
       !courseRestoreFailed &&
       isSituationResultsQuery &&
       isScenarioRecommendationIntent &&
-      primaryRecommendationCards.length > 0
+      primaryListCards.length > 0
   );
   const forceShowListByCards = cards.length > 0;
   const showRecommendationList =
     baseShowRecommendationList || forceSituationRecommendationListVisible || forceShowListByCards;
-  const recommendationListVisible = showRecommendationList && primaryRecommendationCards.length > 0;
+  const recommendationListVisible = showRecommendationList && primaryListCards.length > 0;
   const recommendationMode = scenarioObject?.intentType ?? effectiveScenario?.recommendationMode ?? effectiveMode;
   const baseShowEmptyState = Boolean(
     !bootstrapBusy &&
       !showNameSearch &&
       !pageBusy &&
       !showCourseDeck &&
-      primaryRecommendationCards.length === 0 &&
+      primaryListCards.length === 0 &&
       placeLookupDone
   );
   const showEmptyState = forceShowListByCards ? false : baseShowEmptyState;
@@ -838,7 +985,7 @@ function ResultsContent() {
   useEffect(() => {
     console.log("[empty state conflict check]", {
       qRaw,
-      cardsCount: primaryRecommendationCards.length,
+      cardsCount: primaryListCards.length,
       placeSearchEnabled,
       showEmptyState,
       recommendationListVisible,
@@ -854,7 +1001,7 @@ function ResultsContent() {
   }, [
     qRaw,
     cards.length,
-    primaryRecommendationCards.length,
+    primaryListCards.length,
     placeSearchEnabled,
     showEmptyState,
     recommendationListVisible,
@@ -1050,10 +1197,10 @@ function ResultsContent() {
 
   useEffect(() => {
     if (!qRaw || pageBusy || showNameSearch) return;
-    if (!showRecommendationList || primaryRecommendationCards.length === 0) return;
+    if (!showRecommendationList || primaryListCards.length === 0) return;
     if (recommendDeckLogged.current) return;
     recommendDeckLogged.current = true;
-    const slice = primaryRecommendationCards.slice(0, RECOMMEND_DECK_SIZE);
+    const slice = primaryListCards.slice(0, RECOMMEND_DECK_SIZE);
     logEvent(
       HamaEvents.recommend_deck_impression,
       mergeLogPayload(logBase, {
@@ -1111,7 +1258,7 @@ function ResultsContent() {
     pageBusy,
     showNameSearch,
     showRecommendationList,
-    primaryRecommendationCards,
+    primaryListCards,
     isCourseFixedResults,
     logBase,
     effectiveScenario,
@@ -1153,8 +1300,8 @@ function ResultsContent() {
     !isCourseMode &&
     !showNameSearch &&
     !isCourseFixedResults &&
-    primaryRecommendationCards.length > 0 &&
-    primaryRecommendationCards.length < RECOMMEND_DECK_SIZE;
+    primaryListCards.length > 0 &&
+    primaryListCards.length < RECOMMEND_DECK_SIZE;
 
   const showSoftFallbackCopy = Boolean(
     strictHint || deckIncomplete || rejectedMainPickIds.length > 0
@@ -1164,7 +1311,7 @@ function ResultsContent() {
     effectiveScenario?.intentCategory === "BEAUTY";
 
   const rejectMainAndRefresh = () => {
-    const id = primaryRecommendationCards[0]?.id;
+    const id = primaryListCards[0]?.id;
     if (!id) return;
     const recId = recommendSessionId;
     if (recId && effectiveScenario) {
@@ -1344,7 +1491,7 @@ function ResultsContent() {
         {!bootstrapBusy &&
           showNameSearch &&
           !isLoading &&
-          secondaryRecommendCards.length > 0 && (
+          secondaryListCards.length > 0 && (
             <section style={{ marginBottom: space.section }}>
               <h2
                 style={{
@@ -1363,10 +1510,16 @@ function ResultsContent() {
                 </p>
               )}
               <RecommendationList
-                cards={secondaryRecommendCards}
+                cards={secondaryListCards}
                 scenarioObject={effectiveScenario}
                 namedFoodPresetId={namedFoodPresetIdForListRef?.id}
                 deckRotationKey={matchedNamedFoodPreset ? deckRotationKey : null}
+                recommendEngine={recommendEngine}
+                beautyUrlFinalGuard={beautyUrlFinalGuard}
+                cultureUrlFinalGuard={cultureUrlFinalGuard}
+                beautyV2HardMode={beautyV2HardMode}
+                explicitCategory={resolvedExplicitCategoryForHome}
+                explicitIntent={resolvedExplicitIntentForHome}
                 analyticsV2Click={analyticsV2Base ?? undefined}
                 showSoftFallbackCopy={false}
                 resultsSurface="secondary"
@@ -1400,7 +1553,7 @@ function ResultsContent() {
           !showNameSearch &&
           !pageBusy &&
           !showCourseDeck &&
-          primaryRecommendationCards.length > 0 && (
+          primaryListCards.length > 0 && (
             <p style={{ fontSize: 13, color: colors.textSecondary, margin: "0 0 12px", lineHeight: 1.45 }}>
               같은 이름의 매장은 못 찾았어. 대신 이런 곳은 어때?
             </p>
@@ -1420,7 +1573,7 @@ function ResultsContent() {
             </p>
           )}
 
-        {courseFallbackActive && !showNameSearch && primaryRecommendationCards.length > 0 && (
+        {courseFallbackActive && !showNameSearch && primaryListCards.length > 0 && (
           <p
             style={{
               fontSize: 14,
@@ -1434,7 +1587,7 @@ function ResultsContent() {
           </p>
         )}
 
-        {!pageBusy && !showNameSearch && showRecommendationList && primaryRecommendationCards.length > 0 && (
+        {!pageBusy && !showNameSearch && showRecommendationList && primaryListCards.length > 0 && (
           <>
             {matchedNamedFoodPreset?.id === "chinese" && (
               <p style={{ fontSize: 14, color: colors.textPrimary, margin: "0 0 10px", lineHeight: 1.5 }}>
@@ -1442,10 +1595,16 @@ function ResultsContent() {
               </p>
             )}
             <RecommendationList
-              cards={primaryRecommendationCards}
+              cards={primaryListCards}
               scenarioObject={effectiveScenario}
               namedFoodPresetId={namedFoodPresetIdForListRef?.id}
               deckRotationKey={matchedNamedFoodPreset ? deckRotationKey : null}
+              recommendEngine={recommendEngine}
+              beautyUrlFinalGuard={beautyUrlFinalGuard}
+              cultureUrlFinalGuard={cultureUrlFinalGuard}
+              beautyV2HardMode={beautyV2HardMode}
+              explicitCategory={resolvedExplicitCategoryForHome}
+              explicitIntent={resolvedExplicitIntentForHome}
               analyticsV2Click={analyticsV2Base ?? undefined}
               showSoftFallbackCopy={showSoftFallbackCopy}
               isLoggedIn={isLoggedIn}
@@ -1472,7 +1631,7 @@ function ResultsContent() {
         {!pageBusy &&
           !showNameSearch &&
           showRecommendationList &&
-          primaryRecommendationCards.length > 0 &&
+          primaryListCards.length > 0 &&
           !isCourseFixedResults && (
             <div
               style={{

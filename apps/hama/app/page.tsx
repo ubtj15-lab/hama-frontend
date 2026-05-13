@@ -20,6 +20,7 @@ import { HomeBottomNav } from "./_components/home/HomeBottomNav";
 import { useRecent } from "./_hooks/useRecent";
 import { HamaEvents } from "@/lib/analytics/events";
 import type { HomeResultsNavParams } from "@/lib/homeResultsNavParams";
+import { logHamaTabClickTrace, resolveHomeResultsUrl } from "@/lib/hamaTabClickTrace";
 import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { recordRecentIntent } from "@/lib/recentIntents";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
@@ -186,12 +187,17 @@ function HomePageContent() {
     } else {
       addPoints(3, "상황 검색");
     }
-    const usp = new URLSearchParams();
-    usp.set("q", t);
-    if (nav?.intent) usp.set("intent", nav.intent);
-    if (nav?.category) usp.set("category", nav.category);
-    if (nav?.mode) usp.set("mode", nav.mode);
-    router.push(`/results?${usp.toString()}`);
+    const nextUrl = resolveHomeResultsUrl(t, nav);
+    console.log("[HAMA_HOME_NAV_TO_RESULTS]", { source, nextUrl });
+    logHamaTabClickTrace({
+      source: `HomePage:${source}`,
+      key: nav?.category ?? null,
+      label: null,
+      href: null,
+      nav: nav ?? null,
+      nextUrl,
+    });
+    router.push(nextUrl);
   };
 
   const handleLoginClick = () => {

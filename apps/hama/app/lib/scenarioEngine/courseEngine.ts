@@ -43,6 +43,8 @@ function tabCategoryBoost(p: HomeCard, tab: HomeTabKey): number {
   if (tab === "restaurant" && c === "restaurant") return TAB_CATEGORY_BOOST;
   if (tab === "cafe" && c === "cafe") return TAB_CATEGORY_BOOST;
   if (tab === "activity" && c === "activity") return TAB_CATEGORY_BOOST;
+  if (tab === "fitness" && c === "activity") return TAB_CATEGORY_BOOST;
+  if (tab === "life") return 0;
   return 0;
 }
 

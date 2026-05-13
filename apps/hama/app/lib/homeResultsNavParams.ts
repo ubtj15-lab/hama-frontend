@@ -1,4 +1,5 @@
 import type { HomeTabKey } from "@/lib/storeTypes";
+import { normalizeResultsExplicitCategory } from "@/lib/hamaResultCategoryCanonical";
 
 /**
  * 홈 퀵 카테고리 → /results 네비게이션에 붙이는 명시 파라미터.
@@ -12,7 +13,7 @@ export type HomeResultsNavParams = {
 
 /** URL `category` 값 → `fetchHomeCardsByTab` 탭 (명시 힌트용) */
 export function explicitCategoryToFetchTab(category: string | null | undefined): HomeTabKey | null {
-  const c = (category ?? "").trim().toLowerCase();
+  const c = normalizeResultsExplicitCategory(category) ?? (category ?? "").trim().toLowerCase();
   if (!c) return null;
   switch (c) {
     case "restaurant":
@@ -27,9 +28,9 @@ export function explicitCategoryToFetchTab(category: string | null | undefined):
     case "culture":
       return "museum";
     case "fitness":
-      return "activity";
+      return "fitness";
     case "life":
-      return "all";
+      return "life";
     case "mixed":
       return "all";
     default:

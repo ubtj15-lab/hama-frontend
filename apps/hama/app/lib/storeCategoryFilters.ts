@@ -17,6 +17,10 @@ export function categoriesForHomeTab(tab: HomeTabKey): string[] | null {
       return ["activity", "library"];
     case "museum":
       return ["library", "activity"];
+    case "fitness":
+      return ["activity"];
+    case "life":
+      return null;
     default:
       return [tab];
   }

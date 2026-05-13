@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { colors, radius, shadow } from "@/lib/designTokens";
 import type { HomeResultsNavParams } from "@/lib/homeResultsNavParams";
+import { HOME_RESULTS_TAB_TARGETS, logHamaTabClickTrace, resolveHomeResultsUrl } from "@/lib/hamaTabClickTrace";
 import { Touchable } from "@ui/Touchable";
 
 const CATEGORY_SPRITE_SRC = "/home/home-category-icons-grid.png";
@@ -24,7 +25,6 @@ export type QuickCategoryItem = {
   bg: string;
   /** 0..7 — `home-category-icons-grid.png` (4×2, 행: 푸드~문화 / 뷰티~키즈·가족) */
   spriteIndex: number;
-  expandsBeauty?: boolean;
   /** /results? 에 intent·category·mode 명시 (퀵 그리드 전용) */
   nav?: HomeResultsNavParams;
 };
@@ -34,50 +34,73 @@ export const QUICK_CATEGORY_CANDIDATES: QuickCategoryItem[] = [
   {
     label: "푸드",
     subtitle: "식당·맛집",
-    query: "식당",
+    query: HOME_RESULTS_TAB_TARGETS.restaurant.q,
     spriteIndex: 0,
     bg: "#FFF5EB",
-    nav: { intent: "food_general", category: "restaurant" },
+    nav: {
+      intent: HOME_RESULTS_TAB_TARGETS.restaurant.intent,
+      category: HOME_RESULTS_TAB_TARGETS.restaurant.category,
+    },
   },
   {
     label: "카페",
     subtitle: "커피·디저트·베이커리",
-    query: "카페 커피 디저트 베이커리 추천해줘",
+    query: HOME_RESULTS_TAB_TARGETS.cafe.q,
     spriteIndex: 1,
     bg: "#FFE4CC",
-    nav: { intent: "cafe_general", category: "cafe" },
+    nav: { intent: HOME_RESULTS_TAB_TARGETS.cafe.intent, category: HOME_RESULTS_TAB_TARGETS.cafe.category },
   },
   {
     label: "액티비티",
     subtitle: "체험·놀이·전시",
-    query: "액티비티 추천해줘 체험 놀이 전시",
+    query: HOME_RESULTS_TAB_TARGETS.activity.q,
     spriteIndex: 2,
     bg: "#E6F7ED",
-    nav: { intent: "activity_general", category: "activity" },
+    nav: {
+      intent: HOME_RESULTS_TAB_TARGETS.activity.intent,
+      category: HOME_RESULTS_TAB_TARGETS.activity.category,
+    },
   },
   {
     label: "문화",
     subtitle: "전시·공연·영화·책",
-    query: "박물관",
+    query: HOME_RESULTS_TAB_TARGETS.culture.q,
     spriteIndex: 3,
     bg: "#EDE7F6",
+    nav: {
+      intent: HOME_RESULTS_TAB_TARGETS.culture.intent,
+      category: HOME_RESULTS_TAB_TARGETS.culture.category,
+    },
   },
-  { label: "뷰티", subtitle: "헤어·네일·관리", query: "미용실 추천해줘", spriteIndex: 4, bg: "#FCE7EF", expandsBeauty: true },
+  {
+    label: "뷰티",
+    subtitle: "헤어·네일·관리",
+    query: HOME_RESULTS_TAB_TARGETS.beauty.q,
+    spriteIndex: 4,
+    bg: "#FCE7EF",
+    nav: {
+      intent: HOME_RESULTS_TAB_TARGETS.beauty.intent,
+      category: HOME_RESULTS_TAB_TARGETS.beauty.category,
+    },
+  },
   {
     label: "운동",
     subtitle: "헬스·필라테스·수영",
-    query: "운동 추천해줘 헬스 필라테스 수영",
+    query: HOME_RESULTS_TAB_TARGETS.fitness.q,
     spriteIndex: 5,
     bg: "#E0F0FA",
-    nav: { intent: "fitness_general", category: "fitness" },
+    nav: {
+      intent: HOME_RESULTS_TAB_TARGETS.fitness.intent,
+      category: HOME_RESULTS_TAB_TARGETS.fitness.category,
+    },
   },
   {
     label: "생활",
     subtitle: "병원·약국·세탁·편의",
-    query: "생활 편의 병원 약국 세탁 추천해줘",
+    query: HOME_RESULTS_TAB_TARGETS.life.q,
     spriteIndex: 6,
     bg: "#E9F5EA",
-    nav: { intent: "life_general", category: "life" },
+    nav: { intent: HOME_RESULTS_TAB_TARGETS.life.intent, category: HOME_RESULTS_TAB_TARGETS.life.category },
   },
   {
     label: "키즈/가족",
@@ -256,22 +279,6 @@ type Props = { onPick: (query: string, nav?: HomeResultsNavParams) => void };
 
 export function QuickScenarioGrid({ onPick }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
-  const [beautyExpanded, setBeautyExpanded] = useState(false);
-  const [beautySubCategory, setBeautySubCategory] = useState<"hair" | "nail" | "eyelash" | "waxing" | null>(null);
-
-  const beautyQueryMap: Record<"hair" | "nail" | "eyelash" | "waxing", string> = {
-    hair: "미용실 헤어 헤어샵 살롱 커트 컷 펌 염색 두피 클리닉 추천해줘",
-    nail: "미용실 추천해줘 네일 네일아트",
-    eyelash: "미용실 추천해줘 속눈썹 래쉬",
-    waxing: "미용실 추천해줘 제모 왁싱",
-  };
-
-  const beautyNavMap: Record<"hair" | "nail" | "eyelash" | "waxing", HomeResultsNavParams> = {
-    hair: { intent: "beauty_hair", category: "beauty" },
-    nail: { intent: "beauty_nail", category: "beauty" },
-    eyelash: { intent: "beauty_lash", category: "beauty" },
-    waxing: { intent: "beauty_waxing", category: "beauty" },
-  };
 
   return (
     <div style={{ marginBottom: 12 }}>
@@ -303,27 +310,17 @@ export function QuickScenarioGrid({ onPick }: Props) {
                 aria-label={`${it.label}, ${it.subtitle}`}
                 onClick={() => {
                   setSelected(it.label);
-                  if (it.expandsBeauty) {
-                    setBeautyExpanded(true);
-                    return;
-                  }
-                  setBeautyExpanded(false);
-                  setBeautySubCategory(null);
-                  /** 문화만: goResults/onPick 우회 → URL q-only와 브라우저 풀 네비로 직접 검색과 동일 */
-                  if (it.label === "문화" && typeof window !== "undefined") {
-                    const targetUrl = "/results?q=%EB%B0%95%EB%AC%BC%EA%B4%80";
-                    console.log("[culture actual button clicked]", {
-                      file: "QuickScenarioGrid.tsx",
-                      component: "QuickScenarioGrid",
-                      label: it.label,
-                      query: it.query,
-                      nav: it.nav ?? null,
-                      targetUrl,
-                    });
-                    window.location.assign(targetUrl);
-                    return;
-                  }
-                  onPick(it.query, it.nav);
+                  const nav = it.nav;
+                  const nextUrl = resolveHomeResultsUrl(it.query, nav);
+                  logHamaTabClickTrace({
+                    source: "QuickScenarioGrid",
+                    key: it.label,
+                    label: it.label,
+                    href: null,
+                    nav: nav ?? null,
+                    nextUrl,
+                  });
+                  onPick(it.query, nav);
                 }}
                 className="hama-press"
                 style={{
@@ -361,54 +358,6 @@ export function QuickScenarioGrid({ onPick }: Props) {
           );
         })}
       </div>
-      {beautyExpanded ? (
-        <div
-          style={{
-            marginTop: 8,
-            borderRadius: radius.card,
-            border: `1px solid ${colors.borderSubtle}`,
-            background: "#fff",
-            padding: "10px 10px 8px",
-          }}
-        >
-          <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 900, color: colors.textPrimary }}>
-            어떤 관리를 찾고 있어요?
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {[
-              { id: "hair", label: "헤어" },
-              { id: "nail", label: "네일" },
-              { id: "eyelash", label: "속눈썹" },
-              { id: "waxing", label: "제모" },
-            ].map((opt) => {
-              const active = beautySubCategory === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    const next = opt.id as "hair" | "nail" | "eyelash" | "waxing";
-                    setBeautySubCategory(next);
-                    onPick(beautyQueryMap[next], beautyNavMap[next]);
-                  }}
-                  style={{
-                    height: 42,
-                    borderRadius: radius.button,
-                    border: active ? `2px solid ${colors.accentPrimary}` : `1px solid ${colors.borderSubtle}`,
-                    background: active ? colors.primaryLight : "#fff",
-                    color: colors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
       <div style={{ marginTop: 8 }}>
         <Touchable>
           <button
@@ -416,8 +365,15 @@ export function QuickScenarioGrid({ onPick }: Props) {
             aria-label={`${HOME_COURSE.label}, ${HOME_COURSE.subtitle}`}
             onClick={() => {
               setSelected(HOME_COURSE.label);
-              setBeautyExpanded(false);
-              setBeautySubCategory(null);
+              const nextUrl = resolveHomeResultsUrl(HOME_COURSE.query, HOME_COURSE.nav);
+              logHamaTabClickTrace({
+                source: "QuickScenarioGrid",
+                key: "course",
+                label: HOME_COURSE.label,
+                href: null,
+                nav: { ...HOME_COURSE.nav },
+                nextUrl,
+              });
               onPick(HOME_COURSE.query, HOME_COURSE.nav);
             }}
             className="hama-press"

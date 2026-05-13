@@ -14,8 +14,18 @@ import { HamaEventNames } from "@/lib/hamaEventNames";
 import { inferDirectionsProvider } from "@/lib/inferDirectionsProvider";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
 import { getCardExposureId, saveRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
+import { RECOMMEND_DECK_SIZE } from "@/lib/recommend/recommendConstants";
+import { passesBeautyIndustryWhitelist, passesCultureIndustryWhitelist } from "@/lib/hamaResultCategoryCanonical";
 
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
+
+/** 결과 리스트 실제 픽셀 출처 — 뷰티 v2 하드 모드는 항상 v2_direct */
+export type RecommendationRenderedSource =
+  | "v2_direct"
+  | "stable"
+  | "incoming"
+  | "recovery"
+  | "fallback";
 
 function hashDedupKey(s: string): string {
   let h = 2166136261;
@@ -33,6 +43,18 @@ type Props = {
   namedFoodPresetId?: string | null;
   /** 반복 검색 시 회차·최근 노출 시그니처 — 안정 카드/context가 덱 교체를 가릴 때 사용 */
   deckRotationKey?: string | null;
+  /** 결과 렌더 직전 엔진 로그용 — `useHomeCards` 마지막 성공 분기 */
+  recommendEngine?: "v1" | "v2" | null;
+  /** 뷰티 URL: 업종 화이트리스트로 부모 카드 정제( v1·v2 공통 ) */
+  beautyUrlFinalGuard?: boolean;
+  /** 문화 URL 또는 activity_general+문화계열: 문화 strict 화이트리스트 */
+  cultureUrlFinalGuard?: boolean;
+  /** 뷰티 URL + (v2 엔진 또는 USE_RECOMMEND_V2): stable/recovery 없이 인입 덱만 표시 */
+  beautyV2HardMode?: boolean;
+  /** `results/page` URL 기준 category — 디버그 로그용 */
+  explicitCategory?: string | null;
+  /** `results/page` URL 기준 intent — 디버그 로그용 */
+  explicitIntent?: string | null;
   onPlaceClick: (card: HomeCard, rank: number) => void;
   onNavigate: (card: HomeCard, rank: number) => void;
   onCall: (card: HomeCard, rank: number) => void;
@@ -58,6 +80,12 @@ export function RecommendationList({
   analyticsV2Click,
   showSoftFallbackCopy = false,
   resultsSurface = "primary",
+  recommendEngine = null,
+  beautyUrlFinalGuard = false,
+  cultureUrlFinalGuard = false,
+  beautyV2HardMode = false,
+  explicitCategory = null,
+  explicitIntent = null,
 }: Props) {
   const getCardPlaceId = React.useCallback(
     (card: HomeCard): string =>
@@ -104,6 +132,8 @@ export function RecommendationList({
   const [decisionSavingPlaceId, setDecisionSavingPlaceId] = React.useState<string | null>(null);
   const [receiptFile, setReceiptFile] = React.useState<File | null>(null);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = React.useState<string | null>(null);
+  const [visitPlacePhotos, setVisitPlacePhotos] = React.useState<File[]>([]);
+  const [visitPlacePhotoPreviewUrls, setVisitPlacePhotoPreviewUrls] = React.useState<string[]>([]);
   const [visitFeedbackTags, setVisitFeedbackTags] = React.useState<string[]>([]);
   const [visitFeedbackText, setVisitFeedbackText] = React.useState("");
   const [receiptVerifying, setReceiptVerifying] = React.useState(false);
@@ -111,11 +141,37 @@ export function RecommendationList({
   const [verificationOpenPlaceId, setVerificationOpenPlaceId] = React.useState<string | null>(null);
   const [verificationSubmittedPlaceId, setVerificationSubmittedPlaceId] = React.useState<string | null>(null);
   const [showQuickFeedback, setShowQuickFeedback] = React.useState(false);
-  const visibleRecommendations =
-    stableRecommendations.length > 0 ? stableRecommendations : cards.slice(0, 3);
-  const deckReasons = useDeckRecommendationReasons(visibleRecommendations, scenarioObject);
+  const listIncomingCards = React.useMemo(() => {
+    if (beautyUrlFinalGuard) return cards.filter((c) => passesBeautyIndustryWhitelist(c));
+    if (cultureUrlFinalGuard) return cards.filter((c) => passesCultureIndustryWhitelist(c));
+    return cards;
+  }, [beautyUrlFinalGuard, cultureUrlFinalGuard, cards]);
 
-  const incomingTop3 = React.useMemo(() => cards.slice(0, 3), [cards]);
+  const renderedSource = React.useMemo((): RecommendationRenderedSource => {
+    if (beautyV2HardMode) return "v2_direct";
+    if (stableRecommendations.length > 0) return "stable";
+    return "incoming";
+  }, [beautyV2HardMode, stableRecommendations.length]);
+
+  /** beautyV2HardMode: listIncomingCards 상단 3장만. 그 외: stable 우선 후 인입. */
+  const renderedCards = React.useMemo(() => {
+    if (beautyV2HardMode) {
+      return listIncomingCards.slice(0, 3);
+    }
+    return stableRecommendations.length > 0 ? stableRecommendations : listIncomingCards.slice(0, 3);
+  }, [beautyV2HardMode, listIncomingCards, stableRecommendations]);
+
+  const deckReasons = useDeckRecommendationReasons(renderedCards, scenarioObject);
+
+  React.useEffect(() => {
+    const urls = visitPlacePhotos.map((f) => URL.createObjectURL(f));
+    setVisitPlacePhotoPreviewUrls(urls);
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [visitPlacePhotos]);
+
+  const incomingTop3 = React.useMemo(() => listIncomingCards.slice(0, 3), [listIncomingCards]);
   const incomingDeckFingerprint = React.useMemo(
     () => incomingTop3.map((c) => `${getCardPlaceId(c)}:${String(c.name ?? "")}`).join("|"),
     [incomingTop3, getCardPlaceId]
@@ -130,16 +186,72 @@ export function RecommendationList({
     [stableRecommendations, getCardPlaceId]
   );
 
-  const recommendationVisibleLogKey = React.useMemo(
-    () =>
-      stableRecommendations.length > 0
-        ? `s:${stableDeckFingerprint}`
-        : `i:${incomingDeckFingerprint}`,
-    [stableRecommendations.length, stableDeckFingerprint, incomingDeckFingerprint]
-  );
+  const recommendationVisibleLogKey = React.useMemo(() => {
+    if (beautyV2HardMode) {
+      const fp = listIncomingCards
+        .slice(0, 3)
+        .map((c) => `${getCardPlaceId(c)}:${String(c.name ?? "")}`)
+        .join("|");
+      return `v2_direct:${fp}`;
+    }
+    return stableRecommendations.length > 0 ? `s:${stableDeckFingerprint}` : `i:${incomingDeckFingerprint}`;
+  }, [
+    beautyV2HardMode,
+    listIncomingCards,
+    getCardPlaceId,
+    stableRecommendations.length,
+    stableDeckFingerprint,
+    incomingDeckFingerprint,
+  ]);
+
+  React.useLayoutEffect(() => {
+    const renderDeck = renderedCards.slice(0, RECOMMEND_DECK_SIZE);
+    const renderedCardsLog = renderDeck.map((x) => ({
+      name: x.name,
+      category: x.category,
+      categoryLabel: x.categoryLabel ?? null,
+    }));
+    console.log("[HAMA_RENDER_SOURCE]", {
+      beautyV2HardMode,
+      renderedSource,
+      renderedCards: renderedCardsLog,
+    });
+    console.log(
+      "[HAMA_RENDER_FINAL]",
+      renderDeck.map((x) => ({
+        name: x.name,
+        category: x.category,
+        categoryLabel: x.categoryLabel ?? null,
+      }))
+    );
+    if (renderDeck.length === 0 && recommendEngine !== "v2") return;
+    const finalCards = renderedCardsLog;
+    console.log("[HAMA_RECOMMEND_ENGINE_SELECTED]", {
+      engine: recommendEngine ?? "unset",
+      resultsSurface,
+      beautyUrlFinalGuard,
+      beautyV2HardMode,
+      renderedSource,
+      finalCards,
+    });
+    if (recommendEngine === "v2") {
+      console.log("[HAMA_V2_FINAL_RENDER]", { engine: "v2" as const, finalCards });
+    }
+  }, [
+    renderedCards,
+    renderedSource,
+    recommendEngine,
+    resultsSurface,
+    beautyUrlFinalGuard,
+    beautyV2HardMode,
+  ]);
 
   React.useEffect(() => {
-    const top = visibleRecommendations.slice(0, 3);
+    if (beautyV2HardMode === true) {
+      console.log("[HAMA_STABLE_BYPASSED]");
+      return;
+    }
+    const top = renderedCards.slice(0, 3);
     if (top.length === 0) return;
     const query = scenarioObject?.rawQuery?.trim() ?? "";
     const fp = top.map((c) => `${getCardPlaceId(c)}:${String(c.name ?? "")}`).join("|");
@@ -190,7 +302,7 @@ export function RecommendationList({
         },
       });
     });
-  }, [visibleRecommendations, scenarioObject, deckReasons, getCardPlaceId, resultsSurface]);
+  }, [beautyV2HardMode, renderedCards, scenarioObject, deckReasons, getCardPlaceId, resultsSurface]);
 
   React.useEffect(() => {
     return () => {
@@ -199,13 +311,18 @@ export function RecommendationList({
   }, [receiptPreviewUrl]);
 
   React.useEffect(() => {
-    if (cards.length === 0) {
+    if (beautyV2HardMode === true) {
+      console.log("[HAMA_STABLE_BYPASSED]");
+      return;
+    }
+
+    if (listIncomingCards.length === 0) {
       setStableRecommendations((prev) => (prev.length > 0 ? [] : prev));
       syncedIncomingFingerprintRef.current = "";
       return;
     }
 
-    const next = cards.slice(0, 3);
+    const next = listIncomingCards.slice(0, 3);
     const prevCtx = previousContextKeyRef.current;
     const contextChanged = prevCtx !== null && prevCtx !== contextKey;
 
@@ -257,7 +374,7 @@ export function RecommendationList({
         nextNames: next.map((x) => x.name),
       });
     }
-  }, [contextKey, incomingDeckFingerprint, cards, selectedPlaceId, getCardPlaceId]);
+  }, [beautyV2HardMode, contextKey, incomingDeckFingerprint, listIncomingCards, selectedPlaceId, getCardPlaceId]);
 
   React.useEffect(() => {
     console.log("[decision state]", { selectedPlaceId, selectedPlaceLogId });
@@ -265,45 +382,65 @@ export function RecommendationList({
   }, [selectedPlaceId, selectedPlaceLogId]);
 
   React.useEffect(() => {
+    if (beautyV2HardMode === true) {
+      console.log("[HAMA_STABLE_BYPASSED]");
+      return;
+    }
     console.log("[recommendation freeze]", {
       selectedPlaceId,
       selectedPlaceLogId,
       stableCount: stableRecommendations.length,
-      incomingCount: cards.length,
+      incomingCount: listIncomingCards.length,
       shouldIgnoreIncomingCards: !!selectedPlaceId,
     });
-  }, [selectedPlaceId, selectedPlaceLogId, stableRecommendations, cards.length]);
+  }, [beautyV2HardMode, selectedPlaceId, selectedPlaceLogId, stableRecommendations, listIncomingCards.length]);
 
   React.useEffect(() => {
+    if (beautyV2HardMode === true) {
+      console.log("[HAMA_STABLE_BYPASSED]");
+      return;
+    }
     console.log("[parent cards changed]", {
       contextKey,
-      incomingNames: cards.slice(0, 3).map((x) => x.name),
-      incomingCount: cards.length,
+      incomingNames: listIncomingCards.slice(0, 3).map((x) => x.name),
+      incomingCount: listIncomingCards.length,
       incomingFingerprint: incomingDeckFingerprint,
     });
-  }, [contextKey, cards, incomingDeckFingerprint]);
+  }, [beautyV2HardMode, contextKey, listIncomingCards, incomingDeckFingerprint]);
 
   React.useEffect(() => {
+    if (beautyV2HardMode === true) {
+      console.log("[HAMA_STABLE_BYPASSED]");
+      return;
+    }
     console.log("[recommendation context]", {
       contextKey,
       previousContextKey: previousContextKeyRef.current,
       selectedPlaceId,
-      incomingCount: cards.length,
+      incomingCount: listIncomingCards.length,
       stableCount: stableRecommendations.length,
     });
-  }, [contextKey, selectedPlaceId, cards.length, stableRecommendations.length]);
+  }, [beautyV2HardMode, contextKey, selectedPlaceId, listIncomingCards.length, stableRecommendations.length]);
 
   React.useEffect(() => {
-    const slice = stableRecommendations.length > 0 ? stableRecommendations : cards.slice(0, 3);
+    if (beautyV2HardMode === true) {
+      console.log("[HAMA_STABLE_BYPASSED]");
+      return;
+    }
+    const slice = stableRecommendations.length > 0 ? stableRecommendations : listIncomingCards.slice(0, 3);
     console.log("[recommendation visible]", {
       contextKey,
       names: slice.map((c) => c.name),
       source: stableRecommendations.length > 0 ? "stable" : "incoming",
     });
-  }, [contextKey, recommendationVisibleLogKey, stableRecommendations, cards]);
+  }, [beautyV2HardMode, contextKey, recommendationVisibleLogKey, stableRecommendations, listIncomingCards]);
 
   React.useEffect(() => {
-    const exposed = visibleRecommendations.slice(0, 3);
+    if (beautyV2HardMode === true) {
+      console.log("[HAMA_STABLE_BYPASSED]");
+      return;
+    }
+    const exposed = renderedCards.slice(0, 3);
     if (exposed.length === 0) return;
     const exposedIds = exposed
       .map((card) => getCardExposureId(card))
@@ -315,9 +452,13 @@ export function RecommendationList({
       exposedNames: exposed.map((card) => card.name),
       storageAfterSave,
     });
-  }, [recommendationVisibleLogKey, visibleRecommendations]);
+  }, [beautyV2HardMode, recommendationVisibleLogKey, renderedCards]);
 
   React.useEffect(() => {
+    if (beautyV2HardMode === true) {
+      console.log("[HAMA_STABLE_BYPASSED]");
+      return;
+    }
     console.log(
       "[stable cards]",
       stableRecommendations.map((c) => ({
@@ -326,14 +467,14 @@ export function RecommendationList({
         name: c.name,
       }))
     );
-  }, [stableRecommendations]);
+  }, [beautyV2HardMode, stableRecommendations]);
 
   const submitFeedback = (value: "like" | "neutral" | "dislike") => {
     if (!isLoggedIn) {
       onRequireLogin?.();
       return;
     }
-    const top = visibleRecommendations[0];
+    const top = renderedCards[0];
     if (!top) return;
     setFeedbackDone(value);
     setToast("감사합니다");
@@ -456,6 +597,7 @@ export function RecommendationList({
       setDecisionSavingPlaceId(null);
       setReceiptResult(null);
       setReceiptFile(null);
+      setVisitPlacePhotos([]);
       setVisitFeedbackTags([]);
       setVisitFeedbackText("");
       setReceiptPreviewUrl((prev) => {
@@ -496,20 +638,12 @@ export function RecommendationList({
       alert("선택 기록 저장 중이에요. 잠시 후 다시 눌러주세요.");
       return;
     }
-    const selectedCard = visibleRecommendations.find((card) => getCardPlaceId(card) === selectedPlaceId);
+    const selectedCard = renderedCards.find((card) => getCardPlaceId(card) === selectedPlaceId);
     const selectedPlaceName = selectedCard?.name?.trim() ?? "";
     if (!selectedPlaceName) {
       alert("선택한 매장 정보를 찾을 수 없어요. 다시 선택해 주세요.");
       return;
     }
-    console.log("[receipt verify submit]", {
-      storeId: selectedPlaceId,
-      storeName: selectedPlaceName,
-      isLoggedIn,
-      hasFile: Boolean(receiptFile),
-      hasText: Boolean(visitFeedbackText.trim()),
-      endpoint: "/api/beta/receipt-verify",
-    });
     try {
       setReceiptVerifying(true);
       setReceiptResult(null);
@@ -531,6 +665,9 @@ export function RecommendationList({
           fd.set("receipt_image", receiptFile);
           fd.set("feedback_tags", JSON.stringify(visitFeedbackTags));
           fd.set("feedback_text", visitFeedbackText.trim());
+          visitPlacePhotos.slice(0, 3).forEach((f, i) => {
+            fd.set(`visit_photo_${i}`, f);
+          });
           return fd;
         })(),
       });
@@ -539,18 +676,19 @@ export function RecommendationList({
         status?: string;
         message?: string;
         error?: string;
+        visit_photos?: { uploaded: number; failed: number };
       };
-      console.log("[receipt verify response]", {
-        ok: Boolean(json.ok),
-        status: res.status,
-        message: json.message ?? json.error ?? null,
-      });
       if (!res.ok || !json.ok) {
         setReceiptResult("인증 처리에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;
       }
       logEvent("receipt_verification_submitted", { source: "results", selected_place_id: selectedPlaceId });
-      setReceiptResult(json.message ?? "인증 제출 완료. 관리자 확인 후 참여 횟수에 반영돼요.");
+      let msg = json.message ?? "인증 제출 완료. 관리자 확인 후 참여 횟수에 반영돼요.";
+      const vp = json.visit_photos;
+      if (vp && vp.failed > 0) {
+        msg += " 사진 업로드에 실패한 항목이 있지만 인증은 정상 제출됐어요.";
+      }
+      setReceiptResult(msg);
       setVerificationSubmittedPlaceId(selectedPlaceId);
       setVerificationOpenPlaceId(null);
     } catch (e) {
@@ -565,6 +703,7 @@ export function RecommendationList({
     setSelectedPlaceId(null);
     setSelectedPlaceLogId(null);
     setReceiptFile(null);
+    setVisitPlacePhotos([]);
     setVisitFeedbackTags([]);
     setVisitFeedbackText("");
     setReceiptPreviewUrl((prev) => {
@@ -627,24 +766,45 @@ export function RecommendationList({
     if (!paymentSnapshot || visitFeedbackSaving) return;
     setVisitFeedbackSaving(true);
     try {
-      const reqBody = {
-        place_id: paymentSnapshot.placeId,
-        place_name: paymentSnapshot.placeName,
-        source: "hama_pay",
-        satisfaction: payload.satisfaction,
-        feedback_tags: Array.isArray(payload.feedback_tags) ? payload.feedback_tags : [],
-        memo: typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : null,
+      const visitPhotos = payload.visitPhotos?.length ? payload.visitPhotos.slice(0, 3) : [];
+      let res: Response;
+      if (visitPhotos.length > 0) {
+        const fd = new FormData();
+        fd.set("place_id", paymentSnapshot.placeId);
+        fd.set("place_name", paymentSnapshot.placeName);
+        fd.set("source", "hama_pay");
+        fd.set("satisfaction", payload.satisfaction);
+        fd.set(
+          "memo",
+          typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : ""
+        );
+        fd.set("feedback_tags", JSON.stringify(Array.isArray(payload.feedback_tags) ? payload.feedback_tags : []));
+        visitPhotos.forEach((f, i) => {
+          fd.set(`visit_photo_${i}`, f);
+        });
+        res = await fetch("/api/visit-feedback", { method: "POST", body: fd });
+      } else {
+        const reqBody = {
+          place_id: paymentSnapshot.placeId,
+          place_name: paymentSnapshot.placeName,
+          source: "hama_pay",
+          satisfaction: payload.satisfaction,
+          feedback_tags: Array.isArray(payload.feedback_tags) ? payload.feedback_tags : [],
+          memo: typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : null,
+        };
+        res = await fetch("/api/visit-feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(reqBody),
+        });
+      }
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        detail?: string;
+        visit_photos?: { uploaded: number; failed: number };
       };
-      console.log("[visit-feedback] request(results):", reqBody);
-      const res = await fetch("/api/visit-feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reqBody),
-      });
-      const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; detail?: string };
-      console.log("[visit-feedback] response(results):", { status: res.status, ...json });
       if (!res.ok || !json.ok) {
-        console.error("[visit-feedback] failed(results):", { status: res.status, ...json, reqBody });
         alert(`피드백 저장에 실패했어요.\n${json.error ?? "unknown_error"}${json.detail ? `: ${json.detail}` : ""}`);
         return;
       }
@@ -666,21 +826,35 @@ export function RecommendationList({
         satisfaction: payload.satisfaction,
         tags: payload.feedback_tags,
       });
-      console.log("visit_feedback_saved");
+      const vp = json.visit_photos;
+      let toastMsg = "방문 피드백 저장 완료";
+      if (vp && vp.failed > 0) {
+        toastMsg =
+          vp.uploaded > 0
+            ? "일부 사진 업로드에 실패했지만 피드백은 저장됐어요."
+            : "사진 업로드에 실패했지만 피드백은 제출할 수 있어요. 피드백은 저장됐어요.";
+      }
       setShowVisitFeedbackModal(false);
-      setToast("방문 피드백 저장 완료");
-      window.setTimeout(() => setToast(null), 1800);
-    } catch (e) {
-      console.error("[visit-feedback] failed", e);
+      setToast(toastMsg);
+      window.setTimeout(() => setToast(null), 2800);
+    } catch {
       alert("피드백 저장 중 오류가 발생했어요.");
     } finally {
       setVisitFeedbackSaving(false);
     }
   };
 
+  console.log("[HAMA_BEAUTY_V2_MODE]", {
+    beautyV2HardMode,
+    recommendEngine,
+    explicitCategory: explicitCategory ?? null,
+    explicitIntent: explicitIntent ?? null,
+    incomingCount: listIncomingCards.length,
+  });
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: space.card }}>
-      {visibleRecommendations.map((card, i) => {
+      {renderedCards.map((card, i) => {
         const cardPlaceId = getCardPlaceId(card);
         const shouldShowReceiptVerify = cardPlaceId === selectedPlaceId;
         const isVerificationExpanded = verificationOpenPlaceId === cardPlaceId;
@@ -706,11 +880,15 @@ export function RecommendationList({
                 cardName: card.name,
                 selectedPlaceId,
                 contextKey,
+                beautyV2HardMode,
+                renderedSource,
               });
-              console.log("[stableRecommendations before/after card click]", {
-                stableCount: stableRecommendations.length,
-                names: stableRecommendations.map((c) => c.name),
-              });
+              if (!beautyV2HardMode) {
+                console.log("[stableRecommendations before/after card click]", {
+                  stableCount: stableRecommendations.length,
+                  names: stableRecommendations.map((c) => c.name),
+                });
+              }
               if (selectedPlaceId && selectedPlaceId !== cardPlaceId) {
                 console.log("[card click after selection]", {
                   clickedPlaceId: cardPlaceId,
@@ -776,6 +954,7 @@ export function RecommendationList({
             verificationSubmitted={isVerificationSubmitted}
             receiptFileName={shouldShowReceiptVerify && receiptFile ? receiptFile.name : null}
             receiptPreviewUrl={shouldShowReceiptVerify ? receiptPreviewUrl : null}
+            visitPlacePhotoPreviewUrls={shouldShowReceiptVerify ? visitPlacePhotoPreviewUrls : []}
             visitFeedbackTags={shouldShowReceiptVerify ? visitFeedbackTags : []}
             visitFeedbackText={shouldShowReceiptVerify ? visitFeedbackText : ""}
             receiptVerifying={shouldShowReceiptVerify ? receiptVerifying : false}
@@ -787,6 +966,7 @@ export function RecommendationList({
                 return file ? URL.createObjectURL(file) : null;
               });
             }}
+            onVisitPlacePhotosChange={(files) => setVisitPlacePhotos(files)}
             onToggleVisitFeedbackTag={(tag) => {
               setVisitFeedbackTags((prev) =>
                 prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
@@ -892,7 +1072,7 @@ export function RecommendationList({
         </React.Fragment>
       );
       })}
-      {visibleRecommendations.length > 0 ? (
+      {renderedCards.length > 0 ? (
         <div
           style={{
             borderRadius: 999,
