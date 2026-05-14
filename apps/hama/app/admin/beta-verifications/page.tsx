@@ -131,21 +131,35 @@ export default function AdminBetaVerificationsPage() {
       });
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
+        success?: boolean;
         error?: string;
         detail?: string;
-        newVisitCount?: number;
-        counted?: boolean;
-        updatedVerification?: { id: string; status: string; matched: boolean };
+        details?: string;
+        status?: string;
+        visit_count?: number;
+        incremented?: boolean;
+        verificationId?: string;
       };
-      if (!res.ok || !json.ok) {
-        setMsg(`${action === "approve" ? "승인" : "거절"} 실패: ${json.error ?? "unknown"}`);
-        alert(`${action === "approve" ? "승인" : "거절"} 실패: ${json.error ?? "unknown"}`);
+
+      console.log("[HAMA_ADMIN_VERIFICATION_UPDATE_RESULT]", {
+        verificationId,
+        action,
+        httpOk: res.ok,
+        status: res.status,
+        json,
+      });
+
+      const httpOk = res.ok;
+      const businessOk = json.ok === true || json.success === true;
+      if (!httpOk || !businessOk) {
+        const errText = [json.error, json.detail, json.details].filter(Boolean).join(" · ") || "unknown";
+        setMsg(`${action === "approve" ? "승인" : "거절"} 실패: ${errText}`);
+        alert(`${action === "approve" ? "승인" : "거절"} 실패: ${errText}`);
         return;
       }
       setPending((prev) => prev.filter((item) => item.id !== verificationId));
-      setMsg(
-        `${action} 성공: pending 목록에서 제거됨 · visit_count: ${json.newVisitCount ?? "-"}`
-      );
+      const vc = typeof json.visit_count === "number" ? json.visit_count : "-";
+      setMsg(`${action} 성공: pending 목록에서 제거됨 · visit_count: ${vc}`);
       await load();
       router.refresh();
     } catch {
