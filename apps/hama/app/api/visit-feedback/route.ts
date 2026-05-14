@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
 import { resolveUserIdFromRequest } from "@/lib/server/userResolver";
 import {
+  formHasVisitPhotoKeys,
   parseVisitPhotoFilesFromForm,
   persistVisitPlacePhotos,
 } from "@/lib/server/visitPlacePhotoUpload";
+import { shouldDiagVisitPhoto } from "@/lib/visitPhotoDiag";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,6 +41,20 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ ok: false, error: "invalid_form_data" }, { status: 400 });
     }
+
+    if (shouldDiagVisitPhoto()) {
+      const vp0 = form.get("visit_photo_0");
+      const b0 = vp0 instanceof Blob ? vp0 : null;
+      console.log("[HAMA_VISIT_PHOTO_SERVER_FORMDATA]", {
+        route: "visit-feedback",
+        keys: Array.from(form.keys()),
+        hasVisitPhoto0: form.has("visit_photo_0"),
+        visitPhoto0Type: vp0?.constructor?.name,
+        visitPhoto0Size: b0?.size ?? null,
+        visitPhoto0Mime: b0?.type ?? null,
+      });
+    }
+
     const userId = await resolveUserIdFromRequest(req, String(form.get("user_id") ?? "").trim() || null);
     if (!userId) {
       return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
@@ -57,7 +73,7 @@ export async function POST(req: NextRequest) {
     const tagsRaw = form.get("feedback_tags");
     const tags =
       typeof tagsRaw === "string" ? parseFeedbackTagsFromString(tagsRaw) : [];
-    const visitFiles = parseVisitPhotoFilesFromForm(form);
+    const { parts: visitPhotoParts, errors: visitPhotoParseErrors } = parseVisitPhotoFilesFromForm(form);
 
     if (!placeId) {
       return NextResponse.json({ ok: false, error: "place_id_required" }, { status: 400 });
@@ -84,9 +100,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: "insert_failed", detail: error.message }, { status: 200 });
       }
       const vfId = data?.id ? String(data.id) : null;
-      let visitPhotos = { uploaded: 0, failed: 0 };
-      if (vfId && visitFiles.length > 0) {
-        visitPhotos = await persistVisitPlacePhotos(supabase, visitFiles, {
+      const visitPhotoPersistErrors: string[] = [];
+      let visitUploaded = 0;
+      if (vfId && visitPhotoParts.length > 0) {
+        const r = await persistVisitPlacePhotos(supabase, visitPhotoParts, {
           userId,
           storeId: placeId,
           storeName: placeName,
@@ -94,8 +111,36 @@ export async function POST(req: NextRequest) {
           visitFeedbackId: vfId,
           source: "visit_feedback",
         });
+        visitUploaded = r.uploaded;
+        visitPhotoPersistErrors.push(...r.errors);
       }
-      return NextResponse.json({ ok: true, visit_photos: visitPhotos });
+
+      const visitPhotoOrphanNote: string[] = [];
+      if (formHasVisitPhotoKeys(form) && visitPhotoParts.length === 0 && visitPhotoParseErrors.length === 0) {
+        visitPhotoOrphanNote.push(
+          "visit_photo_* 키는 있으나 유효한 이미지 Blob을 읽지 못했습니다. 브라우저·프록시에서 multipart가 변형됐는지 확인해 주세요."
+        );
+      }
+
+      const visitErrors = [...visitPhotoParseErrors, ...visitPhotoPersistErrors, ...visitPhotoOrphanNote];
+      const visit_photosBase = {
+        uploaded: visitUploaded,
+        failed: visitErrors.length,
+        errors: visitErrors,
+      };
+      const visit_photos = shouldDiagVisitPhoto()
+        ? {
+            ...visit_photosBase,
+            debug: {
+              formKeys: Array.from(form.keys()),
+              parsedPhotoCount: visitPhotoParts.length,
+              uploadAttempted: Boolean(vfId && visitPhotoParts.length > 0),
+              insertedRows: visitUploaded,
+            },
+          }
+        : visit_photosBase;
+
+      return NextResponse.json({ ok: true, visit_photos });
     } catch {
       return NextResponse.json({ ok: false, error: "unexpected_error" }, { status: 500 });
     }
@@ -150,7 +195,7 @@ export async function POST(req: NextRequest) {
     if (error) {
       return NextResponse.json({ ok: false, error: "insert_failed", detail: error.message }, { status: 200 });
     }
-    return NextResponse.json({ ok: true, visit_photos: { uploaded: 0, failed: 0 } });
+    return NextResponse.json({ ok: true, visit_photos: { uploaded: 0, failed: 0, errors: [] as string[] } });
   } catch {
     return NextResponse.json({ ok: false, error: "unexpected_error" }, { status: 500 });
   }

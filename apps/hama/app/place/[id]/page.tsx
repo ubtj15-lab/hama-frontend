@@ -24,7 +24,8 @@ import { ReservationSummaryCard } from "@/_components/reservation/ReservationSum
 import { getReservationPreviewForStore } from "@/lib/reservation/bookingDummy";
 import { buildReserveQueryFromPlace } from "@/lib/reservation/buildReserveSearchParams";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
-import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT } from "@/lib/visitPlacePhotoClient";
+import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT, appendHamaUserIdToFormData } from "@/lib/visitPlacePhotoClient";
+import { shouldDiagVisitPhoto } from "@/lib/visitPhotoDiag";
 import { SHOW_RESERVATION_UI } from "@/lib/reservationUiFlags";
 
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
@@ -293,22 +294,40 @@ export default function PlaceDetailPage() {
       const res = await fetch("/api/beta/receipt-verify", {
         method: "POST",
         body: (() => {
+          const selectedVisitPhotos = betaVisitPlacePhotos.slice(0, 3);
+          const selectedPhotoCount = selectedVisitPhotos.length;
+          if (shouldDiagVisitPhoto()) {
+            console.log("[HAMA_VISIT_PHOTO_CLIENT_DEBUG]", {
+              context: "receipt_verify_place_detail",
+              selectedPhotoCount,
+              files: selectedVisitPhotos.map((f) => ({
+                name: f.name,
+                type: f.type,
+                size: f.size,
+              })),
+              formKeysBeforeBuild: [] as string[],
+            });
+          }
           const fd = new FormData();
+          appendHamaUserIdToFormData(fd);
           fd.set("selected_place_log_id", logId);
           fd.set("receipt_place_name", card.name);
           fd.set("receipt_image", betaReceiptFile);
           fd.set("feedback_tags", JSON.stringify(betaFeedbackTags));
           fd.set("feedback_text", betaFeedbackText.trim());
-          betaVisitPlacePhotos.slice(0, 3).forEach((f, i) => {
+          selectedVisitPhotos.forEach((f, i) => {
             fd.set(`visit_photo_${i}`, f);
           });
+          if (shouldDiagVisitPhoto()) {
+            console.log("[HAMA_VISIT_PHOTO_FORMDATA_KEYS]", Array.from(fd.keys()));
+          }
           return fd;
         })(),
       });
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         message?: string;
-        visit_photos?: { uploaded: number; failed: number };
+        visit_photos?: { uploaded: number; failed: number; errors?: string[] };
       };
       if (!res.ok || !json.ok) {
         setBetaMessage("인증 제출에 실패했어요. 잠시 후 다시 시도해 주세요.");
@@ -320,8 +339,8 @@ export default function PlaceDetailPage() {
       setBetaVisitPlacePhotos([]);
       let msg = json.message ?? "인증이 제출됐어요. 관리자가 확인 후 참여 횟수에 반영돼요.";
       const vp = json.visit_photos;
-      if (vp && vp.failed > 0) {
-        msg += " 사진 업로드에 실패한 항목이 있지만 인증은 정상 제출됐어요.";
+      if (vp && (vp.failed > 0 || (Array.isArray(vp.errors) && vp.errors.length > 0))) {
+        msg = "영수증 인증은 완료됐지만 사진 업로드에 실패했어요.";
       }
       setBetaMessage(msg);
     } catch {
@@ -338,7 +357,22 @@ export default function PlaceDetailPage() {
       const visitPhotos = payload.visitPhotos?.length ? payload.visitPhotos.slice(0, 3) : [];
       let res: Response;
       if (visitPhotos.length > 0) {
+        const selectedVisitPhotos = visitPhotos;
+        const selectedPhotoCount = selectedVisitPhotos.length;
+        if (shouldDiagVisitPhoto()) {
+          console.log("[HAMA_VISIT_PHOTO_CLIENT_DEBUG]", {
+            context: "visit_feedback_place_detail",
+            selectedPhotoCount,
+            files: selectedVisitPhotos.map((f) => ({
+              name: f.name,
+              type: f.type,
+              size: f.size,
+            })),
+            formKeysBeforeBuild: [] as string[],
+          });
+        }
         const fd = new FormData();
+        appendHamaUserIdToFormData(fd);
         fd.set("place_id", card.id);
         fd.set("place_name", card.name);
         fd.set("source", "hama_pay");
@@ -348,9 +382,12 @@ export default function PlaceDetailPage() {
           typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : ""
         );
         fd.set("feedback_tags", JSON.stringify(Array.isArray(payload.feedback_tags) ? payload.feedback_tags : []));
-        visitPhotos.forEach((f, i) => {
+        selectedVisitPhotos.forEach((f, i) => {
           fd.set(`visit_photo_${i}`, f);
         });
+        if (shouldDiagVisitPhoto()) {
+          console.log("[HAMA_VISIT_PHOTO_FORMDATA_KEYS]", Array.from(fd.keys()));
+        }
         res = await fetch("/api/visit-feedback", { method: "POST", body: fd });
       } else {
         const reqBody = {
@@ -371,7 +408,7 @@ export default function PlaceDetailPage() {
         ok?: boolean;
         error?: string;
         detail?: string;
-        visit_photos?: { uploaded: number; failed: number };
+        visit_photos?: { uploaded: number; failed: number; errors?: string[] };
       };
       if (!res.ok || !json.ok) {
         alert(`피드백 저장에 실패했어요.\n${json.error ?? "unknown_error"}${json.detail ? `: ${json.detail}` : ""}`);
@@ -385,7 +422,7 @@ export default function PlaceDetailPage() {
         tags: payload.feedback_tags,
       });
       const vp = json.visit_photos;
-      if (vp && vp.failed > 0) {
+      if (vp && (vp.failed > 0 || (Array.isArray(vp.errors) && vp.errors.length > 0))) {
         alert(
           vp.uploaded > 0
             ? "일부 사진 업로드에 실패했지만 피드백은 저장됐어요."

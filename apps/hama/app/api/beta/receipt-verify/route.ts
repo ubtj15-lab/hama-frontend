@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
 import { resolveUserIdFromRequest } from "@/lib/server/userResolver";
 import {
+  formHasVisitPhotoKeys,
   parseVisitPhotoFilesFromForm,
   persistVisitPlacePhotos,
 } from "@/lib/server/visitPlacePhotoUpload";
+import { shouldDiagVisitPhoto } from "@/lib/visitPhotoDiag";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -53,6 +55,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "invalid_form_data" }, { status: 400 });
   }
 
+  if (shouldDiagVisitPhoto()) {
+    const vp0 = form.get("visit_photo_0");
+    const b0 = vp0 instanceof Blob ? vp0 : null;
+    console.log("[HAMA_VISIT_PHOTO_SERVER_FORMDATA]", {
+      route: "receipt-verify",
+      keys: Array.from(form.keys()),
+      hasVisitPhoto0: form.has("visit_photo_0"),
+      visitPhoto0Type: vp0?.constructor?.name,
+      visitPhoto0Size: b0?.size ?? null,
+      visitPhoto0Mime: b0?.type ?? null,
+    });
+  }
+
   const userId = await resolveUserIdFromRequest(req, String(form.get("user_id") ?? "").trim() || null);
   if (!userId) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
@@ -67,7 +82,7 @@ export async function POST(req: NextRequest) {
     typeof feedbackTextRaw === "string" && feedbackTextRaw.trim().length > 0
       ? feedbackTextRaw.trim().slice(0, 500)
       : null;
-  const visitPhotoFiles = parseVisitPhotoFilesFromForm(form);
+  const { parts: visitPhotoParts, errors: visitPhotoParseErrors } = parseVisitPhotoFilesFromForm(form);
 
   if (!selectedPlaceLogId) {
     return NextResponse.json({ ok: false, error: "selected_place_log_id_required" }, { status: 400 });
@@ -75,7 +90,7 @@ export async function POST(req: NextRequest) {
   if (!receiptPlaceName) {
     return NextResponse.json({ ok: false, error: "receipt_place_name_required" }, { status: 400 });
   }
-  if (!(receiptImage instanceof File)) {
+  if (!(receiptImage instanceof Blob) || receiptImage.size <= 0) {
     return NextResponse.json({ ok: false, error: "receipt_image_required" }, { status: 400 });
   }
   if (!ALLOWED_MIME.has(receiptImage.type)) {
@@ -153,9 +168,11 @@ export async function POST(req: NextRequest) {
     }
 
     const verificationId = inserted.data?.id ? String(inserted.data.id) : null;
-    let visitPhotos = { uploaded: 0, failed: 0 };
-    if (verificationId && visitPhotoFiles.length > 0) {
-      visitPhotos = await persistVisitPlacePhotos(supabase, visitPhotoFiles, {
+
+    const visitPhotoPersistErrors: string[] = [];
+    let visitUploaded = 0;
+    if (verificationId && visitPhotoParts.length > 0) {
+      const r = await persistVisitPlacePhotos(supabase, visitPhotoParts, {
         userId,
         storeId: String(selected.place_id ?? ""),
         storeName: receiptPlaceName,
@@ -163,7 +180,34 @@ export async function POST(req: NextRequest) {
         visitFeedbackId: null,
         source: "receipt_verification",
       });
+      visitUploaded = r.uploaded;
+      visitPhotoPersistErrors.push(...r.errors);
     }
+
+    const visitPhotoOrphanNote: string[] = [];
+    if (formHasVisitPhotoKeys(form) && visitPhotoParts.length === 0 && visitPhotoParseErrors.length === 0) {
+      visitPhotoOrphanNote.push(
+        "visit_photo_* 키는 있으나 유효한 이미지 Blob을 읽지 못했습니다. 브라우저·프록시에서 multipart가 변형됐는지 확인해 주세요."
+      );
+    }
+
+    const visitErrors = [...visitPhotoParseErrors, ...visitPhotoPersistErrors, ...visitPhotoOrphanNote];
+    const visit_photosBase = {
+      uploaded: visitUploaded,
+      failed: visitErrors.length,
+      errors: visitErrors,
+    };
+    const visit_photos = shouldDiagVisitPhoto()
+      ? {
+          ...visit_photosBase,
+          debug: {
+            formKeys: Array.from(form.keys()),
+            parsedPhotoCount: visitPhotoParts.length,
+            uploadAttempted: Boolean(verificationId && visitPhotoParts.length > 0),
+            insertedRows: visitUploaded,
+          },
+        }
+      : visit_photosBase;
 
     return NextResponse.json({
       ok: true,
@@ -172,7 +216,7 @@ export async function POST(req: NextRequest) {
       selected_place: selected,
       selected_place_log_id: selectedPlaceLogId,
       message: "인증이 제출됐어요. 관리자가 확인 후 참여 횟수에 반영돼요.",
-      visit_photos: visitPhotos,
+      visit_photos,
     });
   } catch {
     return NextResponse.json({ ok: false, error: "unexpected_error" }, { status: 500 });

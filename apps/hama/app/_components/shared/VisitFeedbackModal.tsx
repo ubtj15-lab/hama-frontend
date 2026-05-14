@@ -26,6 +26,9 @@ type Props = {
   onSubmit: (payload: VisitFeedbackPayload) => Promise<void> | void;
   submitting?: boolean;
   placeName?: string | null;
+  /** 둘 다 주면 상위가 방문 사진 단일 소스 (RecommendationList 등) */
+  visitPhotos?: File[];
+  onVisitPhotosChange?: (files: File[]) => void;
 };
 
 export default function VisitFeedbackModal({
@@ -34,28 +37,51 @@ export default function VisitFeedbackModal({
   onSubmit,
   submitting = false,
   placeName,
+  visitPhotos: visitPhotosFromParent,
+  onVisitPhotosChange,
 }: Props) {
   const [satisfaction, setSatisfaction] = React.useState<VisitSatisfaction | null>(null);
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
   const [memoText, setMemoText] = React.useState("");
-  const [visitPhotos, setVisitPhotos] = React.useState<File[]>([]);
+  const [internalVisitPhotos, setInternalVisitPhotos] = React.useState<File[]>([]);
   const [visitPhotoPreviewUrls, setVisitPhotoPreviewUrls] = React.useState<string[]>([]);
+
+  const isVisitPhotosControlled =
+    visitPhotosFromParent !== undefined && onVisitPhotosChange !== undefined;
+  const effectiveVisitPhotos = isVisitPhotosControlled ? visitPhotosFromParent! : internalVisitPhotos;
+
+  const setEffectiveVisitPhotos = React.useCallback(
+    (files: File[]) => {
+      if (isVisitPhotosControlled) {
+        onVisitPhotosChange!(files);
+      } else {
+        console.log("[HAMA_VISIT_PHOTO_SETTER]", {
+          nextLength: files.length,
+          files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+        });
+        setInternalVisitPhotos(files);
+      }
+    },
+    [isVisitPhotosControlled, onVisitPhotosChange]
+  );
 
   React.useEffect(() => {
     if (!open) return;
     setSatisfaction(null);
     setSelectedTags([]);
     setMemoText("");
-    setVisitPhotos([]);
-  }, [open]);
+    if (!isVisitPhotosControlled) {
+      setInternalVisitPhotos([]);
+    }
+  }, [open, isVisitPhotosControlled]);
 
   React.useEffect(() => {
-    const urls = visitPhotos.map((f) => URL.createObjectURL(f));
+    const urls = effectiveVisitPhotos.map((f) => URL.createObjectURL(f));
     setVisitPhotoPreviewUrls(urls);
     return () => {
       urls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [visitPhotos]);
+  }, [effectiveVisitPhotos]);
 
   if (!open) return null;
 
@@ -165,11 +191,20 @@ export default function VisitFeedbackModal({
           </div>
           <input
             type="file"
+            name="visit_place_photos"
             accept={VISIT_PLACE_PHOTO_ACCEPT}
             multiple
             onChange={(e) => {
+              console.log("[HAMA_FILE_INPUT_ONCHANGE]", {
+                fileCount: e.currentTarget.files?.length ?? 0,
+                files: Array.from(e.currentTarget.files ?? []).map((f) => ({
+                  name: f.name,
+                  type: f.type,
+                  size: f.size,
+                })),
+              });
               const picked = pickVisitPlacePhotosFromFileList(e.currentTarget.files);
-              setVisitPhotos(picked);
+              setEffectiveVisitPhotos(picked);
               e.currentTarget.value = "";
             }}
             style={{ fontSize: 13 }}
@@ -219,7 +254,7 @@ export default function VisitFeedbackModal({
                 satisfaction,
                 feedback_tags: selectedTags,
                 memo: memoText.trim() || null,
-                visitPhotos: visitPhotos.length > 0 ? visitPhotos : undefined,
+                visitPhotos: effectiveVisitPhotos.length > 0 ? effectiveVisitPhotos : undefined,
               };
               void onSubmit(submitPayload);
             }}

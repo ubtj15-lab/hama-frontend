@@ -95,13 +95,14 @@ type Props = {
   verificationSubmitted?: boolean;
   receiptFileName?: string | null;
   receiptPreviewUrl?: string | null;
-  visitPlacePhotoPreviewUrls?: string[];
+  /** 방문 사진 — 제출 주체(RecommendationList)와 동일 배열을 쓰도록 상위에서 전달 */
+  visitPhotos?: File[];
   visitFeedbackTags?: string[];
   visitFeedbackText?: string;
   receiptVerifying?: boolean;
   receiptResult?: string | null;
   onReceiptFileChange?: (file: File | null) => void;
-  onVisitPlacePhotosChange?: (files: File[]) => void;
+  onVisitPhotosChange?: (files: File[]) => void;
   onToggleVisitFeedbackTag?: (tag: string) => void;
   onVisitFeedbackTextChange?: (value: string) => void;
   onToggleVerification?: (e: React.MouseEvent<HTMLButtonElement>) => void;
@@ -128,13 +129,13 @@ export function RecommendationCard({
   verificationSubmitted = false,
   receiptFileName = null,
   receiptPreviewUrl = null,
-  visitPlacePhotoPreviewUrls = [],
+  visitPhotos = [],
   visitFeedbackTags = [],
   visitFeedbackText = "",
   receiptVerifying = false,
   receiptResult = null,
   onReceiptFileChange,
-  onVisitPlacePhotosChange,
+  onVisitPhotosChange,
   onToggleVisitFeedbackTag,
   onVisitFeedbackTextChange,
   onToggleVerification,
@@ -154,6 +155,15 @@ export function RecommendationCard({
   const isTop = rankOrder === 1;
   const [postVisitOpen, setPostVisitOpen] = useState(false);
   const [reasonShimmerActive, setReasonShimmerActive] = useState(true);
+  const [visitPhotoPreviewUrls, setVisitPhotoPreviewUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    const urls = visitPhotos.map((f) => URL.createObjectURL(f));
+    setVisitPhotoPreviewUrls(urls);
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [visitPhotos]);
 
   useEffect(() => {
     if (selected && showVisitVerification) {
@@ -674,12 +684,21 @@ export function RecommendationCard({
                   </div>
                   <input
                     type="file"
+                    name="visit_place_photos"
                     accept={VISIT_PLACE_PHOTO_ACCEPT}
                     multiple
                     onChange={(e) => {
+                      console.log("[HAMA_FILE_INPUT_ONCHANGE]", {
+                        fileCount: e.currentTarget.files?.length ?? 0,
+                        files: Array.from(e.currentTarget.files ?? []).map((f) => ({
+                          name: f.name,
+                          type: f.type,
+                          size: f.size,
+                        })),
+                      });
                       const list = e.currentTarget.files;
                       const picked = pickVisitPlacePhotosFromFileList(list);
-                      onVisitPlacePhotosChange?.(picked);
+                      onVisitPhotosChange?.(picked);
                       e.currentTarget.value = "";
                     }}
                     onClick={(e) => {
@@ -687,9 +706,9 @@ export function RecommendationCard({
                     }}
                     style={{ width: "100%", maxWidth: 360 }}
                   />
-                  {visitPlacePhotoPreviewUrls.length > 0 ? (
+                  {visitPhotoPreviewUrls.length > 0 ? (
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {visitPlacePhotoPreviewUrls.map((url) => (
+                      {visitPhotoPreviewUrls.map((url) => (
                         <img
                           key={url}
                           src={url}

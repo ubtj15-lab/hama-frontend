@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
 
+export const dynamic = "force-dynamic";
+
 type HomeTabKey = "all" | "restaurant" | "cafe" | "salon" | "activity" | "museum" | "fitness" | "life";
 
 type StoreUpsert = {

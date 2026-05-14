@@ -13,6 +13,8 @@ import { extractSituationTags } from "@/lib/extractSituationTags";
 import { HamaEventNames } from "@/lib/hamaEventNames";
 import { inferDirectionsProvider } from "@/lib/inferDirectionsProvider";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
+import { appendHamaUserIdToFormData } from "@/lib/visitPlacePhotoClient";
+import { shouldDiagVisitPhoto } from "@/lib/visitPhotoDiag";
 import { getCardExposureId, saveRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
 import { RECOMMEND_DECK_SIZE } from "@/lib/recommend/recommendConstants";
 import { passesBeautyIndustryWhitelist, passesCultureIndustryWhitelist } from "@/lib/hamaResultCategoryCanonical";
@@ -20,6 +22,14 @@ import { passesBeautyIndustryWhitelist, passesCultureIndustryWhitelist } from "@
 /** 예약 CTA는 `@/lib/reservationUiFlags`의 SHOW_RESERVATION_UI로 제어. 이 리스트에는 예약 전용 UI 없음. */
 
 const ENABLE_HAMA_PAY_UI = process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY === "true";
+
+function logVisitPhotoState(label: string, files: File[]) {
+  console.log("[HAMA_VISIT_PHOTO_STATE]", {
+    label,
+    selectedVisitPhotosLength: files.length,
+    files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+  });
+}
 
 /** 결과 리스트 실제 픽셀 출처 — 뷰티 v2 하드 모드는 항상 v2_direct */
 export type RecommendationRenderedSource =
@@ -134,8 +144,7 @@ export function RecommendationList({
   const [decisionSavingPlaceId, setDecisionSavingPlaceId] = React.useState<string | null>(null);
   const [receiptFile, setReceiptFile] = React.useState<File | null>(null);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = React.useState<string | null>(null);
-  const [visitPlacePhotos, setVisitPlacePhotos] = React.useState<File[]>([]);
-  const [visitPlacePhotoPreviewUrls, setVisitPlacePhotoPreviewUrls] = React.useState<string[]>([]);
+  const [selectedVisitPhotos, setSelectedVisitPhotos] = React.useState<File[]>([]);
   const [visitFeedbackTags, setVisitFeedbackTags] = React.useState<string[]>([]);
   const [visitFeedbackText, setVisitFeedbackText] = React.useState("");
   const [receiptVerifying, setReceiptVerifying] = React.useState(false);
@@ -143,6 +152,22 @@ export function RecommendationList({
   const [verificationOpenPlaceId, setVerificationOpenPlaceId] = React.useState<string | null>(null);
   const [verificationSubmittedPlaceId, setVerificationSubmittedPlaceId] = React.useState<string | null>(null);
   const [showQuickFeedback, setShowQuickFeedback] = React.useState(false);
+
+  const applySelectedVisitPhotos = React.useCallback((next: File[]) => {
+    console.log("[HAMA_VISIT_PHOTO_SETTER]", {
+      nextLength: next.length,
+      files: next.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+    });
+    setSelectedVisitPhotos(next);
+  }, []);
+
+  React.useEffect(() => {
+    console.log("[HAMA_VISIT_PHOTO_STATE_CHANGED]", {
+      selectedVisitPhotosLength: selectedVisitPhotos.length,
+      files: selectedVisitPhotos.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+    });
+  }, [selectedVisitPhotos]);
+
   const listIncomingCards = React.useMemo(() => {
     if (beautyUrlFinalGuard) return cards.filter((c) => passesBeautyIndustryWhitelist(c));
     if (cultureUrlFinalGuard) return cards.filter((c) => passesCultureIndustryWhitelist(c));
@@ -164,14 +189,6 @@ export function RecommendationList({
   }, [beautyV2HardMode, listIncomingCards, stableRecommendations]);
 
   const deckReasons = useDeckRecommendationReasons(renderedCards, scenarioObject);
-
-  React.useEffect(() => {
-    const urls = visitPlacePhotos.map((f) => URL.createObjectURL(f));
-    setVisitPlacePhotoPreviewUrls(urls);
-    return () => {
-      urls.forEach((u) => URL.revokeObjectURL(u));
-    };
-  }, [visitPlacePhotos]);
 
   const incomingTop3 = React.useMemo(() => listIncomingCards.slice(0, 3), [listIncomingCards]);
   const incomingDeckFingerprint = React.useMemo(
@@ -541,6 +558,7 @@ export function RecommendationList({
     setSelectedPlaceLogId(null);
     setVerificationOpenPlaceId(null);
     setVerificationSubmittedPlaceId(null);
+    let decisionSucceeded = false;
     try {
       setDecisionSavingPlaceId(card.id);
       const res = await fetch("/api/beta/decision", {
@@ -566,6 +584,7 @@ export function RecommendationList({
       if (!res.ok || !json.ok) {
         alert("선택 저장에 실패했어요. 잠시 후 다시 시도해 주세요.");
       } else {
+        decisionSucceeded = true;
         const logIdRaw = json.selected_place_log_id ?? json.selectedPlaceLogId ?? null;
         const logId = typeof logIdRaw === "string" ? logIdRaw : null;
         setSelectedPlaceLogId(logId);
@@ -597,9 +616,10 @@ export function RecommendationList({
       alert("선택 저장 중 오류가 발생했어요.");
     } finally {
       setDecisionSavingPlaceId(null);
+    }
+    if (!decisionSucceeded) {
       setReceiptResult(null);
       setReceiptFile(null);
-      setVisitPlacePhotos([]);
       setVisitFeedbackTags([]);
       setVisitFeedbackText("");
       setReceiptPreviewUrl((prev) => {
@@ -661,15 +681,37 @@ export function RecommendationList({
       const res = await fetch("/api/beta/receipt-verify", {
         method: "POST",
         body: (() => {
+          const visitPhotosForSubmit = selectedVisitPhotos.slice(0, 3);
+          logVisitPhotoState("receipt_verify_before_submit", visitPhotosForSubmit);
+          const selectedPhotoCount = visitPhotosForSubmit.length;
+          if (shouldDiagVisitPhoto()) {
+            console.log("[HAMA_VISIT_PHOTO_CLIENT_DEBUG]", {
+              context: "receipt_verify_results",
+              selectedPhotoCount,
+              files: visitPhotosForSubmit.map((f) => ({
+                name: f.name,
+                type: f.type,
+                size: f.size,
+              })),
+              formKeysBeforeBuild: [] as string[],
+            });
+          }
           const fd = new FormData();
+          appendHamaUserIdToFormData(fd);
           fd.set("selected_place_log_id", selectedPlaceLogId);
           fd.set("receipt_place_name", selectedPlaceName);
           fd.set("receipt_image", receiptFile);
           fd.set("feedback_tags", JSON.stringify(visitFeedbackTags));
           fd.set("feedback_text", visitFeedbackText.trim());
-          visitPlacePhotos.slice(0, 3).forEach((f, i) => {
-            fd.set(`visit_photo_${i}`, f);
-          });
+          if (visitPhotosForSubmit.length > 0) {
+            console.log("[HAMA_VISIT_PHOTO_APPEND_LOOP]", { count: visitPhotosForSubmit.length });
+            visitPhotosForSubmit.forEach((file, i) => {
+              fd.append(`visit_photo_${i}`, file);
+            });
+          }
+          if (shouldDiagVisitPhoto()) {
+            console.log("[HAMA_VISIT_PHOTO_FORMDATA_KEYS]", Array.from(fd.keys()));
+          }
           return fd;
         })(),
       });
@@ -678,7 +720,7 @@ export function RecommendationList({
         status?: string;
         message?: string;
         error?: string;
-        visit_photos?: { uploaded: number; failed: number };
+        visit_photos?: { uploaded: number; failed: number; errors?: string[] };
       };
       if (!res.ok || !json.ok) {
         setReceiptResult("인증 처리에 실패했어요. 잠시 후 다시 시도해 주세요.");
@@ -687,12 +729,13 @@ export function RecommendationList({
       logEvent("receipt_verification_submitted", { source: "results", selected_place_id: selectedPlaceId });
       let msg = json.message ?? "인증 제출 완료. 관리자 확인 후 참여 횟수에 반영돼요.";
       const vp = json.visit_photos;
-      if (vp && vp.failed > 0) {
-        msg += " 사진 업로드에 실패한 항목이 있지만 인증은 정상 제출됐어요.";
+      if (vp && (vp.failed > 0 || (Array.isArray(vp.errors) && vp.errors.length > 0))) {
+        msg = "영수증 인증은 완료됐지만 사진 업로드에 실패했어요.";
       }
       setReceiptResult(msg);
       setVerificationSubmittedPlaceId(selectedPlaceId);
       setVerificationOpenPlaceId(null);
+      setSelectedVisitPhotos([]);
     } catch (e) {
       console.error("[receipt verify] failed", e);
       setReceiptResult("인증 중 오류가 발생했어요.");
@@ -705,7 +748,7 @@ export function RecommendationList({
     setSelectedPlaceId(null);
     setSelectedPlaceLogId(null);
     setReceiptFile(null);
-    setVisitPlacePhotos([]);
+    setSelectedVisitPhotos([]);
     setVisitFeedbackTags([]);
     setVisitFeedbackText("");
     setReceiptPreviewUrl((prev) => {
@@ -771,7 +814,23 @@ export function RecommendationList({
       const visitPhotos = payload.visitPhotos?.length ? payload.visitPhotos.slice(0, 3) : [];
       let res: Response;
       if (visitPhotos.length > 0) {
+        const visitPhotosForSubmit = visitPhotos;
+        logVisitPhotoState("visit_feedback_before_submit", visitPhotosForSubmit);
+        const selectedPhotoCount = visitPhotosForSubmit.length;
+        if (shouldDiagVisitPhoto()) {
+          console.log("[HAMA_VISIT_PHOTO_CLIENT_DEBUG]", {
+            context: "visit_feedback_results",
+            selectedPhotoCount,
+            files: visitPhotosForSubmit.map((f) => ({
+              name: f.name,
+              type: f.type,
+              size: f.size,
+            })),
+            formKeysBeforeBuild: [] as string[],
+          });
+        }
         const fd = new FormData();
+        appendHamaUserIdToFormData(fd);
         fd.set("place_id", paymentSnapshot.placeId);
         fd.set("place_name", paymentSnapshot.placeName);
         fd.set("source", "hama_pay");
@@ -781,9 +840,13 @@ export function RecommendationList({
           typeof payload.memo === "string" && payload.memo.trim().length > 0 ? payload.memo.trim() : ""
         );
         fd.set("feedback_tags", JSON.stringify(Array.isArray(payload.feedback_tags) ? payload.feedback_tags : []));
-        visitPhotos.forEach((f, i) => {
-          fd.set(`visit_photo_${i}`, f);
+        console.log("[HAMA_VISIT_PHOTO_APPEND_LOOP]", { count: visitPhotosForSubmit.length });
+        visitPhotosForSubmit.forEach((file, i) => {
+          fd.append(`visit_photo_${i}`, file);
         });
+        if (shouldDiagVisitPhoto()) {
+          console.log("[HAMA_VISIT_PHOTO_FORMDATA_KEYS]", Array.from(fd.keys()));
+        }
         res = await fetch("/api/visit-feedback", { method: "POST", body: fd });
       } else {
         const reqBody = {
@@ -804,7 +867,7 @@ export function RecommendationList({
         ok?: boolean;
         error?: string;
         detail?: string;
-        visit_photos?: { uploaded: number; failed: number };
+        visit_photos?: { uploaded: number; failed: number; errors?: string[] };
       };
       if (!res.ok || !json.ok) {
         alert(`피드백 저장에 실패했어요.\n${json.error ?? "unknown_error"}${json.detail ? `: ${json.detail}` : ""}`);
@@ -830,13 +893,14 @@ export function RecommendationList({
       });
       const vp = json.visit_photos;
       let toastMsg = "방문 피드백 저장 완료";
-      if (vp && vp.failed > 0) {
+      if (vp && (vp.failed > 0 || (Array.isArray(vp.errors) && vp.errors.length > 0))) {
         toastMsg =
           vp.uploaded > 0
             ? "일부 사진 업로드에 실패했지만 피드백은 저장됐어요."
             : "사진 업로드에 실패했지만 피드백은 제출할 수 있어요. 피드백은 저장됐어요.";
       }
       setShowVisitFeedbackModal(false);
+      setSelectedVisitPhotos([]);
       setToast(toastMsg);
       window.setTimeout(() => setToast(null), 2800);
     } catch {
@@ -956,7 +1020,7 @@ export function RecommendationList({
             verificationSubmitted={isVerificationSubmitted}
             receiptFileName={shouldShowReceiptVerify && receiptFile ? receiptFile.name : null}
             receiptPreviewUrl={shouldShowReceiptVerify ? receiptPreviewUrl : null}
-            visitPlacePhotoPreviewUrls={shouldShowReceiptVerify ? visitPlacePhotoPreviewUrls : []}
+            visitPhotos={shouldShowReceiptVerify ? selectedVisitPhotos : []}
             visitFeedbackTags={shouldShowReceiptVerify ? visitFeedbackTags : []}
             visitFeedbackText={shouldShowReceiptVerify ? visitFeedbackText : ""}
             receiptVerifying={shouldShowReceiptVerify ? receiptVerifying : false}
@@ -968,7 +1032,7 @@ export function RecommendationList({
                 return file ? URL.createObjectURL(file) : null;
               });
             }}
-            onVisitPlacePhotosChange={(files) => setVisitPlacePhotos(files)}
+            onVisitPhotosChange={applySelectedVisitPhotos}
             onToggleVisitFeedbackTag={(tag) => {
               setVisitFeedbackTags((prev) =>
                 prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
@@ -1096,6 +1160,8 @@ export function RecommendationList({
         onSubmit={submitVisitFeedback}
         submitting={visitFeedbackSaving}
         placeName={paymentSnapshot?.placeName ?? null}
+        visitPhotos={selectedVisitPhotos}
+        onVisitPhotosChange={applySelectedVisitPhotos}
       />
     </div>
   );
