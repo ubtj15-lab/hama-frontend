@@ -139,6 +139,8 @@ export default function AdminBetaVerificationsPage() {
         visit_count?: number;
         incremented?: boolean;
         verificationId?: string;
+        duplicate?: boolean;
+        existingApprovedId?: string;
       };
 
       console.log("[HAMA_ADMIN_VERIFICATION_UPDATE_RESULT]", {
@@ -159,7 +161,11 @@ export default function AdminBetaVerificationsPage() {
       }
       setPending((prev) => prev.filter((item) => item.id !== verificationId));
       const vc = typeof json.visit_count === "number" ? json.visit_count : "-";
-      setMsg(`${action} 성공: pending 목록에서 제거됨 · visit_count: ${vc}`);
+      if (json.duplicate === true) {
+        setMsg(`이미 승인된 방문 인증이 있어 중복 처리했어요. · visit_count: ${vc}`);
+      } else {
+        setMsg(`${action} 성공: pending 목록에서 제거됨 · visit_count: ${vc}`);
+      }
       await load();
       router.refresh();
     } catch {
