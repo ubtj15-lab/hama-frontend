@@ -24,3 +24,14 @@ export function isIosBrowser(): boolean {
   const ua = navigator.userAgent;
   return /iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
+
+/** 카카오톡 인앱 브라우저 — beforeinstallprompt 미지원 */
+export function isKakaoInAppBrowser(): boolean {
+  if (typeof window === "undefined") return false;
+  return /KAKAOTALK/i.test(navigator.userAgent);
+}
+
+/** iOS·Safari·카카오 인앱 등 수동 '홈 화면에 추가' 안내가 필요한 환경 */
+export function needsManualHomeScreenGuide(): boolean {
+  return isIosBrowser() || isKakaoInAppBrowser();
+}

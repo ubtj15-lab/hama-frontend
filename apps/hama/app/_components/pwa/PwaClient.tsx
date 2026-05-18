@@ -1,20 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { PwaInstallSheet } from "./PwaInstallSheet";
-import { isIosBrowser, isMobileViewForPwa, isStandaloneMode } from "@/lib/pwa/pwaDevice";
+import React, { useCallback, useEffect, useState } from "react";
+import { PwaInstallBanner } from "./PwaInstallBanner";
 import {
-  ELIGIBLE_SESSION_OPENS,
-  SHOW_DELAY_MS,
-  atPromptLimit,
-  getSessionOpenCount,
-  hasPwaEngagement,
-  incrementPromptShownCount,
-  isSnoozing,
-  maybeIncrementSessionOpen,
-  snoozeInstallPrompt,
-} from "@/lib/pwa/pwaStorage";
+  isMobileViewForPwa,
+  isStandaloneMode,
+  needsManualHomeScreenGuide,
+} from "@/lib/pwa/pwaDevice";
+import { isSnoozing, snoozeInstallPrompt } from "@/lib/pwa/pwaStorage";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -39,65 +32,27 @@ function registerServiceWorker() {
   });
 }
 
-function shouldOfferInstall(): boolean {
-  if (typeof window === "undefined") return false;
-  if (isStandaloneMode()) return false;
-  if (!isMobileViewForPwa()) return false;
-  if (isSnoozing()) return false;
-  if (atPromptLimit()) return false;
-  const sessions = getSessionOpenCount();
-  const engaged = hasPwaEngagement();
-  return sessions >= ELIGIBLE_SESSION_OPENS || engaged;
-}
-
 /**
- * PWA: 세션·스토리지·beforeinstallprompt 기반 설치 안내 (강제 없음, 모바일만).
- * 홈/추천 흐름 — 오버레이 z-index 400. standalone 이면 UI 없음.
+ * 오픈베타 PWA: beforeinstallprompt + 수동 안내 배너 (자동 prompt/시트 없음).
  */
 export function PwaClient() {
-  const pathname = usePathname();
+  const [hydrated, setHydrated] = useState(false);
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
-  const [open, setOpen] = useState(false);
-  const openRef = useRef(false);
-  const scheduleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasShownThisScheduleRef = useRef(false);
-  openRef.current = open;
+  const [dismissed, setDismissed] = useState(false);
 
   const canNativeInstall = Boolean(deferred);
-
-  const clearSchedule = useCallback(() => {
-    if (scheduleRef.current) {
-      clearTimeout(scheduleRef.current);
-      scheduleRef.current = null;
-    }
-  }, []);
-
-  const tryScheduleOpen = useCallback(() => {
-    if (isStandaloneMode()) return;
-    if (!shouldOfferInstall()) return;
-    if (openRef.current) return;
-    if (hasShownThisScheduleRef.current) return;
-
-    clearSchedule();
-    scheduleRef.current = setTimeout(() => {
-      scheduleRef.current = null;
-      if (!shouldOfferInstall() || isStandaloneMode()) return;
-      hasShownThisScheduleRef.current = true;
-      setOpen(true);
-      incrementPromptShownCount();
-    }, SHOW_DELAY_MS);
-  }, [clearSchedule]);
-
-  const handleSnooze = useCallback(() => {
-    snoozeInstallPrompt();
-    setOpen(false);
-    hasShownThisScheduleRef.current = true;
-  }, []);
+  const showManualGuide = needsManualHomeScreenGuide();
+  const visible =
+    hydrated &&
+    !dismissed &&
+    !isStandaloneMode() &&
+    !isSnoozing() &&
+    isMobileViewForPwa() &&
+    (canNativeInstall || showManualGuide);
 
   const handleDismiss = useCallback(() => {
     snoozeInstallPrompt();
-    setOpen(false);
-    hasShownThisScheduleRef.current = true;
+    setDismissed(true);
   }, []);
 
   const onInstall = useCallback(async () => {
@@ -109,10 +64,16 @@ export function PwaClient() {
       /* no-op */
     } finally {
       setDeferred(null);
-      setOpen(false);
-      hasShownThisScheduleRef.current = true;
+      handleDismiss();
     }
-  }, [deferred]);
+  }, [deferred, handleDismiss]);
+
+  useEffect(() => {
+    setHydrated(true);
+    if (typeof window !== "undefined" && isSnoozing()) {
+      setDismissed(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -121,18 +82,15 @@ export function PwaClient() {
     if (process.env.NODE_ENV !== "production" && !swInDev) {
       void unregisterAllServiceWorkers().then((n) => {
         if (n > 0) {
-          console.info(`[HAMA PWA] 개발 모드: 이전 service worker ${n}개를 해제했습니다. 새로고침하면 정적 리소스/manifest가 정상 로드됩니다.`);
+          console.info(
+            `[HAMA PWA] 개발 모드: 이전 service worker ${n}개를 해제했습니다. 새로고침하면 정적 리소스/manifest가 정상 로드됩니다.`
+          );
         }
       });
       return;
     }
 
     registerServiceWorker();
-  }, []);
-
-  useEffect(() => {
-    if (isStandaloneMode()) return;
-    maybeIncrementSessionOpen();
   }, []);
 
   useEffect(() => {
@@ -145,31 +103,25 @@ export function PwaClient() {
   }, []);
 
   useEffect(() => {
-    const onEngage = () => {
-      tryScheduleOpen();
+    const onInstalled = () => {
+      setDeferred(null);
+      handleDismiss();
     };
-    window.addEventListener("hama-pwa-engaged", onEngage);
-    return () => window.removeEventListener("hama-pwa-engaged", onEngage);
-  }, [tryScheduleOpen]);
-
-  useEffect(() => {
-    if (isStandaloneMode()) return;
-    tryScheduleOpen();
-    return () => clearSchedule();
-  }, [pathname, tryScheduleOpen, clearSchedule]);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => window.removeEventListener("appinstalled", onInstalled);
+  }, [handleDismiss]);
 
   if (isStandaloneMode()) {
     return null;
   }
 
   return (
-    <PwaInstallSheet
-      open={open}
-      isIos={isIosBrowser()}
-      onSnooze={handleSnooze}
-      onDismiss={handleDismiss}
-      onInstallClick={onInstall}
+    <PwaInstallBanner
+      visible={visible}
       canNativeInstall={canNativeInstall}
+      showManualGuide={showManualGuide && !canNativeInstall}
+      onInstallClick={() => void onInstall()}
+      onDismiss={handleDismiss}
     />
   );
 }
