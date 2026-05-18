@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   COMPANION_OPTIONS,
@@ -13,7 +13,18 @@ import {
   type DietaryOption,
   type InterestOption,
   type UserProfile,
+  parseUserProfile,
 } from "@/lib/onboardingProfile";
+import {
+  isSurveyCompletedResolved,
+  logSurveyGate,
+  logSurveyComplete,
+  logSurveyRedirect,
+  markOnboardingCompletedLocally,
+  ONBOARDING_PROFILE_PENDING_LS,
+  ONBOARDING_PROMPT_DISMISSED_KEY,
+  readLocalOnboardingCompletedAt,
+} from "@/lib/surveyGate";
 
 const CARD_STYLE: React.CSSProperties = {
   width: "100%",
@@ -33,6 +44,53 @@ function OnboardingPageContent() {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
+  const [gateChecked, setGateChecked] = useState(false);
+  const redirectOnceRef = useRef(false);
+
+  useEffect(() => {
+    const target = returnTo.startsWith("/") ? returnTo : "/";
+    const localCompletedAt = readLocalOnboardingCompletedAt();
+    if (localCompletedAt) {
+      logSurveyGate({ phase: "onboarding_skip", completed: true, source: "local", target });
+      if (!redirectOnceRef.current) {
+        redirectOnceRef.current = true;
+        logSurveyRedirect({ target, source: "onboarding_already_completed_local" });
+        router.replace(target);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/users/me/profile", { cache: "no-store", credentials: "same-origin" });
+        if (!res.ok) {
+          if (!cancelled) setGateChecked(true);
+          return;
+        }
+        const json = (await res.json().catch(() => null)) as { user_profile?: unknown } | null;
+        const serverProfile = parseUserProfile(json?.user_profile);
+        if (isSurveyCompletedResolved(serverProfile)) {
+          markOnboardingCompletedLocally(serverProfile);
+          logSurveyGate({ phase: "onboarding_skip", completed: true, source: "server", target });
+          if (!cancelled && !redirectOnceRef.current) {
+            redirectOnceRef.current = true;
+            logSurveyRedirect({ target, source: "onboarding_already_completed_server" });
+            router.replace(target);
+          }
+          return;
+        }
+      } catch {
+        /* 설문 UI는 계속 표시 */
+      } finally {
+        if (!cancelled) setGateChecked(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [returnTo, router]);
 
   const total = 5;
   const canNext = useMemo(() => {
@@ -95,36 +153,53 @@ function OnboardingPageContent() {
         const reason = json?.error ? `${json.error}${json.detail ? `: ${json.detail}` : ""}` : `http_${res.status}`;
         throw new Error(reason);
       }
+      const completedAt = new Date().toISOString();
+      const savedProfile: UserProfile = {
+        ...profile,
+        onboarding_completed_at: completedAt,
+      };
+      markOnboardingCompletedLocally(savedProfile);
       if (json.warning === "missing_user_profile_column") {
-        // DB 마이그레이션 반영 전에도 사용 흐름이 막히지 않도록 임시 로컬 보관
-        localStorage.setItem(
-          "hama_user_profile_pending",
-          JSON.stringify({
-            ...profile,
-            onboarding_completed_at: new Date().toISOString(),
-          })
-        );
+        localStorage.setItem(ONBOARDING_PROFILE_PENDING_LS, JSON.stringify(savedProfile));
       }
-      localStorage.setItem("hama_onboarding_prompt_dismissed", "1");
-      router.replace(returnTo.startsWith("/") ? returnTo : "/");
+      const target = returnTo.startsWith("/") ? returnTo : "/";
+      logSurveyComplete({
+        httpOk: true,
+        status: res.status,
+        persisted: json.persisted !== false,
+        warning: json.warning ?? null,
+        onboarding_completed_at: completedAt,
+      });
+      logSurveyRedirect({ target, source: "onboarding_submit_success" });
+      router.replace(target);
     } catch (e) {
       console.error("[onboarding] save failed", e);
       const message = e instanceof Error ? e.message : "unknown_error";
       localStorage.setItem(
-        "hama_user_profile_pending",
+        ONBOARDING_PROFILE_PENDING_LS,
         JSON.stringify({
           ...profile,
           onboarding_completed_at: new Date().toISOString(),
           _save_error: message,
         })
       );
-      localStorage.setItem("hama_onboarding_prompt_dismissed", "1");
+      localStorage.setItem(ONBOARDING_PROMPT_DISMISSED_KEY, "1");
       alert(`서버 저장에 실패했지만 임시 저장 후 진행할게요.\n원인: ${message}`);
-      router.replace(returnTo.startsWith("/") ? returnTo : "/");
+      const target = returnTo.startsWith("/") ? returnTo : "/";
+      logSurveyRedirect({ target, source: "onboarding_submit_fallback_pending", error: message });
+      router.replace(target);
     } finally {
       setSaving(false);
     }
   };
+
+  if (!gateChecked) {
+    return (
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#f8fafc" }}>
+        로딩 중...
+      </main>
+    );
+  }
 
   return (
     <main style={{ minHeight: "100vh", background: "#f8fafc", padding: "20px 16px 28px" }}>

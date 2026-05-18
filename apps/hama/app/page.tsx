@@ -10,7 +10,7 @@
  */
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { logEvent } from "@/lib/logEvent";
 import HomeTopBar from "./_components/HomeTopBar";
@@ -26,7 +26,20 @@ import { recordRecentIntent } from "@/lib/recentIntents";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { stashPlaceForSession } from "@/lib/session/placeSession";
 import { colors, space } from "@/lib/designTokens";
-import { isOnboardingCompleted, parseUserProfile } from "@/lib/onboardingProfile";
+import { parseUserProfile } from "@/lib/onboardingProfile";
+import {
+  clearNewUserCookie,
+  getCookie,
+  isKakaoInAppBrowser,
+  isLoggedInForSurveyGate,
+  isSurveyCompletedResolved,
+  logSurveyGate,
+  logSurveyRedirect,
+  markOnboardingCompletedLocally,
+  NEW_USER_COOKIE,
+  ONBOARDING_PROMPT_DISMISSED_KEY,
+  readLocalOnboardingCompletedAt,
+} from "@/lib/surveyGate";
 
 interface HamaUser {
   nickname: string;
@@ -43,7 +56,6 @@ interface PointLog {
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
 const LOGIN_FLAG_KEY = "hamaLoggedIn";
-const ONBOARDING_PROMPT_DISMISSED_KEY = "hama_onboarding_prompt_dismissed";
 const EXPERIMENT_INTRO_SEEN_KEY = "hama_experiment_intro_seen";
 
 function loadUserFromStorage(): HamaUser {
@@ -296,79 +308,125 @@ function HomePageContent() {
   );
 }
 
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
-  return match ? decodeURIComponent(match[2]) : null;
-}
-
 function HomeEntryGate() {
   const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
+  const [gateReady, setGateReady] = useState(false);
   const [showLegacyPrompt, setShowLegacyPrompt] = useState(false);
   const [showPromptBadge, setShowPromptBadge] = useState(false);
   const [showExperimentIntro, setShowExperimentIntro] = useState(false);
+  const redirectOnceRef = useRef(false);
 
   useEffect(() => {
-    const loggedIn = localStorage.getItem(LOGIN_FLAG_KEY) === "1";
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const loggedIn = isLoggedInForSurveyGate();
     setIsLoggedIn(loggedIn);
-    if (loggedIn) {
-      const introSeen = localStorage.getItem(EXPERIMENT_INTRO_SEEN_KEY) === "1";
-      setShowExperimentIntro(!introSeen);
-    } else {
-      setShowExperimentIntro(false);
-    }
+
     if (!loggedIn) {
-      setIsCheckingProfile(false);
+      setShowExperimentIntro(false);
+      setGateReady(true);
+      logSurveyGate({ phase: "ready", loggedIn: false, reason: "not_logged_in" });
       return;
     }
 
-    const isNewUser = getCookie("hama_is_new_user") === "1";
+    const introSeen = localStorage.getItem(EXPERIMENT_INTRO_SEEN_KEY) === "1";
+    setShowExperimentIntro(!introSeen);
+
+    const localCompletedAt = readLocalOnboardingCompletedAt();
+    if (localCompletedAt) {
+      clearNewUserCookie();
+      setShowLegacyPrompt(false);
+      setShowPromptBadge(false);
+      setGateReady(true);
+      logSurveyGate({
+        phase: "ready",
+        loggedIn: true,
+        completed: true,
+        source: "local_cache",
+        localCompletedAt,
+        kakaoInApp: isKakaoInAppBrowser(),
+      });
+      return;
+    }
+
+    const isNewUser = getCookie(NEW_USER_COOKIE) === "1";
+    let cancelled = false;
+
     void (async () => {
       try {
-        const res = await fetch("/api/users/me/profile", { cache: "no-store" });
-        if (!res.ok) {
-          // 쿠키 동기화 타이밍 이슈로 프로필 조회가 실패해도
-          // 로그인 직후 사용자가 설문을 놓치지 않도록 안전 분기한다.
-          if (isNewUser) {
-            router.replace("/onboarding?return_to=%2F");
-            return;
-          }
-          const dismissed = localStorage.getItem(ONBOARDING_PROMPT_DISMISSED_KEY) === "1";
-          setShowLegacyPrompt(!dismissed);
-          setShowPromptBadge(dismissed);
-          setIsCheckingProfile(false);
-          return;
-        }
-        const json = await res.json();
+        const res = await fetch("/api/users/me/profile", { cache: "no-store", credentials: "same-origin" });
+        const json = res.ok ? ((await res.json().catch(() => null)) as { user_profile?: unknown } | null) : null;
         const profile = parseUserProfile(json?.user_profile);
-        const completed = isOnboardingCompleted(profile);
-        if (!completed && isNewUser) {
-          router.replace("/onboarding?return_to=%2F");
+        const completed = isSurveyCompletedResolved(profile);
+
+        logSurveyGate({
+          phase: "profile_loaded",
+          httpOk: res.ok,
+          status: res.status,
+          isNewUser,
+          completed,
+          serverCompletedAt: profile.onboarding_completed_at,
+          localCompletedAt: readLocalOnboardingCompletedAt(),
+          kakaoInApp: isKakaoInAppBrowser(),
+        });
+
+        if (cancelled) return;
+
+        if (completed) {
+          markOnboardingCompletedLocally(profile);
+          setShowLegacyPrompt(false);
+          setShowPromptBadge(false);
+          setGateReady(true);
           return;
         }
-        if (!completed && !isNewUser) {
+
+        if (isNewUser && !redirectOnceRef.current) {
+          redirectOnceRef.current = true;
+          const target = "/onboarding?return_to=%2F";
+          logSurveyRedirect({ target, reason: "new_user_incomplete", isNewUser: true, completed: false });
+          router.replace(target);
+          return;
+        }
+
+        if (!isNewUser) {
           const dismissed = localStorage.getItem(ONBOARDING_PROMPT_DISMISSED_KEY) === "1";
           setShowLegacyPrompt(!dismissed);
           setShowPromptBadge(dismissed);
         }
+        setGateReady(true);
       } catch (e) {
         console.error("[home] profile check failed", e);
-        if (isNewUser) {
-          router.replace("/onboarding?return_to=%2F");
-          return;
+        logSurveyGate({
+          phase: "profile_error",
+          isNewUser,
+          error: e instanceof Error ? e.message : "unknown",
+          localCompletedAt: readLocalOnboardingCompletedAt(),
+          kakaoInApp: isKakaoInAppBrowser(),
+        });
+        if (cancelled) return;
+        if (!readLocalOnboardingCompletedAt()) {
+          const dismissed = localStorage.getItem(ONBOARDING_PROMPT_DISMISSED_KEY) === "1";
+          setShowLegacyPrompt(!dismissed && !isNewUser);
+          setShowPromptBadge(dismissed && !isNewUser);
         }
-        const dismissed = localStorage.getItem(ONBOARDING_PROMPT_DISMISSED_KEY) === "1";
-        setShowLegacyPrompt(!dismissed);
-        setShowPromptBadge(dismissed);
-      } finally {
-        setIsCheckingProfile(false);
+        setGateReady(true);
       }
     })();
-  }, [router]);
 
-  if (isLoggedIn == null || isCheckingProfile) {
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, router]);
+
+  const isBootstrapping = !hydrated || isLoggedIn === null || (isLoggedIn && !gateReady);
+
+  if (isBootstrapping) {
     return (
       <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: colors.bgDefault }}>
         로딩 중...

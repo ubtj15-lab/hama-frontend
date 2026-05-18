@@ -94,12 +94,18 @@ export async function PUT(req: NextRequest) {
         .update({ updated_at: new Date().toISOString() })
         .eq("id", userId);
       if (!fallback.error) {
-        return NextResponse.json({
+        const res = NextResponse.json({
           ok: true,
           user_profile: nextProfile,
           persisted: false,
           warning: "missing_user_profile_column",
         });
+        res.cookies.set("hama_is_new_user", "0", {
+          path: "/",
+          maxAge: 60 * 60 * 24 * 30,
+          sameSite: "lax",
+        });
+        return res;
       }
     }
     return NextResponse.json(
@@ -108,5 +114,11 @@ export async function PUT(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, user_profile: nextProfile });
+  const res = NextResponse.json({ ok: true, user_profile: nextProfile });
+  res.cookies.set("hama_is_new_user", "0", {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+    sameSite: "lax",
+  });
+  return res;
 }
