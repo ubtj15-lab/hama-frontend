@@ -19,7 +19,10 @@ export function pickVisitPlacePhotosFromFileList(list: FileList | null): File[] 
   return out;
 }
 
-/** httpOnly가 아닌 `hama_user_id` 쿠키만 읽을 수 있음. 있으면 FormData에 넣어 서버 `resolveUserIdFromRequest`와 맞춤 */
+/**
+ * 레거시: `hama_user_id`가 httpOnly이면 클라이언트에서 읽을 수 없음.
+ * 서버는 쿠키로 user_id를 해석하므로 FormData에 넣지 않아도 됨.
+ */
 export function appendHamaUserIdToFormData(fd: FormData): void {
   if (typeof document === "undefined") return;
   const m = document.cookie.match(/(?:^|; )hama_user_id=([^;]*)/);

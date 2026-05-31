@@ -23,11 +23,11 @@ async function resolvePublicUserId(
   supabase: ReturnType<typeof getSupabase>,
   incoming: string | null | undefined
 ): Promise<string | null> {
-  const normalized = normalizeClientUserId(incoming);
-  if (normalized) return normalized;
-
   const cookieUserId = req.cookies.get("hama_user_id")?.value?.trim();
   if (cookieUserId) return cookieUserId;
+
+  const normalized = normalizeClientUserId(incoming);
+  if (normalized) return normalized;
 
   const kakaoId = req.cookies.get("hama_kakao_id")?.value?.trim();
   if (!kakaoId || !supabase) return null;

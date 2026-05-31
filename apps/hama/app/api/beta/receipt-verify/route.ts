@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
-import { resolveUserIdFromRequest } from "@/lib/server/userResolver";
+import { getUserIdFromAuthCookie } from "@/lib/server/userResolver";
 import {
   formHasVisitPhotoKeys,
   parseVisitPhotoFilesFromForm,
@@ -68,9 +68,9 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const userId = await resolveUserIdFromRequest(req, String(form.get("user_id") ?? "").trim() || null);
+  const userId = getUserIdFromAuthCookie(req);
   if (!userId) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    return NextResponse.json({ ok: false, error: "LOGIN_REQUIRED" }, { status: 401 });
   }
 
   const selectedPlaceLogId = String(form.get("selected_place_log_id") ?? "").trim();

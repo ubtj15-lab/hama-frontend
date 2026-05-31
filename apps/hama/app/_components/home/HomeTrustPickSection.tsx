@@ -25,6 +25,8 @@ type TrustRow =
 type Props = {
   onPlaceOpen: (card: HomeCard) => void;
   onScenarioGo: (query: string) => void;
+  /** 길찾기 직전 — 방문 미션 시작 등 */
+  onBeforeDirections?: (card: HomeCard) => void;
 };
 
 function thumbPlace(card: HomeCard): string {
@@ -173,7 +175,7 @@ function ScenarioEmptyFallback({ onScenarioGo }: { onScenarioGo: (query: string)
   );
 }
 
-export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
+export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo, onBeforeDirections }: Props) {
   const [rows, setRows] = useState<TrustRow[] | null>(null);
 
   useEffect(() => {
@@ -355,6 +357,17 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
           >
             {reason.subline}
           </p>
+          <p
+            style={{
+              fontSize: 11,
+              color: colors.textMuted,
+              margin: "8px 0 0",
+              lineHeight: 1.45,
+              fontWeight: 600,
+            }}
+          >
+            하마 추천으로 다녀오면 방문 인증 이벤트에 참여할 수 있어요.
+          </p>
           {reason.regionTrust && !featured && (
             <p style={{ ...typo.caption, color: colors.textMuted, margin: "4px 0 0", fontSize: 12 }}>
               {reason.regionTrust}
@@ -386,6 +399,7 @@ export function HomeTrustPickSection({ onPlaceOpen, onScenarioGo }: Props) {
               type="button"
               onClick={() => {
                 logEvent(HamaEvents.home_trust_directions, { place_id: card.id, page: "home" });
+                onBeforeDirections?.(card);
                 openDirections({ name: card.name, lat, lng });
               }}
               style={ctaOutline}

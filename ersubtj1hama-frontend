@@ -1,0 +1,39 @@
+warning: in the working copy of 'apps/hama/app/_components/HomeTopBar.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/_components/home/HomeBottomNav.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/_components/home/HomeTrustPickSection.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/api/beta/receipt-verify/route.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/auth/kakao/success/KakaoSuccessClient.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/lib/designTokens.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/lib/storeRepository.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/lib/storeTypes.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/hama/app/place/[id]/page.tsx', LF will be replaced by CRLF the next time Git touches it
+ apps/hama/app/_components/AuthSync.tsx             |  40 [32m+[m[31m--[m
+ apps/hama/app/_components/HomeTopBar.tsx           |   2 [32m+[m[31m-[m
+ apps/hama/app/_components/SideMenu.tsx             |   6 [32m+[m[31m-[m
+ apps/hama/app/_components/home/HomeBottomNav.tsx   |  37 [32m+[m[31m-[m
+ .../app/_components/home/HomeTrustPickSection.tsx  |  16 [32m+[m[31m-[m
+ .../app/_components/results/RecommendationList.tsx |   5 [32m+[m
+ apps/hama/app/_hooks/useLocalUser.ts               |  53 [32m+[m[31m--[m
+ apps/hama/app/api/auth/kakao/callback/route.ts     | 137 [32m++++[m[31m----[m
+ apps/hama/app/api/auth/kakao/login/route.ts        |   5 [32m+[m[31m-[m
+ apps/hama/app/api/auth/kakao/logout/route.ts       |  10 [32m+[m[31m-[m
+ apps/hama/app/api/beta/receipt-verify/route.ts     |   6 [32m+[m[31m-[m
+ apps/hama/app/api/events/route.ts                  |   4 [32m+[m[31m-[m
+ apps/hama/app/api/log/route.ts                     |   6 [32m+[m[31m-[m
+ .../app/auth/kakao/success/KakaoSuccessClient.tsx  |  33 [32m+[m[31m-[m
+ apps/hama/app/components/Sidebar.tsx               |   7 [32m+[m[31m-[m
+ apps/hama/app/globals.css                          |   7 [32m+[m[31m-[m
+ apps/hama/app/lib/designTokens.ts                  |  16 [32m+[m
+ apps/hama/app/lib/server/userResolver.ts           |  13 [32m+[m[31m-[m
+ apps/hama/app/lib/storeMappers.ts                  |   9 [32m+[m[31m-[m
+ apps/hama/app/lib/storeRepository.ts               |   9 [32m+[m[31m-[m
+ apps/hama/app/lib/storeTypes.ts                    |   2 [32m+[m
+ apps/hama/app/lib/surveyGate.ts                    |  11 [32m+[m[31m-[m
+ apps/hama/app/lib/visitPlacePhotoClient.ts         |   5 [32m+[m[31m-[m
+ apps/hama/app/page.tsx                             | 255 [32m+++++++++++[m[31m---[m
+ apps/hama/app/place/[id]/page.tsx                  |  17 [32m+[m[31m-[m
+ apps/hama/app/results/page.tsx                     |  14 [32m+[m[31m-[m
+ apps/hama/app/search/SearchPageClient.tsx          | 387 [32m+[m[31m--------------------[m
+ apps/hama/app/search/page.tsx                      |  23 [32m+[m[31m-[m
+ 28 files changed, 483 insertions(+), 652 deletions(-)

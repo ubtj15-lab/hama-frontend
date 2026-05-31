@@ -46,6 +46,22 @@ export const colors = {
   successSoft: "#dcfce7",
   warningSoft: "#fef9c3",
   heroTint: "#FAF6EF",
+  /** 길찾기·CTA 주황 (홈 포인트와 동일 계열) */
+  accentCta: "#ff6333",
+  textHeading: "#111827",
+  textBody: "#2b2b2b",
+  cardBorderWarm: "rgba(226, 214, 204, 0.9)",
+} as const;
+
+/** 홈·/search 등 주요 화면 공통 배경 (크림 → 연한 블루그레이) */
+export const pageBackground =
+  "linear-gradient(180deg, #f6f0e9 0%, #f4f6fb 45%, #f4f6fb 100%)";
+
+export const surfaceCardStyle = {
+  background: "#ffffff",
+  borderRadius: 21,
+  border: `1px solid ${colors.cardBorderWarm}`,
+  boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
 } as const;
 
 export const radius = {

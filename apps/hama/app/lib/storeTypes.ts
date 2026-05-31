@@ -84,6 +84,8 @@ export type HomeCard = {
 
   mood?: string[];
   tags?: string[];
+  /** storeTagNormalizer — tags와 동일 병합 결과(어댑터 추적용) */
+  normalizedTags?: string[];
   /** Supabase stores.menu_keywords — 음식 메뉴 키워드(선택 컬럼) */
   menu_keywords?: string[];
   /** 소개 문구(선택 컬럼) */

@@ -3,40 +3,17 @@
 import { useEffect } from "react";
 import { getOrCreateSessionId } from "@hama/shared";
 
-const USER_KEY = "hamaUser";
-const LOGIN_FLAG_KEY = "hamaLoggedIn";
-const COOKIE_USER_ID = "hama_user_id";
-const COOKIE_NICKNAME = "hama_user_nickname";
-const COOKIE_KAKAO_ID = "hama_kakao_id";
-
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
-  return match ? decodeURIComponent(match[2]) : null;
-}
-
+/** 로그인 직후 익명 이벤트를 user_id로 backfill (localStorage 로그인 플래그는 사용하지 않음) */
 export function AuthSync() {
   useEffect(() => {
-    const userId = getCookie(COOKIE_USER_ID);
-    const nickname = getCookie(COOKIE_NICKNAME);
-    const kakaoId = getCookie(COOKIE_KAKAO_ID);
-
-    if (userId) {
+    void (async () => {
       try {
-        const raw = window.localStorage.getItem(USER_KEY);
-        const prev = raw ? JSON.parse(raw) : {};
-        const user = {
-          ...prev,
-          user_id: userId,
-          kakao_id: kakaoId ?? prev.kakao_id ?? null,
-          nickname: nickname ? decodeURIComponent(nickname) : prev.nickname ?? "카카오 사용자",
-          points: typeof prev.points === "number" ? prev.points : 0,
-        };
-        window.localStorage.setItem(USER_KEY, JSON.stringify(user));
-        window.localStorage.setItem(LOGIN_FLAG_KEY, "1");
-        window.dispatchEvent(new Event("storage"));
+        const res = await fetch("/api/me", { cache: "no-store", credentials: "include" });
+        if (!res.ok) return;
+        const json = (await res.json().catch(() => ({}))) as { user?: { id?: string } | null };
+        const userId = json?.user?.id?.trim();
+        if (!userId) return;
 
-        // 로그인 직후, 같은 session_id로 쌓인 익명 이벤트 user_id backfill
         const sessionId = getOrCreateSessionId();
         const backfillKey = `hama_backfill_${sessionId}_${userId}`;
         if (sessionId && !window.sessionStorage.getItem(backfillKey)) {
@@ -44,6 +21,7 @@ export function AuthSync() {
           void fetch("/api/auth/backfill-events", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ session_id: sessionId, user_id: userId }),
           }).catch((e) => {
             console.error("auth backfill fetch failed:", e);
@@ -52,7 +30,7 @@ export function AuthSync() {
       } catch {
         console.error("AuthSync failed");
       }
-    }
+    })();
   }, []);
 
   return null;

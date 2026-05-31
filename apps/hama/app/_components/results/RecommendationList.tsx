@@ -13,6 +13,7 @@ import { extractSituationTags } from "@/lib/extractSituationTags";
 import { HamaEventNames } from "@/lib/hamaEventNames";
 import { inferDirectionsProvider } from "@/lib/inferDirectionsProvider";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
+import { handleReceiptLoginRequired, isReceiptLoginRequiredResponse } from "@/lib/auth/receiptAuth";
 import { appendHamaUserIdToFormData } from "@/lib/visitPlacePhotoClient";
 import { shouldDiagVisitPhoto } from "@/lib/visitPhotoDiag";
 import { getCardExposureId, saveRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
@@ -722,6 +723,10 @@ export function RecommendationList({
         error?: string;
         visit_photos?: { uploaded: number; failed: number; errors?: string[] };
       };
+      if (isReceiptLoginRequiredResponse(res, json)) {
+        handleReceiptLoginRequired(`${window.location.pathname}${window.location.search}`);
+        return;
+      }
       if (!res.ok || !json.ok) {
         setReceiptResult("인증 처리에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;

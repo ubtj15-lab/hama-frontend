@@ -74,10 +74,11 @@ import { mergeResultsScenarioWithExplicitNav, normalizeResultsExplicitCategory, 
 import { USE_RECOMMEND_V2 } from "@/lib/recommend-v2/recommendV2Flags";
 import { isBeautyUrlFromExplicitNav, isBeautyV2HardMode } from "@/lib/recommend-v2/beautyV2HardMode";
 import { shouldApplyCultureStrictWhitelist } from "@/lib/recommend-v2/normalizeRequest";
+import { useHamaMe } from "@/lib/auth/useHamaMe";
+import { kakaoLoginUrl } from "@/lib/auth/kakaoLogin";
 
 /** 결과 페이지만: 고정 더미로 SearchResultSection/분기 검증 — `.env.local` 에 `NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION=1` */
 const DEBUG_FORCE_SEARCH_SECTION = process.env.NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION === "1";
-const LOGIN_FLAG_KEY = "hamaLoggedIn";
 const FAMILY_DINING_ALIAS_QUERIES = new Set([
   "가족 외식",
   "가족외식",
@@ -185,20 +186,13 @@ function ResultsContent() {
   const [relaxPersonalRules, setRelaxPersonalRules] = useState(false);
   const recommendSessionIdRef = useRef<string | null>(null);
   const [recommendSessionId, setRecommendSessionId] = useState<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  useEffect(() => {
-    try {
-      setIsLoggedIn(window.localStorage.getItem(LOGIN_FLAG_KEY) === "1");
-    } catch {}
-  }, []);
+  const { isLoggedIn } = useHamaMe();
 
   const requireKakaoLogin = React.useCallback(() => {
     const message = "추천 결과는 볼 수 있어요. 이 기능은 카카오 로그인 후 사용할 수 있어요.";
     const proceed = window.confirm(`${message}\n\n카카오 로그인 하시겠어요?`);
     if (!proceed) return;
-    const returnTo = `${window.location.pathname}${window.location.search}`;
-    window.location.href = `/api/auth/kakao/login?return_to=${encodeURIComponent(returnTo)}`;
+    window.location.href = kakaoLoginUrl(`${window.location.pathname}${window.location.search}`);
   }, []);
 
   useEffect(() => {

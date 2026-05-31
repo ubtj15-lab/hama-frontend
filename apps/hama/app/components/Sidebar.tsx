@@ -62,11 +62,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         <div style={itemStyle} onClick={() => go("/calendar")}>
           📅 캘린더 - 여행이나 계획을 기록하세요
         </div>
-        <div style={itemStyle} onClick={() => go("/recommend")}>
-          ❤️ 즐겨찾기 - 저장된 매장 또는 경로
-          <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 4 }}>
-            (베타: 추천 리스트)
-          </span>
+        <div style={itemStyle} onClick={() => go("/search?query=" + encodeURIComponent("아이랑 갈만한 곳"))}>
+          🔍 추천 검색 — 상황에 맞는 장소 찾기
         </div>
         <div style={itemStyle} onClick={() => go("/pay")}>
           💳 HAMA Pay - 포인트 및 결제

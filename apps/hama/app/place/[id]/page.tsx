@@ -24,6 +24,9 @@ import { ReservationSummaryCard } from "@/_components/reservation/ReservationSum
 import { getReservationPreviewForStore } from "@/lib/reservation/bookingDummy";
 import { buildReserveQueryFromPlace } from "@/lib/reservation/buildReserveSearchParams";
 import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/shared/VisitFeedbackModal";
+import { useHamaMe } from "@/lib/auth/useHamaMe";
+import { handleReceiptLoginRequired, isReceiptLoginRequiredResponse } from "@/lib/auth/receiptAuth";
+import { kakaoLoginUrl } from "@/lib/auth/kakaoLogin";
 import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT, appendHamaUserIdToFormData } from "@/lib/visitPlacePhotoClient";
 import { shouldDiagVisitPhoto } from "@/lib/visitPhotoDiag";
 import { SHOW_RESERVATION_UI } from "@/lib/reservationUiFlags";
@@ -75,6 +78,7 @@ export default function PlaceDetailPage() {
   const [betaSubmitting, setBetaSubmitting] = useState(false);
   const [betaMessage, setBetaMessage] = useState<string | null>(null);
   const { isSaved, toggleSaved } = useSaved();
+  const { isLoggedIn } = useHamaMe();
 
   useEffect(() => {
     if (!id) return;
@@ -194,9 +198,9 @@ export default function PlaceDetailPage() {
   };
 
   const completeMockPayment = async () => {
-    const loggedIn = typeof window !== "undefined" && window.localStorage.getItem("hamaLoggedIn") === "1";
-    if (!loggedIn) {
+    if (!isLoggedIn) {
       alert("로그인 후 참여 기록을 남길 수 있어요.");
+      window.location.href = kakaoLoginUrl(`${window.location.pathname}${window.location.search}`);
       return;
     }
     if (payMockSaving) return;
@@ -236,9 +240,9 @@ export default function PlaceDetailPage() {
 
   const ensureBetaDecisionLog = async (): Promise<string | null> => {
     if (betaSelectedLogId) return betaSelectedLogId;
-    const loggedIn = typeof window !== "undefined" && window.localStorage.getItem("hamaLoggedIn") === "1";
-    if (!loggedIn) {
+    if (!isLoggedIn) {
       alert("로그인 후 참여 기록을 남길 수 있어요.");
+      window.location.href = kakaoLoginUrl(`${window.location.pathname}${window.location.search}`);
       return null;
     }
     try {
@@ -327,8 +331,13 @@ export default function PlaceDetailPage() {
       const json = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         message?: string;
+        error?: string;
         visit_photos?: { uploaded: number; failed: number; errors?: string[] };
       };
+      if (isReceiptLoginRequiredResponse(res, json)) {
+        handleReceiptLoginRequired(`${window.location.pathname}${window.location.search}`);
+        return;
+      }
       if (!res.ok || !json.ok) {
         setBetaMessage("인증 제출에 실패했어요. 잠시 후 다시 시도해 주세요.");
         return;

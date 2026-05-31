@@ -19,7 +19,10 @@ export async function GET(req: NextRequest) {
     return new Response("Kakao env not set", { status: 500 });
   }
 
-  const returnTo = req.nextUrl.searchParams.get("return_to")?.trim() || "";
+  const returnTo =
+    req.nextUrl.searchParams.get("next")?.trim() ||
+    req.nextUrl.searchParams.get("return_to")?.trim() ||
+    "";
   const state = returnTo ? encodeURIComponent(returnTo) : "";
 
   const params = new URLSearchParams({

@@ -1,15 +1,7 @@
 // app/api/auth/kakao/callback/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = process.env
-  .NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
-
-function getSupabase() {
-  if (!supabaseUrl || !supabaseAnonKey) return null;
-  return createClient(supabaseUrl, supabaseAnonKey);
-}
+import { applyAuthSessionCookies } from "@/lib/server/authCookies";
+import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
 
 function getRedirectUri(req: NextRequest): string {
   const host = req.headers.get("host") || req.headers.get("x-forwarded-host");
@@ -19,6 +11,20 @@ function getRedirectUri(req: NextRequest): string {
   if (host) return `${proto}://${host}/api/auth/kakao/callback`;
   const fallback = (process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || "").trim();
   return fallback || "http://localhost:3000/api/auth/kakao/callback";
+}
+
+function safeReturnPath(state: string | null): string {
+  if (!state) return "/";
+  try {
+    const decoded = decodeURIComponent(state);
+    return decoded.startsWith("/") ? decoded : "/";
+  } catch {
+    return "/";
+  }
+}
+
+function loginFailedRedirect(req: NextRequest): NextResponse {
+  return NextResponse.redirect(new URL("/?login=failed", req.url));
 }
 
 export async function GET(req: NextRequest) {
@@ -31,12 +37,11 @@ export async function GET(req: NextRequest) {
 
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
+  const returnTo = safeReturnPath(state);
 
   if (!code) {
-    return new Response("No code from kakao", { status: 400 });
+    return loginFailedRedirect(req);
   }
-
-  const returnTo = state ? decodeURIComponent(state) : "";
 
   const tokenRes = await fetch("https://kauth.kakao.com/oauth/token", {
     method: "POST",
@@ -50,14 +55,14 @@ export async function GET(req: NextRequest) {
   });
 
   if (!tokenRes.ok) {
-    return new Response("Failed to get token from kakao", { status: 500 });
+    return loginFailedRedirect(req);
   }
 
-  const tokenJson = await tokenRes.json();
+  const tokenJson = (await tokenRes.json()) as { access_token?: string };
   const accessToken = tokenJson.access_token;
 
   if (!accessToken) {
-    return new Response("No access token from kakao", { status: 500 });
+    return loginFailedRedirect(req);
   }
 
   const userRes = await fetch("https://kapi.kakao.com/v2/user/me", {
@@ -65,79 +70,71 @@ export async function GET(req: NextRequest) {
   });
 
   if (!userRes.ok) {
-    const target = returnTo.startsWith("/") ? returnTo : "/";
-    return NextResponse.redirect(new URL(target, req.url));
+    return loginFailedRedirect(req);
   }
 
-  const kakaoUser = await userRes.json();
+  const kakaoUser = (await userRes.json()) as {
+    id?: number | string;
+    kakao_account?: { profile?: { nickname?: string } };
+    properties?: { nickname?: string };
+  };
   const kakaoId = String(kakaoUser?.id ?? "");
   const nickname =
     kakaoUser?.kakao_account?.profile?.nickname ??
     kakaoUser?.properties?.nickname ??
     "카카오 사용자";
 
-  const supabase = getSupabase();
+  if (!kakaoId) {
+    return loginFailedRedirect(req);
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return loginFailedRedirect(req);
+  }
+
   let userId: string | null = null;
   let isNewUser = false;
 
-  if (supabase && kakaoId) {
-    const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
+    .from("users")
+    .select("id")
+    .eq("kakao_id", kakaoId)
+    .maybeSingle();
+
+  if (existingError) {
+    return loginFailedRedirect(req);
+  }
+
+  if (existing?.id) {
+    userId = existing.id;
+    await supabase
       .from("users")
+      .update({ nickname, updated_at: new Date().toISOString() })
+      .eq("id", userId);
+  } else {
+    const { data: inserted, error: insertError } = await supabase
+      .from("users")
+      .insert({
+        kakao_id: kakaoId,
+        nickname,
+        role: "consumer",
+      })
       .select("id")
-      .eq("kakao_id", kakaoId)
       .single();
 
-    if (existing) {
-      userId = existing.id;
-      await supabase
-        .from("users")
-        .update({ nickname, updated_at: new Date().toISOString() })
-        .eq("id", userId);
-    } else {
-      const { data: inserted, error } = await supabase
-        .from("users")
-        .insert({
-          kakao_id: kakaoId,
-          nickname,
-          role: "consumer",
-        })
-        .select("id")
-        .single();
-
-      if (!error && inserted) {
-        userId = inserted.id;
-        isNewUser = true;
-      }
+    if (insertError || !inserted?.id) {
+      return loginFailedRedirect(req);
     }
+    userId = inserted.id;
+    isNewUser = true;
   }
 
-  const target = returnTo.startsWith("/") ? returnTo : "/";
-  const res = NextResponse.redirect(new URL(target, req.url));
-
-  if (userId) {
-    res.cookies.set("hama_user_id", userId, {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-      sameSite: "lax",
-    });
-    res.cookies.set("hama_user_nickname", encodeURIComponent(nickname), {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-      sameSite: "lax",
-    });
+  if (!userId) {
+    return loginFailedRedirect(req);
   }
-  if (kakaoId) {
-    res.cookies.set("hama_kakao_id", kakaoId, {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-      sameSite: "lax",
-    });
-  }
-  res.cookies.set("hama_is_new_user", isNewUser ? "1" : "0", {
-    path: "/",
-    maxAge: 60 * 60 * 24 * 3,
-    sameSite: "lax",
-  });
 
+  const res = NextResponse.redirect(new URL(returnTo, req.url));
+  applyAuthSessionCookies(res, { userId, nickname, kakaoId, isNewUser });
   return res;
 }

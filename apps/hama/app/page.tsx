@@ -5,7 +5,7 @@
  * - RecentIntentChips → 컴포넌트 유지, `/` 에서만 마운트 안 함. 필요 시 아래처럼 다시 추가.
  * - 최근 본 가로 스크롤 → 마이(`/my`)의「최근 본 카드」+ `?open=` 딥링크 로 유지.
  * - 홈 퀵 카테고리 → `QuickScenarioGrid` 의 `QUICK_CATEGORY_CANDIDATES` + `public/home` 일러스트.
- * - HomeTrustPickSection: 신뢰 보조 카드 최대 3개(/api/home-recommend + 시나리오 시드). 최근 검색/최근 본 아님.
+ * - HomeTrustPickSection: 홈 자동 추천 카드 — `/` 에서 마운트 안 함 (검색·/search 결과에서만 노출).
  * 결과 화면 NextSuggestions 등에서 탐색·후속 추천은 그대로.
  */
 "use client";
@@ -18,6 +18,7 @@ import { HomeHero } from "./_components/home/HomeHero";
 import { QuickScenarioGrid } from "./_components/home/QuickScenarioGrid";
 import { HomeBottomNav } from "./_components/home/HomeBottomNav";
 import { useRecent } from "./_hooks/useRecent";
+import { useGeoLocation } from "./_hooks/useGeoLocation";
 import { HamaEvents } from "@/lib/analytics/events";
 import type { HomeResultsNavParams } from "@/lib/homeResultsNavParams";
 import { logHamaTabClickTrace, resolveHomeResultsUrl } from "@/lib/hamaTabClickTrace";
@@ -25,13 +26,19 @@ import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { recordRecentIntent } from "@/lib/recentIntents";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { stashPlaceForSession } from "@/lib/session/placeSession";
-import { colors, space } from "@/lib/designTokens";
+import { colors, pageBackground, space, radius } from "@/lib/designTokens";
+import {
+  loadActiveMission,
+  RECEIPT_VERIFY_PATH,
+  type HamaActiveMission,
+} from "@/lib/mission/hamaActiveMission";
 import { parseUserProfile } from "@/lib/onboardingProfile";
+import { useHamaMe, type HamaMeUser } from "@/lib/auth/useHamaMe";
+import { kakaoLoginUrl } from "@/lib/auth/kakaoLogin";
 import {
   clearNewUserCookie,
   getCookie,
   isKakaoInAppBrowser,
-  isLoggedInForSurveyGate,
   isSurveyCompletedResolved,
   logSurveyGate,
   logSurveyRedirect,
@@ -55,8 +62,17 @@ interface PointLog {
 
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
-const LOGIN_FLAG_KEY = "hamaLoggedIn";
 const EXPERIMENT_INTRO_SEEN_KEY = "hama_experiment_intro_seen";
+const DEFAULT_MISSION_SEARCH_QUERY = "아이랑 갈만한 곳";
+
+const SCENARIO_QUICK_CHIPS: { scenario: string; query: string }[] = [
+  { scenario: "아이랑", query: "아이랑 갈만한 곳" },
+  { scenario: "데이트", query: "데이트하기 좋은 곳" },
+  { scenario: "가족 외식", query: "가족 외식하기 좋은 식당" },
+  { scenario: "혼자 카페", query: "혼자 가기 좋은 카페" },
+  { scenario: "조용한 곳", query: "조용한 곳" },
+  { scenario: "주차 편한 곳", query: "주차 편한 곳" },
+];
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -109,36 +125,44 @@ function isNearbyIntent(q: string) {
   return /(근처|주변|가까운|가까이|내\s?주변|여기\s?근처|근방)/.test(t);
 }
 
-function HomePageContent() {
+type HomePageContentProps = {
+  isLoggedIn: boolean;
+  meUser: HamaMeUser | null;
+};
+
+function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const userLocation = useGeoLocation();
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [todayAskCount, setTodayAskCount] = useState<number | null>(null);
+  const [activeMission, setActiveMission] = useState<HamaActiveMission | null>(null);
   const { recentCards, recordView } = useRecent();
 
   const openId = searchParams.get("open");
 
   useEffect(() => {
-    const sync = () => {
+    if (meUser) {
+      setUser({ nickname: meUser.nickname, points: meUser.points });
+    } else {
       setUser(loadUserFromStorage());
-      try {
-        setIsLoggedIn(window.localStorage.getItem(LOGIN_FLAG_KEY) === "1");
-      } catch {
-        setIsLoggedIn(false);
-      }
-    };
+    }
+  }, [meUser]);
+
+  useEffect(() => {
     logEvent("session_start", { page: "home" });
     logEvent("page_view", { page: "home" });
     logEvent(HamaEvents.home_enter, { page: "home", surface: "first_paint" });
-    sync();
-    window.addEventListener("focus", sync);
-    window.addEventListener("storage", sync);
-    window.addEventListener("pageshow", sync);
+  }, []);
+
+  useEffect(() => {
+    const syncMission = () => setActiveMission(loadActiveMission());
+    syncMission();
+    window.addEventListener("pageshow", syncMission);
+    window.addEventListener("focus", syncMission);
     return () => {
-      window.removeEventListener("focus", sync);
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("pageshow", sync);
+      window.removeEventListener("pageshow", syncMission);
+      window.removeEventListener("focus", syncMission);
     };
   }, []);
 
@@ -175,6 +199,27 @@ function HomePageContent() {
       appendPointLog(amount, reason);
       return updated;
     });
+  };
+
+  const goSearch = (query: string, source: string, scenario?: string) => {
+    const q = query.trim();
+    if (!q) return;
+    if (scenario) {
+      logEvent("scenario_quick_click", { scenario, query: q, page: "home", source });
+    }
+    recordRecentIntent(q);
+    addPoints(3, "상황 검색");
+    const params = new URLSearchParams({ query: q });
+    if (userLocation) {
+      params.set("lat", String(userLocation.lat));
+      params.set("lng", String(userLocation.lng));
+    }
+    router.push(`/search?${params.toString()}`);
+  };
+
+  const handleMissionBannerStart = () => {
+    logEvent("mission_banner_click", { query: DEFAULT_MISSION_SEARCH_QUERY, page: "home" });
+    goSearch(DEFAULT_MISSION_SEARCH_QUERY, "mission_banner");
   };
 
   const goResults = (q: string, source: string, nav?: HomeResultsNavParams) => {
@@ -214,16 +259,11 @@ function HomePageContent() {
 
   const handleLoginClick = () => {
     logEvent("login_start", { page: "home", source: "home_header" });
-    window.location.href = "/api/auth/kakao/login?return_to=%2F";
+    window.location.href = kakaoLoginUrl("/");
   };
 
   const handleLogoutClick = () => {
     logEvent("logout", { page: "home", source: "home_header" });
-    try {
-      window.localStorage.removeItem(USER_KEY);
-      window.localStorage.removeItem(LOG_KEY);
-      window.localStorage.removeItem(LOGIN_FLAG_KEY);
-    } catch {}
     window.location.href = "/api/auth/kakao/logout";
   };
 
@@ -233,7 +273,7 @@ function HomePageContent() {
         minHeight: "100vh",
         paddingBottom: "calc(102px + env(safe-area-inset-bottom, 0px))",
         overflowX: "visible",
-        background: `linear-gradient(180deg, ${colors.bgDefault} 0%, ${colors.bgMuted} 100%)`,
+        background: pageBackground,
       }}
     >
       <style>{`
@@ -267,6 +307,50 @@ function HomePageContent() {
             }}
           />
         </div>
+        <div style={{ animation: "hamaFadeUp 360ms ease 80ms both", position: "relative", zIndex: 10 }}>
+          <div
+            style={{
+              marginBottom: 12,
+              borderRadius: radius.largeCard,
+              border: "1.5px solid #FFE0D0",
+              background: "linear-gradient(135deg, #FFF8F3 0%, #FFFFFF 100%)",
+              padding: "14px 16px",
+              boxShadow: "0 6px 16px rgba(255,107,53,0.08)",
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 900, color: colors.textPrimary, lineHeight: 1.35 }}>
+              🎁 오늘 하마 추천 방문 미션
+            </div>
+            <p
+              style={{
+                margin: "8px 0 12px",
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: colors.textSecondary,
+                fontWeight: 600,
+              }}
+            >
+              하마가 추천한 곳 다녀오고 영수증 인증하면 커피 이벤트에 응모돼요.
+            </p>
+            <button
+              type="button"
+              onClick={handleMissionBannerStart}
+              style={{
+                width: "100%",
+                border: "none",
+                borderRadius: 12,
+                padding: "11px 14px",
+                background: "#FF6B35",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              추천 받고 미션 시작하기
+            </button>
+          </div>
+        </div>
         <div style={{ animation: "hamaFadeUp 360ms ease 120ms both", position: "relative", zIndex: 10 }}>
           <HomeHero
             onSubmitQuery={(q) => {
@@ -274,6 +358,48 @@ function HomePageContent() {
               goResults(q, "hero_natural_input");
             }}
           />
+        </div>
+        <div style={{ animation: "hamaFadeUp 360ms ease 180ms both", position: "relative", zIndex: 10, marginBottom: 14 }}>
+          <h2
+            style={{
+              margin: "0 0 10px",
+              fontSize: 14,
+              fontWeight: 800,
+              color: colors.textPrimary,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            이럴 때 하마에게 골라달라고 해보세요
+          </h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              gap: 8,
+            }}
+          >
+            {SCENARIO_QUICK_CHIPS.map((chip) => (
+              <button
+                key={chip.scenario}
+                type="button"
+                onClick={() => goSearch(chip.query, "scenario_quick", chip.scenario)}
+                style={{
+                  border: `1px solid ${colors.borderSubtle}`,
+                  borderRadius: 12,
+                  background: "#fff",
+                  padding: "10px 12px",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: colors.textPrimary,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
+                }}
+              >
+                {chip.scenario}
+              </button>
+            ))}
+          </div>
         </div>
         <div style={{ animation: "hamaFadeUp 360ms ease 240ms both", position: "relative", zIndex: 10 }}>
           <QuickScenarioGrid
@@ -289,6 +415,57 @@ function HomePageContent() {
             }}
           />
         </div>
+        {activeMission && !activeMission.verified && (
+          <div
+            id="hama-active-mission"
+            style={{
+              animation: "hamaFadeUp 360ms ease 300ms both",
+              position: "relative",
+              zIndex: 10,
+              marginTop: 14,
+              marginBottom: 14,
+              borderRadius: radius.largeCard,
+              border: `1px solid ${colors.borderSubtle}`,
+              background: "#fff",
+              padding: "14px 16px",
+              boxShadow: "0 6px 16px rgba(37,99,235,0.08)",
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#2563eb" }}>진행 중인 방문 미션</div>
+            <p style={{ margin: "8px 0 12px", fontSize: 14, lineHeight: 1.5, color: colors.textPrimary, fontWeight: 700 }}>
+              {activeMission.placeName} 다녀오셨나요?
+              <br />
+              <span style={{ fontWeight: 600, color: colors.textSecondary, fontSize: 13 }}>
+                영수증 인증하고 이벤트 응모하세요.
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                logEvent("mission_receipt_click", {
+                  placeName: activeMission.placeName,
+                  placeId: activeMission.placeId ?? null,
+                  page: "home",
+                });
+                // TODO: 전용 영수증 업로드 UI — 현재는 /receipt 안내 페이지로 연결
+                router.push(RECEIPT_VERIFY_PATH);
+              }}
+              style={{
+                width: "100%",
+                border: "none",
+                borderRadius: 12,
+                padding: "11px 14px",
+                background: "#2563eb",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              영수증 인증하기
+            </button>
+          </div>
+        )}
         {todayAskCount != null && todayAskCount >= 10 && (
           <p
             style={{
@@ -310,8 +487,8 @@ function HomePageContent() {
 
 function HomeEntryGate() {
   const router = useRouter();
+  const { user: meUser, isLoggedIn, loading: meLoading } = useHamaMe();
   const [hydrated, setHydrated] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [gateReady, setGateReady] = useState(false);
   const [showLegacyPrompt, setShowLegacyPrompt] = useState(false);
   const [showPromptBadge, setShowPromptBadge] = useState(false);
@@ -323,12 +500,9 @@ function HomeEntryGate() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || meLoading) return;
 
-    const loggedIn = isLoggedInForSurveyGate();
-    setIsLoggedIn(loggedIn);
-
-    if (!loggedIn) {
+    if (!isLoggedIn) {
       setShowExperimentIntro(false);
       setGateReady(true);
       logSurveyGate({ phase: "ready", loggedIn: false, reason: "not_logged_in" });
@@ -360,7 +534,7 @@ function HomeEntryGate() {
 
     void (async () => {
       try {
-        const res = await fetch("/api/users/me/profile", { cache: "no-store", credentials: "same-origin" });
+        const res = await fetch("/api/users/me/profile", { cache: "no-store", credentials: "include" });
         const json = res.ok ? ((await res.json().catch(() => null)) as { user_profile?: unknown } | null) : null;
         const profile = parseUserProfile(json?.user_profile);
         const completed = isSurveyCompletedResolved(profile);
@@ -422,9 +596,9 @@ function HomeEntryGate() {
     return () => {
       cancelled = true;
     };
-  }, [hydrated, router]);
+  }, [hydrated, meLoading, isLoggedIn, router]);
 
-  const isBootstrapping = !hydrated || isLoggedIn === null || (isLoggedIn && !gateReady);
+  const isBootstrapping = !hydrated || meLoading || (isLoggedIn && !gateReady);
 
   if (isBootstrapping) {
     return (
@@ -445,7 +619,8 @@ function HomeEntryGate() {
           <button
             type="button"
             onClick={() => {
-              window.location.href = "/api/auth/kakao/login?return_to=%2F";
+              logEvent("login_start", { page: "home", source: "home_gate" });
+              window.location.href = kakaoLoginUrl("/");
             }}
             style={{ width: "100%", border: "none", borderRadius: 12, padding: "12px 14px", background: "#FEE500", fontWeight: 800, cursor: "pointer" }}
           >
@@ -543,7 +718,7 @@ function HomeEntryGate() {
             <div style={{ margin: 0, lineHeight: 1.68, color: "#0f172a", fontSize: 14 }}>
               <div style={{ marginBottom: 8, fontWeight: 700, color: "#334155" }}>✍️ 마케팅 느낌 버전</div>
               <p style={{ margin: 0, whiteSpace: "pre-line" }}>
-                {"안녕하세요, 이범기입니다.\n\nAI는 점점 똑똑해지고 있지만,\n정작 \"오늘 뭐 먹지?\", \"어디 갈까?\" 같은\n일상의 결정은 여전히 번거롭고 어렵습니다.\n\n그래서 직접 만들어봤습니다."}
+                {"안녕하세요. 하마입니다.\n\nAI는 점점 똑똑해지고 있지만,\n정작 \"오늘 뭐 먹지?\", \"어디 갈까?\" 같은\n일상의 결정은 여전히 번거롭고 어렵습니다.\n\n그래서 직접 만들어봤습니다."}
               </p>
               <p style={{ margin: "10px 0 0", fontWeight: 900, whiteSpace: "pre-line" }}>
                 {"AI가 우리의 일상적인 선택까지 도와줄 수 있을지,\n실제로 검증해보는 서비스입니다."}
@@ -552,7 +727,7 @@ function HomeEntryGate() {
                 {"하마는\n복잡한 검색 대신,\n당신의 상황에 맞는 선택을 딱 골라주는 것을 목표로 합니다.\n\n그리고 이 실험은\n여러분의 실제 선택 데이터를 통해 점점 더 똑똑해집니다.\n\n지금 직접 경험해보세요.\n생각보다 더 편해질지도 모릅니다."}
               </p>
               <p style={{ margin: "12px 0 0", textAlign: "right", color: "#475569", fontWeight: 700 }}>
-                — 이범기 드림
+                — 하마 드림
               </p>
             </div>
             <button
@@ -579,7 +754,7 @@ function HomeEntryGate() {
           </div>
         </div>
       )}
-      <HomePageContent />
+      <HomePageContent isLoggedIn={isLoggedIn} meUser={meUser} />
     </>
   );
 }

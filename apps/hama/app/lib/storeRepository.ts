@@ -16,6 +16,7 @@ import {
   passesNamedFoodPresetFullCardGate,
   passesTonkatsuJapaneseRelaxGate,
 } from "@/lib/recommend/namedFoodPresets";
+import { normalizeStoreTagsFromRow } from "@/lib/storeTagNormalizer";
 
 export type NamedFoodPresetRepoPhase = "strict" | "broad" | "tonkatsu_relax";
 
@@ -113,6 +114,11 @@ export function toHomeCard(row: StoreRow): HomeCard {
     sanitizeImageUrl((row as any).cover_image_url, true) ??
     sanitizeImageUrl(row.image_url, false);
 
+  const tagPack = normalizeStoreTagsFromRow(row as Record<string, unknown>, {
+    existingTags: Array.isArray(row.tags) ? row.tags : [],
+    name: row.name,
+  });
+
   const card: any = {
     id: row.id,
     name: row.name ?? "",
@@ -137,7 +143,8 @@ export function toHomeCard(row: StoreRow): HomeCard {
     mood: row.mood ?? [],
     moodText: moodArrayToText(row.mood),
 
-    tags: row.tags ?? [],
+    tags: tagPack.tags,
+    normalizedTags: tagPack.normalizedTags,
 
     ...(Array.isArray((row as StoreRow).menu_keywords) && (row as StoreRow).menu_keywords!.length
       ? { menu_keywords: (row as StoreRow).menu_keywords }

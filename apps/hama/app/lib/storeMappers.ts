@@ -1,5 +1,6 @@
 // app/lib/storeMappers.ts
 import type { HomeCard } from "@/lib/storeTypes";
+import { normalizeStoreTagsFromRow } from "@/lib/storeTagNormalizer";
 
 // 프로젝트 내 Store(혹은 stores row) 형태가 조금씩 달라도 안전하게 처리
 type AnyStore = Record<string, any>;
@@ -92,6 +93,11 @@ export function storeToHomeCard(store: AnyStore): HomeCard {
       ? store.longitude
       : store?.lng ?? store?.longitude ?? null;
 
+  const tagPack = normalizeStoreTagsFromRow(store, {
+    existingTags: Array.isArray(store?.tags) ? (store.tags as string[]) : [],
+    name,
+  });
+
   return {
     id,
     name,
@@ -112,6 +118,7 @@ export function storeToHomeCard(store: AnyStore): HomeCard {
     withKids: store?.withKids ?? store?.with_kids ?? null,
     forWork: store?.forWork ?? store?.for_work ?? null,
     priceLevel: store?.priceLevel ?? store?.price_level ?? null,
-    tags: store?.tags ?? null,
+    tags: tagPack.tags,
+    normalizedTags: tagPack.normalizedTags,
   } as HomeCard;
 }

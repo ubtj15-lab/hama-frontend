@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
+import { logEvent } from "@/lib/logEvent";
 import { colors, radius } from "@/lib/designTokens";
 
 type Props = {
@@ -57,19 +58,47 @@ export function HomeBottomNav({ active = "home" }: Props) {
           justifyContent: "space-around",
         }}
       >
-        <button type="button" style={itemStyle(active === "home")} onClick={() => router.push("/")}>
+        <button
+          type="button"
+          style={itemStyle(active === "home")}
+          onClick={() => {
+            logEvent("bottom_nav_click", { tab: "home" });
+            router.push("/");
+          }}
+        >
           <span style={iconWrap}>🏠</span>
           <span>홈</span>
         </button>
-        <button type="button" style={itemStyle(active === "saved")} onClick={() => router.push("/my")}>
+        <button
+          type="button"
+          style={itemStyle(active === "saved")}
+          onClick={() => {
+            logEvent("bottom_nav_click", { tab: "saved" });
+            router.push("/my");
+          }}
+        >
           <span style={iconWrap}>🔖</span>
           <span>저장</span>
         </button>
-        <button type="button" style={itemStyle(active === "history")} onClick={() => router.push("/calendar")}>
+        <button
+          type="button"
+          style={itemStyle(active === "history")}
+          onClick={() => {
+            logEvent("bottom_nav_click", { tab: "history" });
+            router.push("/mypage/points");
+          }}
+        >
           <span style={iconWrap}>🕘</span>
           <span>기록</span>
         </button>
-        <button type="button" style={itemStyle(active === "my")} onClick={() => router.push("/my")}>
+        <button
+          type="button"
+          style={itemStyle(active === "my")}
+          onClick={() => {
+            logEvent("bottom_nav_click", { tab: "my" });
+            router.push("/my");
+          }}
+        >
           <span style={iconWrap}>👤</span>
           <span>MY</span>
         </button>

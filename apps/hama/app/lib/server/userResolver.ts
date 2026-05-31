@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { HAMA_USER_ID_COOKIE } from "./authCookies";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 
 function normalizeClientUserId(v: string | null | undefined): string | null {
@@ -9,15 +10,21 @@ function normalizeClientUserId(v: string | null | undefined): string | null {
   return t;
 }
 
+/** 영수증 인증 등 — httpOnly `hama_user_id` 쿠키만 허용 */
+export function getUserIdFromAuthCookie(req: NextRequest): string | null {
+  const id = req.cookies.get(HAMA_USER_ID_COOKIE)?.value?.trim();
+  return id || null;
+}
+
 export async function resolveUserIdFromRequest(
   req: NextRequest,
   incomingUserId?: string | null
 ): Promise<string | null> {
+  const cookieUserId = getUserIdFromAuthCookie(req);
+  if (cookieUserId) return cookieUserId;
+
   const normalized = normalizeClientUserId(incomingUserId ?? null);
   if (normalized) return normalized;
-
-  const cookieUserId = req.cookies.get("hama_user_id")?.value?.trim();
-  if (cookieUserId) return cookieUserId;
 
   const kakaoId = req.cookies.get("hama_kakao_id")?.value?.trim();
   if (!kakaoId) return null;

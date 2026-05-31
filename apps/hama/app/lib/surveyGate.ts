@@ -4,6 +4,7 @@ export const ONBOARDING_COMPLETED_AT_LS = "hama_onboarding_completed_at";
 export const ONBOARDING_PROFILE_PENDING_LS = "hama_user_profile_pending";
 export const ONBOARDING_PROMPT_DISMISSED_KEY = "hama_onboarding_prompt_dismissed";
 export const NEW_USER_COOKIE = "hama_is_new_user";
+/** @deprecated 로그인 판별은 `/api/me` (httpOnly `hama_user_id` 쿠키) 사용 */
 export const LOGIN_FLAG_KEY = "hamaLoggedIn";
 
 export function getCookie(name: string): string | null {
@@ -12,15 +13,9 @@ export function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[2]) : null;
 }
 
-/** 카카오 콜백 직후 localStorage 동기화 전에도 쿠키로 로그인 판별 */
+/** @deprecated `/api/me` 사용 — `hama_user_id`는 httpOnly라 document.cookie로 읽을 수 없음 */
 export function isLoggedInForSurveyGate(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    if (window.localStorage.getItem(LOGIN_FLAG_KEY) === "1") return true;
-  } catch {
-    /* ignore */
-  }
-  return Boolean(getCookie("hama_user_id"));
+  return false;
 }
 
 export function readLocalOnboardingCompletedAt(): string | null {

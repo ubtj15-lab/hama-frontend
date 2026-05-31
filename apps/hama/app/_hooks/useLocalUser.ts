@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { kakaoLoginUrl } from "@/lib/auth/kakaoLogin";
+import { useHamaMe } from "@/lib/auth/useHamaMe";
 
 interface HamaUser {
   nickname: string;
@@ -16,9 +18,8 @@ interface PointLog {
 
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
-const LOGIN_FLAG_KEY = "hamaLoggedIn";
 
-function loadUserFromStorage(): HamaUser {
+function loadGuestPointsFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
 
   try {
@@ -34,7 +35,7 @@ function loadUserFromStorage(): HamaUser {
   }
 }
 
-function saveUserToStorage(user: HamaUser) {
+function saveGuestPointsToStorage(user: HamaUser) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -61,31 +62,20 @@ function appendPointLog(amount: number, reason: string) {
 }
 
 export function useLocalUser() {
+  const { user: meUser, isLoggedIn, refresh } = useHamaMe();
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // 메뉴 UI
+  useEffect(() => {
+    if (meUser) {
+      setUser({ nickname: meUser.nickname, points: meUser.points });
+    } else {
+      setUser(loadGuestPointsFromStorage());
+    }
+  }, [meUser]);
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 60, left: 10 });
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
-
-  const syncLoginState = () => {
-    if (typeof window === "undefined") return;
-    setUser(loadUserFromStorage());
-    setIsLoggedIn(window.localStorage.getItem(LOGIN_FLAG_KEY) === "1");
-  };
-
-  useEffect(() => {
-    syncLoginState();
-    window.addEventListener("pageshow", syncLoginState);
-    window.addEventListener("focus", syncLoginState);
-    window.addEventListener("storage", syncLoginState);
-    return () => {
-      window.removeEventListener("pageshow", syncLoginState);
-      window.removeEventListener("focus", syncLoginState);
-      window.removeEventListener("storage", syncLoginState);
-    };
-  }, []);
 
   const updateMenuPosition = () => {
     if (!menuButtonRef.current) return;
@@ -110,28 +100,18 @@ export function useLocalUser() {
   const addPoints = (amount: number, reason: string) => {
     setUser((prev) => {
       const updated = { ...prev, points: prev.points + amount };
-      saveUserToStorage(updated);
+      if (!isLoggedIn) saveGuestPointsToStorage(updated);
       appendPointLog(amount, reason);
       return updated;
     });
   };
 
   const logoutLocal = () => {
-    if (typeof window === "undefined") return;
-    window.localStorage.removeItem(USER_KEY);
-    window.localStorage.removeItem(LOG_KEY);
-    window.localStorage.removeItem(LOGIN_FLAG_KEY);
-    setUser({ nickname: "게스트", points: 0 });
-    setIsLoggedIn(false);
+    window.location.href = "/api/auth/kakao/logout";
   };
 
   const loginLocal = () => {
-    if (typeof window === "undefined") return;
-    const newUser: HamaUser = { nickname: "카카오 사용자", points: user.points };
-    window.localStorage.setItem(USER_KEY, JSON.stringify(newUser));
-    window.localStorage.setItem(LOGIN_FLAG_KEY, "1");
-    setUser(newUser);
-    setIsLoggedIn(true);
+    window.location.href = kakaoLoginUrl("/");
   };
 
   return {
@@ -148,6 +128,7 @@ export function useLocalUser() {
     addPoints,
     logoutLocal,
     loginLocal,
+    refreshMe: refresh,
 
     setMenuOpen,
     setMenuPos,

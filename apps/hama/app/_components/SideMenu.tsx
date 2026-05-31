@@ -109,12 +109,12 @@ export default function SideMenu({
               <button
                 onClick={() => {
                   closeMenu();
-                  logEvent("page_view", { page: "recommend" });
-                  onGo("/recommend");
+                  logEvent("page_view", { page: "search", source: "side_menu" });
+                  onGo("/search?query=" + encodeURIComponent("아이랑 갈만한 곳"));
                 }}
                 style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "none", background: "#2563EB", fontSize: 14, fontWeight: 600, color: "#fff", textAlign: "left", cursor: "pointer" }}
               >
-                오늘의 추천 보기
+                추천 검색하기
               </button>
             </div>
           </div>

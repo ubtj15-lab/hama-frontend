@@ -16,8 +16,9 @@ body {
 
 :root {
   color-scheme: light;
-  --hama-bg-top: #faf6ef;
-  --hama-bg-bottom: #f5f2ec;
+  --hama-bg-top: #f6f0e9;
+  --hama-bg-mid: #f4f6fb;
+  --hama-bg-bottom: #f4f6fb;
   --hama-surface: #ffffff;
   --hama-surface-2: rgba(255, 255, 255, 0.9);
   --hama-muted: #f5f2ec;
@@ -77,7 +78,7 @@ body {
 
 body {
   color: var(--hama-text);
-  background: linear-gradient(180deg, var(--hama-bg-top) 0%, var(--hama-bg-bottom) 100%);
+  background: linear-gradient(180deg, var(--hama-bg-top) 0%, var(--hama-bg-mid) 45%, var(--hama-bg-bottom) 100%);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

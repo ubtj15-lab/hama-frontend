@@ -75,7 +75,7 @@ export default function HomeTopBar({
             type="button"
             onClick={() => {
               if (onLoginClick) onLoginClick();
-              else window.location.href = "/api/auth/kakao/login?return_to=%2F";
+              else window.location.href = "/api/auth/kakao/login?next=%2F";
             }}
             style={{
               height: 34,
