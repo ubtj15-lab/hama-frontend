@@ -487,17 +487,38 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
 
 function HomeEntryGate() {
   const router = useRouter();
-  const { user: meUser, isLoggedIn, loading: meLoading } = useHamaMe();
+  const searchParams = useSearchParams();
+  const { user: meUser, isLoggedIn, loading: meLoading, refresh } = useHamaMe();
   const [hydrated, setHydrated] = useState(false);
   const [gateReady, setGateReady] = useState(false);
   const [showLegacyPrompt, setShowLegacyPrompt] = useState(false);
   const [showPromptBadge, setShowPromptBadge] = useState(false);
   const [showExperimentIntro, setShowExperimentIntro] = useState(false);
+  const [loginFailReason, setLoginFailReason] = useState<string | null>(null);
   const redirectOnceRef = useRef(false);
+  const authReturnHandledRef = useRef(false);
 
   useEffect(() => {
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || authReturnHandledRef.current) return;
+    const loginParam = searchParams.get("login");
+    if (!loginParam) return;
+
+    authReturnHandledRef.current = true;
+    void refresh();
+
+    if (loginParam === "failed") {
+      const reason = searchParams.get("reason") || "unknown";
+      setLoginFailReason(reason);
+      console.error("[home] Kakao login failed", { reason });
+      logSurveyGate({ phase: "login_failed", reason });
+    }
+
+    router.replace("/", { scroll: false });
+  }, [hydrated, searchParams, refresh, router]);
 
   useEffect(() => {
     if (!hydrated || meLoading) return;
@@ -616,6 +637,23 @@ function HomeEntryGate() {
           <p style={{ margin: "0 0 16px", color: "#475569", lineHeight: 1.45 }}>
             카카오 로그인 후 바로 맞춤 추천을 받아보세요.
           </p>
+          {loginFailReason ? (
+            <p
+              role="alert"
+              style={{
+                margin: "0 0 16px",
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "#FEF2F2",
+                color: "#B91C1C",
+                fontSize: 13,
+                lineHeight: 1.45,
+                wordBreak: "break-all",
+              }}
+            >
+              로그인에 실패했습니다. ({loginFailReason})
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={() => {

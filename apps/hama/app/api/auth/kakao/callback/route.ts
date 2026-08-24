@@ -1,16 +1,17 @@
 // app/api/auth/kakao/callback/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { applyAuthSessionCookies } from "@/lib/server/authCookies";
+import { getKakaoAuthEnv } from "@/lib/server/kakaoAuthConfig";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
 
-function getRedirectUri(req: NextRequest): string {
-  const host = req.headers.get("host") || req.headers.get("x-forwarded-host");
-  const proto =
-    req.headers.get("x-forwarded-proto") ||
-    (host?.includes("localhost") ? "http" : "https");
-  if (host) return `${proto}://${host}/api/auth/kakao/callback`;
-  const fallback = (process.env.NEXT_PUBLIC_KAKAO_REDIRECT_URI || "").trim();
-  return fallback || "http://localhost:3000/api/auth/kakao/callback";
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+function loginFailedRedirect(req: NextRequest, reason: string): NextResponse {
+  const url = new URL("/", req.url);
+  url.searchParams.set("login", "failed");
+  url.searchParams.set("reason", reason.slice(0, 180));
+  return NextResponse.redirect(url);
 }
 
 function safeReturnPath(state: string | null): string {
@@ -23,61 +24,122 @@ function safeReturnPath(state: string | null): string {
   }
 }
 
-function loginFailedRedirect(req: NextRequest): NextResponse {
-  return NextResponse.redirect(new URL("/?login=failed", req.url));
-}
-
 export async function GET(req: NextRequest) {
-  const REST_KEY = (process.env.KAKAO_REST_API_KEY || "").trim();
-  const redirectUri = getRedirectUri(req);
+  const envResult = getKakaoAuthEnv(req);
+  if (!envResult.ok) {
+    const reason = `missing_env:${envResult.missing.join(",")}`;
+    console.error("[kakao/callback] missing env", { missing: envResult.missing });
+    return loginFailedRedirect(req, reason);
+  }
 
-  if (!REST_KEY || !redirectUri) {
-    return new Response("Kakao env not set", { status: 500 });
+  const { clientId, clientSecret, redirectUri } = envResult.env;
+  const returnTo = safeReturnPath(req.nextUrl.searchParams.get("state"));
+
+  const kakaoError = req.nextUrl.searchParams.get("error");
+  const kakaoErrorDescription = req.nextUrl.searchParams.get("error_description");
+  if (kakaoError) {
+    const reason = `kakao_oauth_error:${kakaoError}`;
+    console.error("[kakao/callback] Kakao OAuth error", {
+      error: kakaoError,
+      error_description: kakaoErrorDescription,
+    });
+    return loginFailedRedirect(req, reason);
   }
 
   const code = req.nextUrl.searchParams.get("code");
-  const state = req.nextUrl.searchParams.get("state");
-  const returnTo = safeReturnPath(state);
-
   if (!code) {
-    return loginFailedRedirect(req);
+    console.error("[kakao/callback] authorization code missing", {
+      search: req.nextUrl.search,
+    });
+    return loginFailedRedirect(req, "missing_code");
   }
 
-  const tokenRes = await fetch("https://kauth.kakao.com/oauth/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: REST_KEY,
-      redirect_uri: redirectUri,
-      code,
-    }),
+  const tokenBody = new URLSearchParams({
+    grant_type: "authorization_code",
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    code,
   });
+  // Match previous production behavior: only send secret when configured.
+  if (clientSecret) tokenBody.set("client_secret", clientSecret);
+
+  let tokenRes: Response;
+  try {
+    tokenRes = await fetch("https://kauth.kakao.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: tokenBody,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "unknown";
+    console.error("[kakao/callback] token request network error", { message });
+    return loginFailedRedirect(req, "token_request_network_error");
+  }
+
+  const tokenRaw = await tokenRes.text();
+  let tokenJson: { access_token?: string; error?: string; error_description?: string } = {};
+  try {
+    tokenJson = JSON.parse(tokenRaw) as typeof tokenJson;
+  } catch {
+    /* non-JSON body handled below */
+  }
 
   if (!tokenRes.ok) {
-    return loginFailedRedirect(req);
+    const kakaoMsg = tokenJson.error_description || tokenJson.error || tokenRaw.slice(0, 200);
+    console.error("[kakao/callback] token request failed", {
+      status: tokenRes.status,
+      redirectUri,
+      kakaoError: tokenJson.error,
+      kakaoErrorDescription: tokenJson.error_description,
+      body: tokenRaw.slice(0, 500),
+    });
+    const reason =
+      tokenJson.error === "invalid_grant" && /redirect/i.test(String(kakaoMsg))
+        ? "redirect_uri_mismatch"
+        : `token_request_failed:${tokenJson.error || tokenRes.status}`;
+    return loginFailedRedirect(req, reason);
   }
 
-  const tokenJson = (await tokenRes.json()) as { access_token?: string };
   const accessToken = tokenJson.access_token;
-
   if (!accessToken) {
-    return loginFailedRedirect(req);
+    console.error("[kakao/callback] access_token missing in token response", {
+      body: tokenRaw.slice(0, 500),
+    });
+    return loginFailedRedirect(req, "missing_access_token");
   }
 
-  const userRes = await fetch("https://kapi.kakao.com/v2/user/me", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  let userRes: Response;
+  try {
+    userRes = await fetch("https://kapi.kakao.com/v2/user/me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "unknown";
+    console.error("[kakao/callback] user info request network error", { message });
+    return loginFailedRedirect(req, "user_info_network_error");
+  }
 
+  const userRaw = await userRes.text();
   if (!userRes.ok) {
-    return loginFailedRedirect(req);
+    console.error("[kakao/callback] user info request failed", {
+      status: userRes.status,
+      body: userRaw.slice(0, 500),
+    });
+    return loginFailedRedirect(req, `user_info_failed:${userRes.status}`);
   }
 
-  const kakaoUser = (await userRes.json()) as {
+  let kakaoUser: {
     id?: number | string;
     kakao_account?: { profile?: { nickname?: string } };
     properties?: { nickname?: string };
   };
+  try {
+    kakaoUser = JSON.parse(userRaw) as typeof kakaoUser;
+  } catch {
+    console.error("[kakao/callback] user info JSON parse failed", { body: userRaw.slice(0, 500) });
+    return loginFailedRedirect(req, "user_info_parse_failed");
+  }
+
   const kakaoId = String(kakaoUser?.id ?? "");
   const nickname =
     kakaoUser?.kakao_account?.profile?.nickname ??
@@ -85,12 +147,16 @@ export async function GET(req: NextRequest) {
     "카카오 사용자";
 
   if (!kakaoId) {
-    return loginFailedRedirect(req);
+    console.error("[kakao/callback] kakao user id missing", { kakaoUser });
+    return loginFailedRedirect(req, "missing_kakao_user_id");
   }
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
-    return loginFailedRedirect(req);
+    console.error(
+      "[kakao/callback] Supabase admin unavailable — check NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY"
+    );
+    return loginFailedRedirect(req, "supabase_unavailable");
   }
 
   let userId: string | null = null;
@@ -103,15 +169,28 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   if (existingError) {
-    return loginFailedRedirect(req);
+    console.error("[kakao/callback] users lookup failed", {
+      kakaoId,
+      error: existingError.message,
+      code: existingError.code,
+    });
+    return loginFailedRedirect(req, "users_lookup_failed");
   }
 
   if (existing?.id) {
     userId = existing.id;
-    await supabase
+    const { error: updateError } = await supabase
       .from("users")
       .update({ nickname, updated_at: new Date().toISOString() })
       .eq("id", userId);
+    if (updateError) {
+      console.error("[kakao/callback] users update failed", {
+        userId,
+        error: updateError.message,
+        code: updateError.code,
+      });
+      return loginFailedRedirect(req, "users_update_failed");
+    }
   } else {
     const { data: inserted, error: insertError } = await supabase
       .from("users")
@@ -124,17 +203,24 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (insertError || !inserted?.id) {
-      return loginFailedRedirect(req);
+      console.error("[kakao/callback] users insert failed", {
+        kakaoId,
+        error: insertError?.message,
+        code: insertError?.code,
+      });
+      return loginFailedRedirect(req, "users_insert_failed");
     }
     userId = inserted.id;
     isNewUser = true;
   }
 
   if (!userId) {
-    return loginFailedRedirect(req);
+    console.error("[kakao/callback] userId unresolved after upsert", { kakaoId });
+    return loginFailedRedirect(req, "missing_user_id");
   }
 
   const res = NextResponse.redirect(new URL(returnTo, req.url));
   applyAuthSessionCookies(res, { userId, nickname, kakaoId, isNewUser });
+  console.info("[kakao/callback] login success", { userId, kakaoId, isNewUser, returnTo });
   return res;
 }

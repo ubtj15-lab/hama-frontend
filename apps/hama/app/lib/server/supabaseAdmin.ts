@@ -29,7 +29,8 @@ export function createSupabaseAdmin() {
 export function getSupabaseAdmin() {
   try {
     return createSupabaseAdmin();
-  } catch {
+  } catch (e) {
+    console.error("[supabaseAdmin] unavailable", e instanceof Error ? e.message : e);
     return null;
   }
 }
