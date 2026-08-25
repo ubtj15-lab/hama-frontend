@@ -159,6 +159,14 @@ export async function GET(req: NextRequest) {
     return loginFailedRedirect(req, "supabase_unavailable");
   }
 
+  const supabaseHost = (() => {
+    try {
+      return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").host || "missing_host";
+    } catch {
+      return "invalid_supabase_url";
+    }
+  })();
+
   let userId: string | null = null;
   let isNewUser = false;
 
@@ -169,11 +177,17 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   if (existingError) {
-    const detail = `${existingError.code || "unknown"}:${existingError.message || "no_message"}`
+    const raw = `${existingError.code || "unknown"}:${existingError.message || "no_message"}`;
+    const isFetchFailed = /fetch failed|ENOTFOUND|ECONNREFUSED|network/i.test(raw);
+    const detail = (isFetchFailed
+      ? `supabase_unreachable:${supabaseHost}`
+      : raw
+    )
       .replace(/\s+/g, "_")
       .slice(0, 120);
     console.error("[kakao/callback] users lookup failed", {
       kakaoId,
+      supabaseHost,
       error: existingError.message,
       code: existingError.code,
       details: existingError.details,
