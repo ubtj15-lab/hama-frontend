@@ -169,12 +169,17 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   if (existingError) {
+    const detail = `${existingError.code || "unknown"}:${existingError.message || "no_message"}`
+      .replace(/\s+/g, "_")
+      .slice(0, 120);
     console.error("[kakao/callback] users lookup failed", {
       kakaoId,
       error: existingError.message,
       code: existingError.code,
+      details: existingError.details,
+      hint: existingError.hint,
     });
-    return loginFailedRedirect(req, "users_lookup_failed");
+    return loginFailedRedirect(req, `users_lookup_failed:${detail}`);
   }
 
   if (existing?.id) {
@@ -184,12 +189,15 @@ export async function GET(req: NextRequest) {
       .update({ nickname, updated_at: new Date().toISOString() })
       .eq("id", userId);
     if (updateError) {
+      const detail = `${updateError.code || "unknown"}:${updateError.message || "no_message"}`
+        .replace(/\s+/g, "_")
+        .slice(0, 120);
       console.error("[kakao/callback] users update failed", {
         userId,
         error: updateError.message,
         code: updateError.code,
       });
-      return loginFailedRedirect(req, "users_update_failed");
+      return loginFailedRedirect(req, `users_update_failed:${detail}`);
     }
   } else {
     const { data: inserted, error: insertError } = await supabase
@@ -203,12 +211,15 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (insertError || !inserted?.id) {
+      const detail = `${insertError?.code || "unknown"}:${insertError?.message || "no_id"}`
+        .replace(/\s+/g, "_")
+        .slice(0, 120);
       console.error("[kakao/callback] users insert failed", {
         kakaoId,
         error: insertError?.message,
         code: insertError?.code,
       });
-      return loginFailedRedirect(req, "users_insert_failed");
+      return loginFailedRedirect(req, `users_insert_failed:${detail}`);
     }
     userId = inserted.id;
     isNewUser = true;
