@@ -1,0 +1,5 @@
+{
+  "buildCommand": "npm run build:hama",
+  "installCommand": "npm install",
+  "framework": "nextjs"
+}

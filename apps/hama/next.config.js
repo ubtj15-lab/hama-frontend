@@ -12,6 +12,9 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
+  /** Vercel 빌드 중 Supabase 지연으로 SSG worker가 죽는 경우 완화 */
+  staticPageGenerationTimeout: 180,
+
   experimental: {
     /** 모노레포: 루트 node_modules 기준으로 트레이싱·청크 해석 */
     outputFileTracingRoot: path.join(__dirname, "../.."),
