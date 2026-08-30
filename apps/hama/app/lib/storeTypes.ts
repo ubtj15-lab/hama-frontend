@@ -88,6 +88,8 @@ export type HomeCard = {
   normalizedTags?: string[];
   /** Supabase stores.menu_keywords — 음식 메뉴 키워드(선택 컬럼) */
   menu_keywords?: string[];
+  /** Supabase stores.search_keywords — 장르/상황/지역 검색 키워드(선택 컬럼) */
+  search_keywords?: string[];
   /** 소개 문구(선택 컬럼) */
   description?: string | null;
   /** CHINESE | JAPANESE | … — stores.food_sub_category(선택) */

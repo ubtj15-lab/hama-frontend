@@ -22,6 +22,63 @@ export type RecommendationMode = "single" | "course";
 /** DB category / 역할 매핑용 (FOOD → restaurant, BEAUTY → salon, FITNESS/LIFE → URL 퀵 탭) */
 export type IntentCategory = "FOOD" | "CAFE" | "ACTIVITY" | "BEAUTY" | "FITNESS" | "LIFE";
 
+/** Query Understanding — 자연어에서 추출한 의미 신호 (routing 입력). */
+export type QueryUnderstandingCategory =
+  | "restaurant"
+  | "cafe"
+  | "activity"
+  | "culture"
+  | "beauty"
+  | "life";
+
+export type ParsedRecommendationQuery = {
+  rawQuery: string;
+  normalizedQuery: string;
+  primaryCategory?: QueryUnderstandingCategory;
+  categoryConfidence?: number;
+  menuIntents?: string[];
+  purposeIntents?: string[];
+  companionIntents?: string[];
+  contextIntents?: string[];
+  hardConstraints?: string[];
+  expandedKeywords?: string[];
+  secondaryCategories?: QueryUnderstandingCategory[];
+  /** 시뮬레이터/디버그: 최종 vertical 라우트 */
+  route?: IntentCategory | "MIXED";
+  /** true면 generic mixed pool 대신 vertical 우선 */
+  strongVertical?: boolean;
+  parkingPreferred?: boolean;
+  negation?: QueryNegation;
+  /** Canonical positive venue ids after polarity reconciliation (kids_cafe, alcohol, …). */
+  venueIntents?: string[];
+  /** Debug: excluded venues subtracted from positive venue requirements. */
+  venuePolarity?: {
+    positiveBefore: string[];
+    excludedVenues: string[];
+    positiveAfter: string[];
+    removedByExclusion: string[];
+    contradictionResolved: boolean;
+  };
+};
+
+/** Query Understanding v3 — 부정/제외 (긍정 신호와 분리) */
+export type QueryNegation = {
+  isNegationQuery: boolean;
+  patterns: string[];
+  types: string[];
+  excludedCategories: QueryUnderstandingCategory[];
+  excludedMenus: string[];
+  excludedContexts: string[];
+  excludedAttributes: string[];
+  suppressedIntents: string[];
+  excludedVenues: string[];
+  positiveRemainder: string;
+  positivePurpose: string[];
+  hardExclusions: string[];
+  softSuppressions: string[];
+  fallbackReason: string | null;
+};
+
 /** FOOD 세부 장르(태그/랭킹 보조용). intentCategory가 FOOD일 때 주로 설정 */
 export type FoodSubCategory =
   | "KOREAN"
@@ -60,6 +117,8 @@ export type ScenarioObject = {
   recommendationMode?: RecommendationMode;
   /** search_strict일 때 단일 카테고리 하드 필터 */
   intentCategory?: IntentCategory;
+  /** Query Understanding 디버그 스냅샷 */
+  queryUnderstanding?: ParsedRecommendationQuery;
   /** 명시적 단일목적 검색(기본 true when intentCategory set) */
   intentStrict?: boolean;
   /** 음식 장르 힌트(FOOD + 키워드 매칭 시) */
@@ -68,6 +127,8 @@ export type ScenarioObject = {
   beautySubCategory?: BeautySubCategory;
   /** 정규화된 메뉴명(예: 짜장면, 초밥) — FOOD 랭킹·카드 태그 */
   menuIntent?: string[];
+  catalogMenu?: import("@/lib/recommend/catalogMenuLexicon").CatalogMenuResolution;
+  conversationalDiscovery?: import("@/lib/recommend/conversationalDiscovery").ConversationalDiscoverySignal;
   /** 음식 취향 토큰: spicy_brothy, light_clean, light, hearty, brothy, hangover, kid_friendly_menu, parent_friendly_menu 등 */
   foodPreference?: string[];
   /** 분위기 토큰: atmospheric, calm, conversation_friendly, emotional */
