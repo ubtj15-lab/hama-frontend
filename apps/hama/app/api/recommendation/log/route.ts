@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  mergeImpressionHistory,
+  type RecommendationSessionSnapshot,
+} from "@/lib/analytics/recommendationSessionSnapshot";
+import { RECOMMENDATION_ENGINE_VERSION } from "@/lib/analytics/recommendationEngineVersion";
+import {
+  buildContextualRejectResponseRow,
+  shouldSkipRecommendationEventsTable,
+} from "@/lib/analytics/contextualRejectFeedback";
+import { isRecommendationRejectReason } from "@/lib/analytics/recommendationRejectReasons";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
@@ -81,6 +91,7 @@ type Body = {
     shown_place_ids?: string[] | null;
     main_pick_id?: string | null;
     recommendation_reasons?: Record<string, unknown> | null;
+    session_snapshot?: RecommendationSessionSnapshot | null;
     weights?: Record<string, unknown> | null;
     scenario?: string | null;
     weather?: string | null;
@@ -108,7 +119,21 @@ async function insertAnalyticsV2(body: Body, resolvedUserId: string | null) {
 
   try {
     if (body.event_name === "recommendation_impression" && recommendationId) {
-      const { error } = await svc.from("recommendations").insert({
+      const snapshot = v2.session_snapshot ?? null;
+      const atIso = body.created_at ?? new Date().toISOString();
+      const baseMetadata: Record<string, unknown> = {
+        event_name: body.event_name,
+        source_page: body.source_page ?? null,
+        template_id: body.template_id ?? null,
+        step_pattern: body.step_pattern ?? null,
+        place_ids: body.place_ids ?? [],
+        raw_metadata: body.metadata ?? {},
+      };
+      const metadata = snapshot
+        ? mergeImpressionHistory(baseMetadata, snapshot, atIso)
+        : baseMetadata;
+
+      const row = {
         id: recommendationId,
         day_of_week: v2.day_of_week ?? null,
         time_of_day: v2.time_of_day ?? null,
@@ -122,16 +147,89 @@ async function insertAnalyticsV2(body: Body, resolvedUserId: string | null) {
         recommendation_reasons: v2.recommendation_reasons ?? {},
         weights: v2.weights ?? {},
         weather: v2.weather ?? null,
-        metadata: {
-          event_name: body.event_name,
-          source_page: body.source_page ?? null,
-          template_id: body.template_id ?? null,
-          step_pattern: body.step_pattern ?? null,
-          place_ids: body.place_ids ?? [],
-          raw_metadata: body.metadata ?? {},
+        metadata,
+      };
+
+      const { error } = await svc.from("recommendations").insert(row);
+      if (error) {
+        const isDup = error.code === "23505" || /duplicate key/i.test(String(error.message ?? ""));
+        if (isDup) {
+          try {
+            const { data: existing } = await svc
+              .from("recommendations")
+              .select("metadata")
+              .eq("id", recommendationId)
+              .maybeSingle();
+            const prev =
+              existing?.metadata && typeof existing.metadata === "object"
+                ? (existing.metadata as Record<string, unknown>)
+                : {};
+            const merged = snapshot
+              ? mergeImpressionHistory({ ...prev, ...baseMetadata }, snapshot, atIso)
+              : { ...prev, ...baseMetadata };
+            const { error: upErr } = await svc
+              .from("recommendations")
+              .update({
+                shown_place_ids: v2.shown_place_ids ?? [],
+                main_pick_id: v2.main_pick_id ?? null,
+                recommendation_reasons: v2.recommendation_reasons ?? {},
+                weights: v2.weights ?? {},
+                weather: v2.weather ?? null,
+                scenario: v2.scenario ?? body.scenario ?? null,
+                metadata: merged,
+                day_of_week: v2.day_of_week ?? null,
+                time_of_day: v2.time_of_day ?? null,
+              })
+              .eq("id", recommendationId);
+            if (upErr) console.error("recommendations update:", upErr.message);
+          } catch (e) {
+            console.error("recommendations upsert failed:", e);
+          }
+        } else {
+          console.error("recommendations insert:", error.message);
+        }
+      }
+      return;
+    }
+
+    if (body.event_name === "contextual_reject" && recommendationId) {
+      if (!isRecommendationRejectReason(v2.reject_reason)) {
+        console.warn("contextual_reject ignored: invalid reject_reason");
+        return;
+      }
+      const placeId = String(v2.selected_place_id ?? body.entity_id ?? "").trim();
+      if (!placeId) {
+        console.warn("contextual_reject ignored: missing place_id");
+        return;
+      }
+      const meta = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+      const row = buildContextualRejectResponseRow({
+        recommendationId,
+        userId: resolvedUserId,
+        sessionId,
+        payload: {
+          recommendation_id: recommendationId,
+          place_id: placeId,
+          reject_reason: v2.reject_reason,
+          shown_position:
+            typeof body.recommendation_rank === "number" ? body.recommendation_rank : null,
+          distance_m_at_recommendation:
+            typeof meta.distance_m_at_recommendation === "number"
+              ? meta.distance_m_at_recommendation
+              : null,
+          feedback_source: "PRE_VISIT",
+          engine_version: RECOMMENDATION_ENGINE_VERSION,
+          shown_place_unverified: meta.shown_place_unverified === true,
+          query: typeof meta.query === "string" ? meta.query : null,
+          qu_snapshot:
+            meta.qu_snapshot && typeof meta.qu_snapshot === "object"
+              ? (meta.qu_snapshot as never)
+              : null,
         },
+        sourcePage: body.source_page ?? null,
       });
-      if (error) console.error("recommendations insert:", error.message);
+      const { error } = await svc.from("recommendation_responses").insert(row);
+      if (error) console.error("recommendation_responses insert:", error.message);
       return;
     }
 
@@ -186,7 +284,8 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as Body;
     const supabase = getSupabase();
     const resolvedUserId = supabase ? await resolvePublicUserId(req, supabase, body.user_id ?? null) : null;
-    if (supabase) {
+    const skipEventsTable = shouldSkipRecommendationEventsTable(body.event_name);
+    if (supabase && !skipEventsTable) {
       const row = {
         session_id: body.session_id ?? "unknown",
         user_id: resolvedUserId,

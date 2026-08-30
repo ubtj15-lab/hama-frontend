@@ -3,9 +3,20 @@
 import React from "react";
 import { colors, space, typo } from "@/lib/designTokens";
 import type { ConstraintChip } from "@/lib/conversation/summarize";
+import { dedupeDisplayChips } from "./resultsPresentation";
 
-export function ActiveConstraintChips({ chips }: { chips: ConstraintChip[] }) {
-  if (!chips.length) return null;
+export function ActiveConstraintChips({
+  chips,
+  excludeLabels = [],
+}: {
+  chips: ConstraintChip[];
+  excludeLabels?: string[];
+}) {
+  const visibleLabels = dedupeDisplayChips([
+    ...excludeLabels,
+    ...chips.map((c) => c.label),
+  ]).filter((label) => !excludeLabels.some((ex) => ex.trim() === label));
+  if (!visibleLabels.length) return null;
 
   return (
     <div
@@ -18,9 +29,9 @@ export function ActiveConstraintChips({ chips }: { chips: ConstraintChip[] }) {
         marginBottom: space.section,
       }}
     >
-      {chips.map((c) => (
+      {visibleLabels.map((label) => (
         <span
-          key={c.id}
+          key={label}
           role="listitem"
           style={{
             ...typo.caption,
@@ -36,7 +47,7 @@ export function ActiveConstraintChips({ chips }: { chips: ConstraintChip[] }) {
             textOverflow: "ellipsis",
           }}
         >
-          {c.label}
+          {label}
         </span>
       ))}
     </div>

@@ -5,6 +5,7 @@ import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { useDeckRecommendationReasons } from "@/_hooks/useDeckRecommendationReasons";
 import { RecommendationCard } from "./RecommendationCard";
+import { ALTERNATIVE_SECTION_LABEL, REFRESH_BUTTON_COPY, RESULTS_PURPLE } from "./resultsPresentation";
 import { space } from "@/lib/designTokens";
 import type { LogRecommendationEventInput } from "@/lib/analytics/types";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
@@ -74,6 +75,13 @@ type Props = {
   isLoggedIn?: boolean;
   onRequireLogin?: () => void;
   analyticsV2Click?: LogRecommendationEventInput["analytics_v2"];
+  /** Phase A session id — observability only */
+  recommendationId?: string | null;
+  sessionHistory?: Record<string, unknown> | null;
+  /** Shuffle / other-rec without requiring login */
+  onRejectRecommendation?: (placeId: string) => void;
+  /** Open reason bar without shuffle (logged-in dislike). Parent owns bar lifetime. */
+  onOpenContextualReject?: (placeId: string) => void;
   /** 메인 카드 아래 — 후보 부족·재추천 등 */
   showSoftFallbackCopy?: boolean;
   /** 추천 인상 메타: 주 추천 vs '이런 곳도 있어' */
@@ -91,6 +99,8 @@ export function RecommendationList({
   isLoggedIn = false,
   onRequireLogin,
   analyticsV2Click,
+  onRejectRecommendation,
+  onOpenContextualReject,
   showSoftFallbackCopy = false,
   resultsSurface = "primary",
   recommendEngine = null,
@@ -531,6 +541,9 @@ export function RecommendationList({
         feedback: value,
       } as LogRecommendationEventInput["analytics_v2"],
     });
+    if (value === "dislike" && resultsSurface === "primary") {
+      onOpenContextualReject?.(getCardPlaceId(top));
+    }
   };
 
   const choosePlace = async (card: HomeCard, rank: number): Promise<boolean> => {
@@ -923,9 +936,7 @@ export function RecommendationList({
     incomingCount: listIncomingCards.length,
   });
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: space.card }}>
-      {renderedCards.map((card, i) => {
+  const cardNodes = renderedCards.map((card, i) => {
         const cardPlaceId = getCardPlaceId(card);
         const shouldShowReceiptVerify = cardPlaceId === selectedPlaceId;
         const isVerificationExpanded = verificationOpenPlaceId === cardPlaceId;
@@ -1088,17 +1099,18 @@ export function RecommendationList({
                 type="button"
                 onClick={() => setShowQuickFeedback((prev) => !prev)}
                 style={{
-                  height: 34,
-                  borderRadius: 10,
-                  border: "1px solid #CBD5E1",
-                  background: "#fff",
-                  color: "#475569",
+                  height: 28,
+                  border: "none",
+                  background: "transparent",
+                  color: "#9A958C",
                   fontSize: 12,
-                  fontWeight: 800,
+                  fontWeight: 700,
                   cursor: "pointer",
+                  textAlign: "left",
+                  padding: 0,
                 }}
               >
-                방문 후 인증/피드백 남기기 {showQuickFeedback ? "▴" : "▾"}
+                이 추천 도움됐나요? {showQuickFeedback ? "▴" : "▾"}
               </button>
               {showQuickFeedback ? (
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
@@ -1142,7 +1154,64 @@ export function RecommendationList({
           ) : null}
         </React.Fragment>
       );
-      })}
+      });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: space.card }}>
+      {cardNodes[0] ?? null}
+      {cardNodes.length > 1 ? (
+        <section style={{ marginTop: 8 }}>
+          <h2
+            style={{
+              margin: "0 0 12px",
+              fontSize: 15,
+              fontWeight: 800,
+              letterSpacing: "-0.03em",
+              color: "#3A3A3A",
+            }}
+          >
+            {ALTERNATIVE_SECTION_LABEL}
+          </h2>
+          <div
+            className="hama-alt-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr)",
+              gap: 10,
+            }}
+          >
+            {cardNodes.slice(1)}
+          </div>
+        </section>
+      ) : null}
+      {renderedCards.length > 0 && resultsSurface === "primary" && onRejectRecommendation ? (
+        <div style={{ display: "grid", gap: 6, paddingTop: 4 }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#8A857C" }}>
+            마음에 안 들면 다시 골라드릴게요.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const top = renderedCards[0];
+              if (!top) return;
+              const id = getCardPlaceId(top);
+              onRejectRecommendation(id);
+            }}
+            style={{
+              minHeight: 44,
+              borderRadius: 14,
+              border: "1.5px dashed #D4C4F5",
+              background: "#F7F3FF",
+              color: RESULTS_PURPLE,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            {REFRESH_BUTTON_COPY}
+          </button>
+        </div>
+      ) : null}
       {renderedCards.length > 0 ? (
         <div
           style={{
@@ -1159,6 +1228,11 @@ export function RecommendationList({
         </div>
       ) : null}
 
+      <style>{`
+        @media (min-width: 720px) {
+          .hama-alt-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+      `}</style>
       <VisitFeedbackModal
         open={showVisitFeedbackModal}
         onClose={() => setShowVisitFeedbackModal(false)}

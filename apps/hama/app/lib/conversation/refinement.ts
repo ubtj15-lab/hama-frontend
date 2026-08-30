@@ -1,5 +1,6 @@
 import type { ConversationContext } from "./types";
 import type { RefinementType } from "./types";
+import { isSelfContainedCurrentTurn } from "./selfContainedTurn";
 
 function norm(s: string): string {
   return String(s ?? "")
@@ -60,6 +61,10 @@ export function detectRefinementType(
     /가까운\s*데|가까운\s*곳|근처|멀리\s*는\s*싫|멀리\s*싫|실내\s*만|중식\s*만|일식\s*만/.test(q)
   ) {
     return "narrow";
+  }
+
+  if (previous && isSelfContainedCurrentTurn(text, previous.currentIntent)) {
+    return "new_request";
   }
 
   if (/\?+\s*$|뭐가\s*좋|어디가\s*좋|추천해줘\?/.test(q) && q.length < 24) return "clarify";

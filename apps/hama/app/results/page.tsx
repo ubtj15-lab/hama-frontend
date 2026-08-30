@@ -7,6 +7,7 @@ import { useHomeMode } from "@/_hooks/useHomeMode";
 import { useRecent } from "@/_hooks/useRecent";
 import { usePlaceNameSearchResults } from "@/_hooks/usePlaceNameSearchResults";
 import { explainPlaceNameSearchGate, normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
+import { isDirectSearchModeQuery, logDirectSearchPipeline } from "@/lib/search/directSearch";
 import {
   parseScenarioIntent,
   explainCourseGenerationMatch,
@@ -44,6 +45,7 @@ import {
   matchesTonkatsuBetaDisabledQuery,
 } from "@/lib/recommend/namedFoodPresets";
 import { ResultsHeader } from "@/_components/results/ResultsHeader";
+import { RESULTS_CONTENT_MAX_WIDTH } from "@/_components/results/resultsPresentation";
 import { ActiveConstraintChips } from "@/_components/results/ActiveConstraintChips";
 import { RecommendationList } from "@/_components/results/RecommendationList";
 import { SearchResultSection } from "@/_components/results/SearchResultSection";
@@ -68,6 +70,20 @@ import { recordRecentIntent } from "@/lib/recentIntents";
 import { recordPwaEngagement } from "@/lib/pwa/pwaEngagement";
 import FeedbackFab from "@/components/FeedbackFab";
 import { logRecommendationEvent } from "@/lib/analytics/logRecommendationEvent";
+import { logContextualRejectFeedback } from "@/lib/analytics/logContextualRejectFeedback";
+import { createRecommendationSessionId } from "@/lib/analytics/recommendationSessionIdentity";
+import {
+  buildRecommendationSessionSnapshot,
+  mergeImpressionHistory,
+} from "@/lib/analytics/recommendationSessionSnapshot";
+import { RECOMMENDATION_ENGINE_VERSION } from "@/lib/analytics/recommendationEngineVersion";
+import type { RecommendationRejectReason } from "@/lib/analytics/recommendationRejectReasons";
+import { ContextualRejectReasonBar } from "@/_components/results/ContextualRejectReasonBar";
+import {
+  buildFrozenContextualRejectPayload,
+  freezeContextualRejectContext,
+  type FrozenContextualReject,
+} from "@/_components/results/contextualRejectLifecycle";
 import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 import { hamaDevLog } from "@/lib/hamaDevLog";
 import { mergeResultsScenarioWithExplicitNav, normalizeResultsExplicitCategory, passesBeautyIndustryWhitelist, passesCultureIndustryWhitelist, strictExplicitGateCategoryFromUrl } from "@/lib/hamaResultCategoryCanonical";
@@ -173,6 +189,7 @@ function ResultsContent() {
 
   const [shuffleKey, setShuffleKey] = useState(0);
   const [rejectedMainPickIds, setRejectedMainPickIds] = useState<string[]>([]);
+  const [contextualReject, setContextualReject] = useState<FrozenContextualReject | null>(null);
   const [courseFilter, setCourseFilter] = useState<"all" | "food" | "indoor" | "under3h">("all");
   const [retryInput, setRetryInput] = useState("");
   const started = useRef<number>(0);
@@ -184,8 +201,11 @@ function ResultsContent() {
   const [profileOverride, setProfileOverride] = useState<Partial<UserProfile> | null>(null);
   const [scenarioPatch, setScenarioPatch] = useState<Partial<ScenarioObject> | null>(null);
   const [relaxPersonalRules, setRelaxPersonalRules] = useState(false);
+  /** Observability-only decision session. Not an input to ranking/shuffle. */
   const recommendSessionIdRef = useRef<string | null>(null);
   const [recommendSessionId, setRecommendSessionId] = useState<string | null>(null);
+  const sessionHistoryRef = useRef<Record<string, unknown>>({});
+  const [sessionHistory, setSessionHistory] = useState<Record<string, unknown>>({});
   const { isLoggedIn } = useHamaMe();
 
   const requireKakaoLogin = React.useCallback(() => {
@@ -216,6 +236,7 @@ function ResultsContent() {
 
   useEffect(() => {
     setRejectedMainPickIds([]);
+    setContextualReject(null);
   }, [qRaw]);
 
   useEffect(() => {
@@ -235,17 +256,13 @@ function ResultsContent() {
   }, [qRaw]);
 
   useEffect(() => {
-    // 새 추천 세션마다 ID를 갱신 (보정/거절/클릭을 같은 세션에 묶기)
-    try {
-      recommendSessionIdRef.current =
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    } catch {
-      recommendSessionIdRef.current = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    }
+    // Observability only: new decision session when the raw query changes.
+    // Shuffle / reject refresh (shuffleKey) must keep the same id and must not feed ranking.
+    recommendSessionIdRef.current = createRecommendationSessionId();
     setRecommendSessionId(recommendSessionIdRef.current);
-  }, [qRaw, shuffleKey]);
+    sessionHistoryRef.current = {};
+    setSessionHistory({});
+  }, [qRaw]);
 
   useEffect(() => {
     if (!courseIdParam && !qRaw) router.replace("/");
@@ -439,8 +456,9 @@ function ResultsContent() {
     /** 푸드는 곧 URL이 식당으로 치환되며, 그 전 한 프레임용으로도 식당 토큰과 동일 랭킹 입력을 씀 */
     if (qNorm === "푸드") return "식당";
     if (qNorm === "식당" || qNorm === "맛집") return qNorm;
-    return (convCtx?.cumulativeText ?? qRaw) || null;
-  }, [qRaw, explicitCategory, convCtx?.cumulativeText, matchedNamedFoodPreset, isSoloSituationQuery]);
+    /** Semantic ranking/discovery uses the current turn only. cumulativeText stays for UI/logs. */
+    return qRaw || null;
+  }, [qRaw, explicitCategory, matchedNamedFoodPreset, isSoloSituationQuery]);
 
   /** 프리셋일 때 코스·데이트 시나리오가 랭킹/페치를 가로채지 않도록 단일 식당 맥락으로 고정 */
   const scenarioObjectForHomeCards = useMemo((): ScenarioObject | undefined => {
@@ -575,8 +593,12 @@ function ResultsContent() {
   }, [courseIdParam, isGenericFoodResultsQuery, isFamilyDiningAliasQuery, matchedNamedFoodPreset, isSoloSituationQuery, qRaw]);
 
   const placeNameGate = useMemo(() => explainPlaceNameSearchGate(qRaw), [qRaw]);
-  /** 음식 세부 프리셋 쿼리는 "매장명 검색"으로 오인하지 않음 — deferRanking으로 페치가 막히는 것 방지 */
-  const placeSearchEnabled = !matchedNamedFoodPreset && !isSoloSituationQuery && placeNameGate.enabled;
+  /** 직접 음식·메뉴 검색(고기, 중식 등) — API 검색 우선 */
+  const directSearchMode = useMemo(() => isDirectSearchModeQuery(qRaw), [qRaw]);
+  /** 음식 세부 프리셋도 direct search면 search-by-name API를 켠다 */
+  const placeSearchEnabled =
+    (directSearchMode || (!matchedNamedFoodPreset && !isSoloSituationQuery)) &&
+    (directSearchMode || placeNameGate.enabled);
   const { items: placeHits, loading: placeSearchLoading, meta: placeSearchMeta } = usePlaceNameSearchResults(
     qRaw,
     placeSearchEnabled,
@@ -784,13 +806,19 @@ function ResultsContent() {
    * 뷰티 URL: 코스 복원 실패/세션 고정 코스 등으로 `cards`를 덮어쓰지 않고 항상 `useHomeCards` 결과만 사용.
    * 그 외: 기존 코스·복원 분기 유지.
    */
+  const directSearchPrimaryCards = useMemo(() => {
+    if (!directSearchMode || placeHits.length === 0) return null;
+    return placeHits.slice(0, 12);
+  }, [directSearchMode, placeHits]);
+
   const primaryRecommendationCards: HomeCard[] = beautyUrlFinalGuard
     ? cards
-    : courseRestoreFailed
-      ? []
-      : isCourseFixedResults && courseFixedCards
-        ? courseFixedCards
-        : cards;
+    : directSearchPrimaryCards ??
+      (courseRestoreFailed
+        ? []
+        : isCourseFixedResults && courseFixedCards
+          ? courseFixedCards
+          : cards);
 
   const primaryListCards = useMemo(() => {
     if (beautyUrlFinalGuard) {
@@ -961,7 +989,7 @@ function ResultsContent() {
       isScenarioRecommendationIntent &&
       primaryListCards.length > 0
   );
-  const forceShowListByCards = cards.length > 0;
+  const forceShowListByCards = cards.length > 0 || (directSearchMode && placeHits.length > 0);
   const showRecommendationList =
     baseShowRecommendationList || forceSituationRecommendationListVisible || forceShowListByCards;
   const recommendationListVisible = showRecommendationList && primaryListCards.length > 0;
@@ -977,10 +1005,25 @@ function ResultsContent() {
   const showEmptyState = forceShowListByCards ? false : baseShowEmptyState;
 
   useEffect(() => {
+    logDirectSearchPipeline("[SEARCH_API_RESULT_COUNT]", {
+      query: qRaw,
+      placeHitsCount: placeHits.length,
+      directSearchMode,
+    });
+    logDirectSearchPipeline("[DIRECT_SEARCH_CANDIDATES]", {
+      query: qRaw,
+      placeHitsTop: placeHits.slice(0, 12).map((c) => c.name),
+    });
+    logDirectSearchPipeline("[FINAL_UI_CARDS]", {
+      query: qRaw,
+      primaryListCount: primaryListCards.length,
+      cardsFromHome: cards.length,
+    });
     console.log("[empty state conflict check]", {
       qRaw,
       cardsCount: primaryListCards.length,
       placeSearchEnabled,
+      directSearchMode,
       showEmptyState,
       recommendationListVisible,
     });
@@ -1210,6 +1253,18 @@ function ResultsContent() {
     const recId = recommendSessionId;
     if (recId && effectiveScenario) {
       const now = new Date();
+      const sessionSnapshot = buildRecommendationSessionSnapshot({
+        query: qRaw,
+        scenario: effectiveScenario,
+        cards: slice,
+      });
+      const nextHistory = mergeImpressionHistory(
+        sessionHistoryRef.current,
+        sessionSnapshot,
+        now.toISOString()
+      );
+      sessionHistoryRef.current = nextHistory;
+      setSessionHistory(nextHistory);
       logRecommendationEvent({
         event_name: "recommendation_impression",
         entity_type: null,
@@ -1221,6 +1276,7 @@ function ResultsContent() {
         place_ids: slice.map((c) => c.id),
         metadata: {
           query: qRaw,
+          engine_version: RECOMMENDATION_ENGINE_VERSION,
           recommendation_voices: slice.map((c) => c.recommendationVoice ?? null),
           course_fixed: isCourseFixedResults,
         },
@@ -1228,15 +1284,25 @@ function ResultsContent() {
           recommendation_id: recId,
           category_clicked: intentCategoryToCategoryClicked(effectiveScenario.intentCategory),
           user_profile: (mergedProfileForRanking ?? {}) as unknown as Record<string, unknown>,
-          shown_place_ids: slice.map((c) => c.id),
-          main_pick_id: slice[0]?.id ?? null,
+          shown_place_ids: sessionSnapshot.shown_places.map((p) => p.place_id),
+          main_pick_id: sessionSnapshot.shown_places[0]?.place_id ?? null,
+          session_snapshot: sessionSnapshot,
           recommendation_reasons: {
-            items: slice.map((c) => ({
-              id: c.id,
-              name: c.name,
-              voice: c.recommendationVoice ?? null,
-              reasonText: c.reasonText ?? null,
-              breakdown: (c as any).recommendationScoreBreakdown ?? null,
+            engine_version: sessionSnapshot.engine_version,
+            query: sessionSnapshot.query,
+            qu_snapshot: sessionSnapshot.qu_snapshot,
+            items: sessionSnapshot.shown_places.map((p, i) => ({
+              id: p.place_id,
+              place_id: p.place_id,
+              position: p.position,
+              name: p.name,
+              category: p.category,
+              voice: slice[i]?.recommendationVoice ?? null,
+              reasonText: p.reason_text,
+              distance_m: p.distance_m,
+              travel_time_min: p.travel_time_min,
+              breakdown: (slice[i] as { recommendationScoreBreakdown?: unknown } | undefined)
+                ?.recommendationScoreBreakdown ?? null,
             })),
           },
           weights: hybridWeightsForLog,
@@ -1304,11 +1370,39 @@ function ResultsContent() {
     effectiveScenario?.intentType === "search_strict" &&
     effectiveScenario?.intentCategory === "BEAUTY";
 
+  const freezeRejectForPlace = (placeId: string) => {
+    const frozen = freezeContextualRejectContext({
+      placeId,
+      recommendationId: recommendSessionId,
+      sessionHistory: sessionHistoryRef.current,
+    });
+    if (frozen) setContextualReject(frozen);
+  };
+
+  const submitFrozenContextualReason = (reason: RecommendationRejectReason) => {
+    const payload = buildFrozenContextualRejectPayload(contextualReject, reason);
+    if (payload) logContextualRejectFeedback(payload);
+    setContextualReject(null);
+  };
+
   const rejectMainAndRefresh = () => {
     const id = primaryListCards[0]?.id;
     if (!id) return;
     const recId = recommendSessionId;
     if (recId && effectiveScenario) {
+      const now = new Date();
+      const sessionSnapshot = buildRecommendationSessionSnapshot({
+        query: qRaw,
+        scenario: effectiveScenario,
+        cards: primaryListCards.slice(0, RECOMMEND_DECK_SIZE),
+      });
+      const nextHistory = mergeImpressionHistory(
+        sessionHistoryRef.current,
+        sessionSnapshot,
+        now.toISOString()
+      );
+      sessionHistoryRef.current = nextHistory;
+      setSessionHistory(nextHistory);
       logRecommendationEvent({
         event_name: "reject_main_pick",
         entity_type: "place",
@@ -1433,7 +1527,7 @@ function ResultsContent() {
         background: `linear-gradient(180deg, ${colors.bgDefault} 0%, ${colors.bgMuted} 100%)`,
       }}
     >
-      <div style={{ maxWidth: 1080, margin: "0 auto", padding: `16px ${space.pageX}px 0` }}>
+      <div style={{ maxWidth: RESULTS_CONTENT_MAX_WIDTH, width: "100%", margin: "0 auto", padding: `16px ${space.pageX}px 0`, boxSizing: "border-box" }}>
         <button
           type="button"
           onClick={() => router.push("/")}
@@ -1450,8 +1544,8 @@ function ResultsContent() {
         >
           ← 홈으로
         </button>
-        <ResultsHeader isLoading={headerLoading} />
-        <ActiveConstraintChips chips={constraintChips} />
+        <ResultsHeader isLoading={headerLoading} queryLabel={qRaw || effectiveScenario?.rawQuery} />
+        <ActiveConstraintChips chips={constraintChips} excludeLabels={[qRaw || effectiveScenario?.rawQuery || ""]} />
 
         {strictHint && (
           <p style={{ fontSize: 13, color: colors.textSecondary, margin: "0 0 16px", lineHeight: 1.45 }}>
@@ -1600,6 +1694,13 @@ function ResultsContent() {
               explicitCategory={resolvedExplicitCategoryForHome}
               explicitIntent={resolvedExplicitIntentForHome}
               analyticsV2Click={analyticsV2Base ?? undefined}
+              recommendationId={recommendSessionId}
+              sessionHistory={sessionHistory}
+              onRejectRecommendation={(placeId) => {
+                freezeRejectForPlace(placeId);
+                rejectMainAndRefresh();
+              }}
+              onOpenContextualReject={freezeRejectForPlace}
               showSoftFallbackCopy={showSoftFallbackCopy}
               isLoggedIn={isLoggedIn}
               onRequireLogin={requireKakaoLogin}
@@ -1621,6 +1722,13 @@ function ResultsContent() {
             />
           </>
         )}
+
+        {contextualReject ? (
+          <ContextualRejectReasonBar
+            onSelect={submitFrozenContextualReason}
+            onSkip={() => setContextualReject(null)}
+          />
+        ) : null}
 
         {!pageBusy &&
           !showNameSearch &&

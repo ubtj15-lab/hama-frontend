@@ -17,6 +17,7 @@ import {
 import type { IntentionType } from "@/lib/intention";
 import { buildTopRecommendations } from "@/lib/recommend/scoring";
 import type { RecommendScoreBreakdown, ScoredRecommendItem } from "@/lib/recommend/scoring";
+import { finalizeRecommendations } from "@/lib/recommend/finalizeRecommendations";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassification";
 import { RECOMMEND_DECK_SIZE, RECOMMEND_POOL_SINGLE_TAB } from "@/lib/recommend/recommendConstants";
@@ -46,6 +47,12 @@ import {
 } from "@/lib/recommend/recentExposure";
 import { logEvent } from "@/lib/logEvent";
 import { getOrCreateHamaSearchSeed } from "@/lib/searchDiversityClient";
+import {
+  buildSearchByNameApiUrl,
+  fetchDirectSearchHomeCards,
+  isDirectSearchModeQuery,
+  logDirectSearchPipeline,
+} from "@/lib/search/directSearch";
 import { categoriesForHomeTab } from "@/lib/storeCategoryFilters";
 import {
   applyStoreSuppression,
@@ -971,7 +978,7 @@ async function fetchMuseumCardsViaSearchByNameApi(q: string): Promise<HomeCard[]
   try {
     const t = String(q ?? "").trim();
     if (t.length < 2) return [];
-    const url = `/api/stores/search-by-name?${new URLSearchParams({ q: t }).toString()}`;
+    const url = buildSearchByNameApiUrl(t);
     const seed = getOrCreateHamaSearchSeed();
     const headers: Record<string, string> = {};
     if (seed) headers["x-hama-search-seed"] = seed;
@@ -2672,6 +2679,35 @@ type SafetyDiversityOutcome = {
   recentExposureReplacements: number;
 };
 
+/**
+ * Shared semantic finalizer first (discovery on the full eligible pool).
+ * Live-only safety/diversity runs only when discovery does not apply,
+ * so PLAY / FAMILY_OUTING decks are not replaced by jittered cafe/restaurant.
+ */
+function resolveFinalRecommendationDeck(
+  picked: ScoredRecommendItem[],
+  allRanked: ScoredRecommendItem[],
+  query: string | null | undefined,
+  scenario: ScenarioObject | null | undefined,
+  explicitCategory?: string | null,
+  diagnostics?: Parameters<typeof applySafetyAndDiversity>[5]
+): SafetyDiversityOutcome {
+  if (scenario) {
+    const cap = Math.min(5, Math.max(3, diagnostics?.deckCap ?? RECOMMEND_DECK_SIZE));
+    const finalized = finalizeRecommendations({
+      query: String(query ?? ""),
+      parsed: scenario,
+      ranked: picked,
+      scoredPool: allRanked,
+      deckSize: cap,
+    });
+    if (finalized.applied) {
+      return { deck: finalized.deck, recentExposureReplacements: 0 };
+    }
+  }
+  return applySafetyAndDiversity(picked, allRanked, query, scenario, explicitCategory, diagnostics);
+}
+
 function applySafetyAndDiversity(
   picked: ScoredRecommendItem[],
   allRanked: ScoredRecommendItem[],
@@ -3346,7 +3382,7 @@ async function fetchNamedFoodPresetFallbackRestaurantCards(opts: {
     if (out.length >= 52) break;
     const token = String(kw ?? "").trim();
     if (token.length < 2) continue;
-    const url = `/api/stores/search-by-name?${new URLSearchParams({ q: token }).toString()}`;
+    const url = buildSearchByNameApiUrl(token);
     try {
       const res = await fetch(url, {
         cache: "no-store",
@@ -3920,6 +3956,22 @@ export function useHomeCards(
           fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, apiHits);
         }
 
+        let directSearchCandidates: HomeCard[] = [];
+        const directSearchMode = isDirectSearchModeQuery(options.searchQuery);
+        if (directSearchMode && !cancelled) {
+          fetchTabsTried.push("direct:search_by_name_api");
+          directSearchCandidates = await fetchDirectSearchHomeCards(String(options.searchQuery ?? "").trim());
+          logDirectSearchPipeline("[SEARCH_API_RESULT_COUNT]", {
+            query: options.searchQuery ?? null,
+            count: directSearchCandidates.length,
+            topNames: directSearchCandidates.slice(0, 12).map((c) => c.name),
+          });
+          if (directSearchCandidates.length > 0) {
+            fetchedRaw = mergeHomeCardsUniqueById(directSearchCandidates, fetchedRaw);
+            countsByTab.direct_search_by_name = directSearchCandidates.length;
+          }
+        }
+
         if (preset && fetchedRaw.length < 3 && !openBetaAccuracyFirst) {
           fetchedRaw = await applySituationPresetEnrichment(fetchedRaw);
         }
@@ -4217,7 +4269,24 @@ export function useHomeCards(
                 : merged.filter((c) => passesNamedFoodPresetFullCardGate(c, presetRef, "broad"));
           }
           fetched = pool;
+          if (fetched.length === 0 && directSearchCandidates.length > 0) {
+            fetched = directSearchCandidates.filter(
+              (c) => isNamedFoodPresetRestaurantDbCategoryOnly(c) && !blobFailsNamedFoodPresetHardExclude(c)
+            );
+            logDirectSearchPipeline("[DIRECT_SEARCH_CANDIDATES]", {
+              query: options.searchQuery ?? null,
+              afterPresetFilterEmpty: true,
+              restoredCount: fetched.length,
+            });
+          }
         }
+
+        logDirectSearchPipeline("[AFTER_RECOMMEND_FILTER]", {
+          query: options.searchQuery ?? null,
+          directSearchMode,
+          directSearchCandidates: directSearchCandidates.length,
+          fetchedAfterFilters: fetched.length,
+        });
 
         const rankScenario = scenarioForHomeCardsRanking(
           options.scenarioObject ?? null,
@@ -4326,7 +4395,7 @@ export function useHomeCards(
         exposureLogState.candidateCountBefore = fallbackCandidates.length;
         exposureLogState.candidateCountAfter = fallbackCandidates.length;
         hamaDevLog("[HAMA_RESULTS] fallbackCandidates.length:", fallbackCandidates.length);
-        let safetyDiversityOutcome = applySafetyAndDiversity(
+        let safetyDiversityOutcome = resolveFinalRecommendationDeck(
           rankedPrimary,
           rankedFallbackBoosted,
           options.searchQuery ?? null,
@@ -4356,7 +4425,7 @@ export function useHomeCards(
               await buildExpandedRankedPool(fetched, { ...ctx, excludeStoreIds: [] }, 50),
               namedFoodPresetOpt
             );
-            safetyDiversityOutcome = applySafetyAndDiversity(
+            safetyDiversityOutcome = resolveFinalRecommendationDeck(
               rankedPrimary,
               rankedFallbackRetry,
               options.searchQuery ?? null,
@@ -4432,7 +4501,7 @@ export function useHomeCards(
                 options.scenarioObject ?? null
               );
             }
-            safetyDiversityOutcome = applySafetyAndDiversity(
+            safetyDiversityOutcome = resolveFinalRecommendationDeck(
               rankedPrimary,
               rankedFbFood,
               options.searchQuery ?? null,
@@ -5175,6 +5244,12 @@ export function useHomeCards(
 
         if (namedFoodPresetOpt) {
           picked = guardNamedFoodPresetPickedDeck(picked, namedFoodPresetOpt, options.searchQuery ?? null);
+          if (picked.length === 0 && directSearchCandidates.length > 0) {
+            const cap = deckCapDiag ?? RECOMMEND_DECK_SIZE;
+            picked = directSearchCandidates.slice(0, cap).map((card, i) =>
+              homeCardToBrowseScoredItem(card, 900 - i)
+            );
+          }
         }
 
         if (namedFoodPresetOpt && picked.length > 0) {
@@ -5191,13 +5266,25 @@ export function useHomeCards(
           isConservativeAccuracyFirstFoodPreset(namedFoodPresetOpt) &&
           picked.length < 3
         ) {
-          hamaDevLog("[HAMA_FOOD_PRESET_INSUFFICIENT]", {
-            query: options.searchQuery ?? null,
-            presetId: namedFoodPresetOpt.id,
-            threshold: 3,
-            beforeClear: picked.map((p) => p.card.name),
-          });
-          picked = [];
+          if (directSearchCandidates.length >= 1) {
+            const cap = deckCapDiag ?? RECOMMEND_DECK_SIZE;
+            picked = directSearchCandidates.slice(0, cap).map((card, i) =>
+              homeCardToBrowseScoredItem(card, 920 - i)
+            );
+            hamaDevLog("[HAMA_DIRECT_SEARCH_PRESET_FALLBACK]", {
+              query: options.searchQuery ?? null,
+              presetId: namedFoodPresetOpt.id,
+              count: picked.length,
+            });
+          } else {
+            hamaDevLog("[HAMA_FOOD_PRESET_INSUFFICIENT]", {
+              query: options.searchQuery ?? null,
+              presetId: namedFoodPresetOpt.id,
+              threshold: 3,
+              beforeClear: picked.map((p) => p.card.name),
+            });
+            picked = [];
+          }
         }
 
         if (!explicitBeautyScenarioBypass) {
@@ -5216,12 +5303,20 @@ export function useHomeCards(
             optionsSearchQuery: options.searchQuery ?? null,
             soloChineseStripPoolLength: soloChineseStripPool.length,
           });
-          picked = applySoloIntentChineseTop3HardStrip(
-            picked,
-            soloChineseStripPool,
-            soloStripQuery,
-            effectiveScenarioForSoloStrip
-          );
+          if (directSearchCandidates.length < 1) {
+            picked = applySoloIntentChineseTop3HardStrip(
+              picked,
+              soloChineseStripPool,
+              soloStripQuery,
+              effectiveScenarioForSoloStrip
+            );
+          } else {
+            hamaDevLog("[HAMA_SOLO_TOP3_BLOCK_SKIPPED]", {
+              query: soloStripQuery,
+              reason: "direct_search_candidates_present",
+              directCount: directSearchCandidates.length,
+            });
+          }
         } else {
           console.log("[HAMA_BEAUTY_SCENARIO_BYPASS]", {
             explicitCategory: options.explicitCategory ?? null,
@@ -5230,10 +5325,24 @@ export function useHomeCards(
           });
         }
 
-        const pickedWithReasons = applyReasonTemplateEngine({
+        let pickedWithReasons = applyReasonTemplateEngine({
           items: picked,
           query: options.searchQuery ?? null,
         });
+
+        if (pickedWithReasons.length === 0 && directSearchCandidates.length > 0) {
+          const cap = namedFoodPresetOpt ? Math.min(5, deckCapDiag ?? 5) : RECOMMEND_DECK_SIZE;
+          pickedWithReasons = directSearchCandidates.slice(0, cap).map((card, i) => ({
+            card: { ...card },
+            reasonText: "검색어에 맞는 식당",
+            reasonVoice: "solo" as const,
+            breakdown: neutralBrowseBreakdown(880 - i),
+          }));
+          logDirectSearchPipeline("[DIRECT_SEARCH_FINAL_FALLBACK]", {
+            query: options.searchQuery ?? null,
+            count: pickedWithReasons.length,
+          });
+        }
 
         if (options.namedFoodPreset) {
           hamaDevLog("[HAMA_FOOD_PRESET]", {
@@ -5280,8 +5389,7 @@ export function useHomeCards(
               : ""
           );
           setRecommendEngine("v1");
-          setCards(
-            pickedWithReasons.map((p) => ({
+          const uiCards = pickedWithReasons.map((p) => ({
               ...p.card,
               recommendationScoreBreakdown: {
                 final: p.breakdown.finalScore,
@@ -5293,8 +5401,14 @@ export function useHomeCards(
                 personal: p.breakdown.personalizationScore,
                 activeScenario: String(p.breakdown.activeScenario),
               },
-            }))
-          );
+            }));
+          logDirectSearchPipeline("[FINAL_UI_CARDS]", {
+            query: options.searchQuery ?? null,
+            directSearchMode,
+            count: uiCards.length,
+            names: uiCards.slice(0, 12).map((c) => c.name),
+          });
+          setCards(uiCards);
           setDeckIncomplete(
             !wantCourse &&
               (options.namedFoodPreset

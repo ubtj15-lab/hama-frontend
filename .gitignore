@@ -42,4 +42,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# HAMA recommendation simulator local cache / reports
+apps/hama/.simulator-cache/
+apps/hama/.simulator-output/
+
 /lib/generated/prisma

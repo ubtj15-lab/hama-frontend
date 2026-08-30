@@ -6,6 +6,7 @@ export type {
   MergeIntentOptions,
 } from "./types";
 export { detectRefinementType } from "./refinement";
+export { isSelfContainedCurrentTurn } from "./selfContainedTurn";
 export { parseTurnIntent, extractPartialFromUtterance } from "./parseTurn";
 export { mergeIntent } from "./mergeIntent";
 export { applyConversationMemory, normalizeRejectedCategory } from "./memory";

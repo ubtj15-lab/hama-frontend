@@ -58,6 +58,8 @@ export type LogRecommendationEventInput = {
     shown_place_ids?: string[] | null;
     main_pick_id?: string | null;
     recommendation_reasons?: Record<string, unknown> | null;
+    /** Phase A observability snapshot. Never an engine input. */
+    session_snapshot?: import("./recommendationSessionSnapshot").RecommendationSessionSnapshot | null;
     weights?: Record<string, unknown> | null;
     scenario?: string | null;
     weather?: string | null;

@@ -1,22 +1,31 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { logRecommendationPlace } from "@/lib/analytics/recommendationPlaceLog";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { scenarioRankKeyForRecommendationCopy } from "@/lib/scenarioEngine/scenarioRankBridge";
-import { businessStateFromCard, type BusinessState } from "@/lib/recommend/scoreParts";
 import { getCategoryImage } from "@/lib/categoryImages";
 import {
   buildRecommendationReason,
   getClientTimeOfDay,
   type RecommendationReasonBlock,
 } from "@/lib/recommend/buildRecommendationReason";
-import { colors, radius, shadow, space, typo } from "@/lib/designTokens";
-import { Chip } from "@ui/Chip";
 import { Touchable } from "@ui/Touchable";
 import type { LogRecommendationEventInput } from "@/lib/analytics/types";
 import { pickVisitPlacePhotosFromFileList, VISIT_PLACE_PHOTO_ACCEPT } from "@/lib/visitPlacePhotoClient";
+import {
+  DECISION_BUTTON_COPY,
+  DECISION_BUTTON_SELECTED_COPY,
+  IMAGE_REFERENCE_LABEL,
+  PRIMARY_PICK_LABEL,
+  RESULTS_PURPLE,
+  RESULTS_PURPLE_SOFT,
+  conversationalReasonFromBlock,
+  essentialFacts,
+  hoursStatusLabel,
+  oneLineReasonFromBlock,
+} from "./resultsPresentation";
 
 /** 예약 CTA는 `@/lib/reservationUiFlags`의 SHOW_RESERVATION_UI로 제어. 이 카드에는 예약 전용 UI 없음. */
 
@@ -25,54 +34,6 @@ const SHOW_HAMA_PAY_MOCK =
   ENABLE_HAMA_PAY_UI &&
   (process.env.NODE_ENV === "development" ||
     process.env.NEXT_PUBLIC_ENABLE_HAMA_PAY_MOCK === "true");
-
-function bizLabel(s: BusinessState): string {
-  switch (s) {
-    case "OPEN":
-      return "영업 중";
-    case "LAST_ORDER_SOON":
-      return "라스트오더 임박";
-    case "BREAK":
-      return "브레이크타임";
-    case "CLOSED":
-      return "영업 종료";
-    default:
-      return "영업 정보 확인";
-  }
-}
-
-function kmLine(card: HomeCard): string {
-  const km = card.distanceKm;
-  if (typeof km === "number" && Number.isFinite(km)) return `${km.toFixed(1)}km`;
-  return "거리 확인 필요";
-}
-
-function crowdFromReason(reason: RecommendationReasonBlock): string {
-  const t = `${reason.liveStatusLine ?? ""} ${reason.subline ?? ""} ${reason.badges.join(" ")}`;
-  if (/여유|한산|안\s?붐빔/.test(t)) return "여유 있어요";
-  if (/혼잡|붐빔|대기/.test(t)) return "약간 붐벼요";
-  return "확인 필요";
-}
-
-function crowdColor(crowd: string): string {
-  return crowd.includes("여유") ? "#2F9E44" : crowd.includes("붐") ? "#F08C00" : colors.textSecondary;
-}
-
-function normalizeShortSentence(text: string): string {
-  return text
-    .replace(/\s+/g, " ")
-    .replace(/[.。]+$/g, "")
-    .trim();
-}
-
-function splitReasonLines(lines: string[]): string[] {
-  return lines
-    .flatMap((line) => String(line).split(/[·.]/))
-    .map((line) => normalizeShortSentence(line))
-    .filter(Boolean)
-    .map((line) => (line.length > 28 ? `${line.slice(0, 28)}…` : line))
-    .slice(0, 3);
-}
 
 type Props = {
   card: HomeCard;
@@ -214,19 +175,10 @@ export function RecommendationCard({
     (card as any).main_image_url;
   const displayImage = realImage || getCategoryImage(card.category ?? undefined, card.id || card.name);
 
-  const openStatus = bizLabel(businessStateFromCard(card));
-  const crowdStatus = crowdFromReason(reason);
-  const cleanReasons = splitReasonLines([reason.headline, reason.subline, ...reason.badges]);
-  const visibleTags = (card.tags ?? []).map((t) => normalizeShortSentence(String(t))).filter(Boolean).slice(0, 3);
-  const fallbackTags = visibleTags.length ? visibleTags : reason.badges.slice(0, 3);
-
-  const scenarioLine = useMemo(() => {
-    const first = String(reason.scenarioLabel ?? "")
-      .split("\n")
-      .map((v) => normalizeShortSentence(v))
-      .find(Boolean);
-    return first || "지금 가기 편해요";
-  }, [reason.scenarioLabel]);
+  const teaser = oneLineReasonFromBlock(reason);
+  const why = conversationalReasonFromBlock(reason);
+  const facts = essentialFacts(card);
+  const hours = hoursStatusLabel(card);
   const isHamaPayEnabled = ENABLE_HAMA_PAY_UI && (hamaPayEnabled ?? (card.hama_pay_enabled === true));
 
   return (
@@ -255,114 +207,18 @@ export function RecommendationCard({
           }
         }}
         style={{
-          borderRadius: 24,
-          background: "#fff",
-          padding: 16,
-          border: isTop ? "2px solid #F97316" : "1px solid #F1F5F9",
-          boxShadow: "0 2px 10px rgba(15,23,42,0.06)",
+          borderRadius: isTop ? 28 : 20,
+          background: isTop ? "#fff" : "#FFFCF8",
+          padding: isTop ? 0 : 12,
+          border: isTop ? `1.5px solid ${RESULTS_PURPLE_SOFT}` : "1px solid #EFE8DE",
+          boxShadow: isTop ? "0 10px 28px rgba(107, 77, 230, 0.1)" : "none",
           position: "relative",
+          overflow: "hidden",
         }}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <span
-                style={{
-                  borderRadius: 999,
-                  background: isTop ? "#F97316" : "#F1F5F9",
-                  color: isTop ? "#fff" : "#475569",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  padding: "6px 12px",
-                }}
-              >
-                추천 {rankOrder}순위
-              </span>
-              {isTop ? (
-                <span style={{ fontSize: 13, fontWeight: 800, color: "#F97316" }}>🔥 지금 여기 기준 최적!</span>
-              ) : null}
-            </div>
-
-            <div style={{ marginBottom: 6, fontSize: 15, fontWeight: 800, color: "#F97316", wordBreak: "keep-all" }}>
-              {scenarioLine}
-            </div>
-
-            <h3
-              style={{
-                margin: "0 0 10px",
-                fontSize: "clamp(24px, 4.8vw, 36px)",
-                lineHeight: 1.1,
-                fontWeight: 900,
-                color: "#020617",
-                wordBreak: "keep-all",
-              }}
-            >
-              {card.name}
-            </h3>
-
-            <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: "8px 14px", fontSize: 15, fontWeight: 700, color: "#334155" }}>
-              <span>🚶 {kmLine(card)}</span>
-              <span>🕒 {openStatus}</span>
-              <span style={{ color: crowdColor(crowdStatus) }}>👥 {crowdStatus}</span>
-            </div>
-            {isHamaPayEnabled ? (
-              <div
-                style={{
-                  marginBottom: 10,
-                  display: "inline-flex",
-                  borderRadius: 999,
-                  background: "#DCFCE7",
-                  color: "#166534",
-                  fontSize: 12,
-                  fontWeight: 900,
-                  padding: "6px 10px",
-                }}
-              >
-                HAMA Pay 가능
-              </div>
-            ) : null}
-
-            <div style={{ marginBottom: 12, borderRadius: 16, background: "rgba(255,237,213,0.6)", padding: "10px 12px" }}>
-              <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 900, color: "#F97316" }}>✨ 추천 이유</div>
-              <div
-                className="hama-reason-shimmer-wrap"
-                data-shimmer={reasonShimmerActive ? "on" : "off"}
-              >
-                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 5 }}>
-                  {cleanReasons.map((line, idx) => (
-                    <li key={`${line}-${idx}`} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 14, fontWeight: 700, color: "#1F2937", lineHeight: 1.35 }}>
-                      <span
-                        style={{
-                          marginTop: 2,
-                          width: 16,
-                          height: 16,
-                          borderRadius: 999,
-                          background: "#F97316",
-                          color: "#fff",
-                          fontSize: 10,
-                          display: "inline-grid",
-                          placeItems: "center",
-                          flexShrink: 0,
-                        }}
-                      >
-                        ✓
-                      </span>
-                      <span>{line}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {fallbackTags.map((tag) => (
-                <Chip key={tag}>{tag}</Chip>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ position: "relative", height: "clamp(128px, 24vw, 176px)", borderRadius: 16, overflow: "hidden", background: "#F1F5F9" }}>
+        {isTop ? (
+          <div>
+            <div className="hama-top1-hero">
               <img
                 src={displayImage}
                 alt={card.name}
@@ -374,24 +230,224 @@ export function RecommendationCard({
                   target.src = "/images/category/default-1.jpg";
                 }}
               />
-              <div
+              <span
                 style={{
                   position: "absolute",
-                  right: 8,
-                  bottom: 8,
+                  left: 12,
+                  top: 12,
                   borderRadius: 999,
-                  background: "rgba(0,0,0,0.7)",
+                  background: RESULTS_PURPLE,
                   color: "#fff",
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: 800,
-                  padding: "4px 10px",
+                  padding: "6px 10px",
                 }}
               >
-                실제 매장 참고 이미지 ⓘ
+                ✨ {PRIMARY_PICK_LABEL}
+              </span>
+              <span
+                style={{
+                  position: "absolute",
+                  right: 10,
+                  bottom: 10,
+                  borderRadius: 999,
+                  background: "rgba(26,26,26,0.55)",
+                  color: "#fff",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: "4px 8px",
+                }}
+              >
+                {IMAGE_REFERENCE_LABEL}
+              </span>
+            </div>
+            <div style={{ padding: "16px 16px 14px" }}>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: "clamp(22px, 6vw, 28px)",
+                  lineHeight: 1.2,
+                  fontWeight: 800,
+                  letterSpacing: "-0.04em",
+                  color: "#1A1A1A",
+                  wordBreak: "keep-all",
+                }}
+              >
+                {card.name}
+              </h3>
+              {teaser ? (
+                <p
+                  className="hama-reason-shimmer-wrap"
+                  data-shimmer={reasonShimmerActive ? "on" : "off"}
+                  style={{
+                    margin: "10px 0 0",
+                    fontSize: 15,
+                    fontWeight: 600,
+                    letterSpacing: "-0.01em",
+                    lineHeight: 1.45,
+                    color: RESULTS_PURPLE,
+                    fontStyle: "italic",
+                  }}
+                >
+                  {teaser}
+                </p>
+              ) : null}
+              {facts.length ? (
+                <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8, fontSize: 13, fontWeight: 700, color: "#5F5E5A" }}>
+                  {facts.map((fact) => (
+                    <span key={fact}>
+                      {fact === facts[0] && card.distanceKm != null ? `📍 ${fact}` : fact}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {hours.unverified ? (
+                <p style={{ margin: "8px 0 0", fontSize: 12, fontWeight: 600, color: "#9A958C" }}>{hours.label}</p>
+              ) : (
+                <p style={{ margin: "8px 0 0", fontSize: 12, fontWeight: 700, color: "#5F5E5A" }}>{hours.label}</p>
+              )}
+              {isHamaPayEnabled ? (
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: "inline-flex",
+                    borderRadius: 999,
+                    background: "#DCFCE7",
+                    color: "#166534",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: "5px 10px",
+                  }}
+                >
+                  HAMA Pay 가능
+                </div>
+              ) : null}
+              {why ? (
+                <div style={{ marginTop: 14, borderRadius: 16, background: "#F7F3FF", padding: "12px 14px" }}>
+                  <div
+                    style={{
+                      marginBottom: 6,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                      color: RESULTS_PURPLE,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    하마가 고른 이유
+                  </div>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#2A2A2A", lineHeight: 1.45 }}>{why}</p>
+                </div>
+              ) : null}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }} onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigate();
+                  }}
+                  style={{
+                    minHeight: 48,
+                    borderRadius: 14,
+                    border: "1px solid #E8E0D4",
+                    background: "#fff",
+                    color: "#1A1A1A",
+                    fontSize: 14,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  길찾기
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onChooseHere) onChooseHere(e);
+                    else onCardClick();
+                  }}
+                  style={{
+                    minHeight: 48,
+                    borderRadius: 14,
+                    border: "none",
+                    background: selected ? "#16A34A" : RESULTS_PURPLE,
+                    color: "#fff",
+                    fontSize: 14,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {selected ? DECISION_BUTTON_SELECTED_COPY : DECISION_BUTTON_COPY}
+                </button>
+              </div>
+              {showVerificationEntry || isHamaPayEnabled ? (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setPostVisitOpen((prev) => !prev);
+                    }}
+                    style={{
+                      marginTop: 8,
+                      width: "100%",
+                      minHeight: 36,
+                      border: "none",
+                      background: "transparent",
+                      color: "#9A958C",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    방문 후 인증/피드백 {postVisitOpen ? "▴" : "▾"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: "flex", gap: 12, alignItems: "stretch" }}>
+              <div style={{ position: "relative", width: 88, minHeight: 88, flexShrink: 0, borderRadius: 14, overflow: "hidden", background: "#F1F5F9" }}>
+                <img
+                  src={displayImage}
+                  alt={card.name}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  loading="lazy"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.onerror = null;
+                    target.src = "/images/category/default-1.jpg";
+                  }}
+                />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: 16,
+                    fontWeight: 800,
+                    letterSpacing: "-0.03em",
+                    color: "#1A1A1A",
+                    wordBreak: "keep-all",
+                  }}
+                >
+                  {card.name}
+                </h3>
+                {teaser ? (
+                  <p style={{ margin: "6px 0 0", fontSize: 13, fontWeight: 600, color: "#6B4DE6", lineHeight: 1.4, fontStyle: "italic" }}>
+                    {teaser}
+                  </p>
+                ) : null}
+                {facts.length ? (
+                  <p style={{ margin: "8px 0 0", fontSize: 12, fontWeight: 700, color: "#8A857C" }}>{facts.join(" · ")}</p>
+                ) : null}
               </div>
             </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
                 onClick={(e) => {
@@ -399,17 +455,17 @@ export function RecommendationCard({
                   onNavigate();
                 }}
                 style={{
-                  height: 46,
-                  borderRadius: 14,
-                  border: "1px solid #E2E8F0",
+                  minHeight: 42,
+                  borderRadius: 12,
+                  border: "1px solid #E8E0D4",
                   background: "#fff",
-                  color: "#0F172A",
-                  fontSize: 14,
-                  fontWeight: 900,
+                  color: "#1A1A1A",
+                  fontSize: 13,
+                  fontWeight: 800,
                   cursor: "pointer",
                 }}
               >
-                📍 길찾기
+                길찾기
               </button>
               <button
                 type="button"
@@ -420,20 +476,20 @@ export function RecommendationCard({
                   else onCardClick();
                 }}
                 style={{
-                  height: 46,
-                  borderRadius: 14,
+                  minHeight: 42,
+                  borderRadius: 12,
                   border: "none",
-                  background: selected ? "#16A34A" : "#111827",
+                  background: selected ? "#16A34A" : "#2A2A2A",
                   color: "#fff",
-                  fontSize: 14,
-                  fontWeight: 900,
+                  fontSize: 13,
+                  fontWeight: 800,
                   cursor: "pointer",
                 }}
               >
-                {selected ? "선택 완료" : "여기로 결정"}
+                {selected ? DECISION_BUTTON_SELECTED_COPY : DECISION_BUTTON_COPY}
               </button>
             </div>
-            {(showVerificationEntry || isHamaPayEnabled) ? (
+            {showVerificationEntry || isHamaPayEnabled ? (
               <div onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
@@ -443,24 +499,23 @@ export function RecommendationCard({
                     setPostVisitOpen((prev) => !prev);
                   }}
                   style={{
-                    marginTop: 8,
+                    marginTop: 6,
                     width: "100%",
-                    height: 36,
-                    borderRadius: 10,
-                    border: "1px solid #E2E8F0",
-                    background: "#fff",
-                    color: "#475569",
-                    fontSize: 12,
-                    fontWeight: 800,
+                    minHeight: 32,
+                    border: "none",
+                    background: "transparent",
+                    color: "#B0AAA3",
+                    fontSize: 11,
+                    fontWeight: 700,
                     cursor: "pointer",
                   }}
                 >
-                  방문 후 인증/피드백 남기기 {postVisitOpen ? "▴" : "▾"}
+                  방문 후 인증/피드백 {postVisitOpen ? "▴" : "▾"}
                 </button>
               </div>
             ) : null}
           </div>
-        </div>
+        )}
         {postVisitOpen && selected && isHamaPayEnabled ? (
           <div
             style={{
@@ -849,6 +904,18 @@ export function RecommendationCard({
         ) : null}
       </article>
       <style jsx>{`
+        .hama-top1-hero {
+          position: relative;
+          height: clamp(188px, 48vw, 240px);
+          background: #F1F5F9;
+        }
+
+        @media (min-width: 720px) {
+          .hama-top1-hero {
+            height: 176px;
+          }
+        }
+
         .hama-reason-shimmer-wrap {
           position: relative;
           overflow: hidden;
@@ -897,6 +964,12 @@ export function RecommendationCard({
           .hama-reason-shimmer-wrap[data-shimmer="on"]::after {
             animation: none;
             display: none;
+          }
+        }
+
+        @media (min-width: 720px) {
+          .hama-top1-hero {
+            height: 176px !important;
           }
         }
       `}</style>
