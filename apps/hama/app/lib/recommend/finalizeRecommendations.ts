@@ -5,6 +5,7 @@
  * Order:
  *   merged ranked ∪ scored pool
  *   → kids-safety eligibility (adult venues never re-enter when kids context)
+ *   → local distance eligibility (ordinary local hard cap; no far TOP3 backfill)
  *   → applyDiscoveryRerank once on the remaining pool
  *   → TOP-N deck
  *
@@ -13,6 +14,7 @@
 
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { isHighConfidenceAdultVenueHaystack } from "./childFriendlyScore";
+import { applyLocalDistanceSafety } from "./localDistanceSafety";
 import {
   applyDiscoveryRerank,
   DISCOVERY_POOL_LIMIT,
@@ -80,6 +82,26 @@ function applyKidsSafetyToDiscoveryPool<T>(
   return pool.filter((item) => !isHighConfidenceAdultVenueHaystack(discoveryItemHaystack(item)));
 }
 
+function distanceKmOfDiscoveryItem<T>(item: DiscoveryRerankItem<T>): number | null {
+  const payload = item.payload as { card?: { distanceKm?: number | null }; distanceKm?: number | null } | undefined;
+  const fromPayload = payload?.card?.distanceKm ?? payload?.distanceKm;
+  if (typeof fromPayload === "number" && Number.isFinite(fromPayload)) return fromPayload;
+  return null;
+}
+
+function applyLocalDistanceToDiscoveryPool<T>(
+  pool: DiscoveryRerankItem<T>[],
+  query: string,
+  parsed: ScenarioObject
+): DiscoveryRerankItem<T>[] {
+  return applyLocalDistanceSafety(pool, {
+    query,
+    parsed,
+    distanceKmOf: distanceKmOfDiscoveryItem,
+    placeNameOf: (item) => item.name,
+  });
+}
+
 /**
  * Generic pool finalizer. `applyDiscoveryRerank` runs exactly once.
  */
@@ -92,7 +114,8 @@ export function finalizeDiscoveryPool<T>(input: {
 }): DiscoveryRerankResult<T> & { eligiblePool: DiscoveryRerankItem<T>[] } {
   const deckSize = input.deckSize ?? 3;
   const merged = mergeDiscoveryPool(input.ranked, input.scoredPool ?? []);
-  const safe = applyKidsSafetyToDiscoveryPool(merged, input.parsed);
+  const kidsSafe = applyKidsSafetyToDiscoveryPool(merged, input.parsed);
+  const safe = applyLocalDistanceToDiscoveryPool(kidsSafe, input.query, input.parsed);
   const byScore = [...safe].sort((a, b) =>
     b.score !== a.score ? b.score - a.score : a.id.localeCompare(b.id)
   );
