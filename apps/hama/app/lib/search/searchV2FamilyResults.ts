@@ -162,7 +162,7 @@ export function enrichResultByCategory(
   query: string
 ): SearchV2ResultCard {
   const category = classifyRowCategory(row);
-  const hints = { name: row.name, description: row.description, tags: row.tags };
+  const hints = { name: row.name, description: row.description, tags: row.tags, with_kids: row.with_kids };
   const { lat, lng } = pickLatLng(row);
 
   return {

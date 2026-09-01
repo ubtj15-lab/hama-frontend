@@ -50,6 +50,31 @@ export function isAlcoholNightlifeHaystack(haystack: string): boolean {
   return false;
 }
 
+/**
+ * JS `\b` is ASCII-only, so `펍\b` misses Hangul compounds (홀덤펍).
+ * Token-level 펍 only — not raw 바/호프/술/와인.
+ */
+function hasKoreanSafePubToken(haystack: string): boolean {
+  return /펍/.test(haystack);
+}
+
+/**
+ * High-confidence adult / child-inappropriate venue.
+ * Reuses nightlife detection and adds holdem / poker-pub / Korean-safe 펍.
+ * Used for kids-context eligibility and kid-copy blocking — not global ranking.
+ */
+export function isHighConfidenceAdultVenueHaystack(haystack: string): boolean {
+  if (isAlcoholNightlifeHaystack(haystack)) return true;
+  const h = haystack.toLowerCase();
+  if (/홀덤|포커펍/.test(h)) return true;
+  if (hasKoreanSafePubToken(h)) return true;
+  return false;
+}
+
+export function isHighConfidenceAdultVenue(card: HomeCard): boolean {
+  return isHighConfidenceAdultVenueHaystack(haystackForKids(card));
+}
+
 export function haystackForKids(card: HomeCard): string {
   const parts = [
     card.name,
@@ -157,6 +182,9 @@ export function isHardExcludedForKidsScenario(card: HomeCard, opts?: { rawQuery?
 /** UI 문구: "아이랑 가기 좋아요" 등 금지 여부 */
 export function shouldBlockKidFriendlyMessaging(card: HomeCard): boolean {
   return (
-    isAlcoholNightlifeVenue(card) || isHardExcludedForKidsScenario(card) || childFriendlyScore(card) < 0.38
+    isHighConfidenceAdultVenue(card) ||
+    isAlcoholNightlifeVenue(card) ||
+    isHardExcludedForKidsScenario(card) ||
+    childFriendlyScore(card) < 0.38
   );
 }

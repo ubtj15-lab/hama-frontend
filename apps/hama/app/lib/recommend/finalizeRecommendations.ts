@@ -4,7 +4,7 @@
  *
  * Order:
  *   merged ranked ∪ scored pool
- *   → kids-safety eligibility (nightlife never re-enters)
+ *   → kids-safety eligibility (adult venues never re-enter when kids context)
  *   → applyDiscoveryRerank once on the remaining pool
  *   → TOP-N deck
  *
@@ -12,7 +12,7 @@
  */
 
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
-import { isAlcoholNightlifeHaystack } from "./childFriendlyScore";
+import { isHighConfidenceAdultVenueHaystack } from "./childFriendlyScore";
 import {
   applyDiscoveryRerank,
   DISCOVERY_POOL_LIMIT,
@@ -45,8 +45,15 @@ function discoveryItemHaystack<T>(item: DiscoveryRerankItem<T>): string {
     .join(" ");
 }
 
-function shouldExcludeNightlifeForKids(parsed: ScenarioObject): boolean {
-  return parsed.withKids === true;
+const KIDS_PURPOSE_TRIGGERS = new Set(["kids_cafe", "indoor_play"]);
+
+/** Explicit child context only — bare 가족 / scenario=family does not activate. */
+export function isExplicitKidsRecommendationContext(parsed: ScenarioObject): boolean {
+  if (parsed.withKids === true) return true;
+  const uq = parsed.queryUnderstanding;
+  if ((uq?.companionIntents ?? []).includes("child")) return true;
+  if ((uq?.purposeIntents ?? []).some((p) => KIDS_PURPOSE_TRIGGERS.has(p))) return true;
+  return false;
 }
 
 function mergeDiscoveryPool<T>(
@@ -69,8 +76,8 @@ function applyKidsSafetyToDiscoveryPool<T>(
   pool: DiscoveryRerankItem<T>[],
   parsed: ScenarioObject
 ): DiscoveryRerankItem<T>[] {
-  if (!shouldExcludeNightlifeForKids(parsed)) return pool;
-  return pool.filter((item) => !isAlcoholNightlifeHaystack(discoveryItemHaystack(item)));
+  if (!isExplicitKidsRecommendationContext(parsed)) return pool;
+  return pool.filter((item) => !isHighConfidenceAdultVenueHaystack(discoveryItemHaystack(item)));
 }
 
 /**

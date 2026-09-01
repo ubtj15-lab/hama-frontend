@@ -1,22 +1,46 @@
+import { isHighConfidenceAdultVenueHaystack } from "@/lib/recommend/childFriendlyScore";
 import type { SearchV2ResultCard, StoreRow } from "./searchV2Results";
 
 export type SearchCategoryKind = "restaurant" | "cafe" | "kidscafe" | "activity" | "outdoor" | "other";
 
-function isFamilyQuery(query: string): boolean {
-  return /아이|가족|키즈|kids|family|유아|어린이/.test(query.trim().toLowerCase());
-}
+export type SearchCategoryCopyHints = Pick<StoreRow, "name" | "description" | "tags" | "with_kids">;
 
-function categoryHaystack(
-  category?: string | null,
-  hints?: Pick<StoreRow, "name" | "description" | "tags">
-): string {
+function categoryHaystack(category?: string | null, hints?: SearchCategoryCopyHints): string {
   const parts = [category, hints?.name, hints?.description, ...(Array.isArray(hints?.tags) ? hints.tags : [])];
   return parts.map((p) => String(p ?? "").toLowerCase()).join(" ");
 }
 
+function placeKidsHaystack(hints?: SearchCategoryCopyHints): string {
+  return [hints?.name, hints?.description, ...(Array.isArray(hints?.tags) ? hints.tags : [])]
+    .map((p) => String(p ?? "").toLowerCase())
+    .join(" ");
+}
+
+/** Place-grounded kids evidence only — not category=activity or mood=가벼운활동. */
+export function hasPositiveKidsPlaceSignal(hints?: SearchCategoryCopyHints): boolean {
+  if (hints?.with_kids === true) return true;
+  const hay = placeKidsHaystack(hints);
+  return /아이동반|아이\s*동반|키즈카페|키즈존|키즈\s*룸|키즈룸|유아|어린이|영유아|(?:^|[\s,#])키즈(?:$|[\s,#])/.test(
+    hay
+  );
+}
+
+export function allowKidsOrientedPresentation(
+  kind: SearchCategoryKind,
+  hints?: SearchCategoryCopyHints
+): boolean {
+  if (isHighConfidenceAdultVenueHaystack(placeKidsHaystack(hints))) return false;
+  if (kind === "kidscafe") return true;
+  return hasPositiveKidsPlaceSignal(hints);
+}
+
+function hasIndoorPlaceSignal(hints?: SearchCategoryCopyHints): boolean {
+  return /실내|indoor/.test(placeKidsHaystack(hints));
+}
+
 export function resolveSearchCategoryKind(
   category?: string | null,
-  hints?: Pick<StoreRow, "name" | "description" | "tags">
+  hints?: SearchCategoryCopyHints
 ): SearchCategoryKind {
   const raw = String(category ?? "").trim().toLowerCase();
   if (raw === "activity" || raw === "at4") return "activity";
@@ -35,7 +59,7 @@ export function resolveSearchCategoryKind(
   return "other";
 }
 
-export function getCategoryLabel(category?: string | null, hints?: Pick<StoreRow, "name" | "description" | "tags">): string {
+export function getCategoryLabel(category?: string | null, hints?: SearchCategoryCopyHints): string {
   const kind = resolveSearchCategoryKind(category, hints);
   switch (kind) {
     case "restaurant":
@@ -61,29 +85,33 @@ export function getCategoryLabel(category?: string | null, hints?: Pick<StoreRow
 
 export function getReasonByCategory(
   category?: string | null,
-  query = "",
-  hints?: Pick<StoreRow, "name" | "description" | "tags">
+  _query = "",
+  hints?: SearchCategoryCopyHints
 ): string {
   const kind = resolveSearchCategoryKind(category, hints);
-  const family = isFamilyQuery(query);
+  const kidsOk = allowKidsOrientedPresentation(kind, hints);
 
   switch (kind) {
     case "restaurant":
-      return family
+      return kidsOk
         ? "아이와 함께 편하게 식사하기 좋은 곳이에요."
         : "편하게 식사하기 좋은 곳이에요.";
     case "cafe":
-      return family
-        ? "가족 나들이 후 가볍게 쉬어가기 좋은 카페예요."
+      return kidsOk
+        ? "아이와 함께 가볍게 쉬어가기 좋은 카페예요."
         : "가볍게 쉬어가기 좋은 카페예요.";
     case "kidscafe":
       return "아이와 함께 놀기 좋은 키즈 공간이에요.";
     case "activity":
-      return "아이와 함께 가볍게 놀거나 체험하기 좋은 곳이에요.";
+      return kidsOk
+        ? "아이와 함께 가볍게 놀거나 체험하기 좋은 곳이에요."
+        : "가볍게 놀거나 체험하기 좋은 곳이에요.";
     case "outdoor":
-      return "아이와 함께 산책하거나 잠깐 들르기 좋은 야외 장소예요.";
+      return kidsOk
+        ? "아이와 함께 산책하거나 잠깐 들르기 좋은 야외 장소예요."
+        : "산책하거나 잠깐 들르기 좋은 야외 장소예요.";
     default:
-      return family
+      return kidsOk
         ? "아이와 함께 들르기 좋은 곳이에요."
         : "상황에 맞게 가볍게 들르기 좋은 곳이에요.";
   }
@@ -92,20 +120,22 @@ export function getReasonByCategory(
 export function getTagsByCategory(
   category?: string | null,
   _query = "",
-  hints?: Pick<StoreRow, "name" | "description" | "tags">
+  hints?: SearchCategoryCopyHints
 ): string[] {
   const kind = resolveSearchCategoryKind(category, hints);
+  const kidsOk = allowKidsOrientedPresentation(kind, hints);
   switch (kind) {
     case "restaurant":
-      return ["#아이동반", "#가족외식", "#무난한선택"];
+      return kidsOk ? ["#아이동반", "#가족외식", "#무난한선택"] : ["#식사", "#무난한선택"];
     case "cafe":
-      return ["#아이랑", "#카페", "#분위기좋음"];
+      return kidsOk ? ["#아이랑", "#카페", "#분위기좋음"] : ["#카페", "#분위기좋음"];
     case "kidscafe":
       return ["#키즈카페", "#아이동반", "#실내활동"];
     case "activity":
-      return ["#아이동반", "#실내활동", "#체험"];
+      if (kidsOk) return ["#아이동반", "#실내활동", "#체험"];
+      return hasIndoorPlaceSignal(hints) ? ["#실내활동", "#체험"] : ["#액티비티", "#체험"];
     case "outdoor":
-      return ["#야외", "#산책", "#아이동반"];
+      return kidsOk ? ["#야외", "#산책", "#아이동반"] : ["#야외", "#산책"];
     default:
       return ["#추천", "#하마추천"];
   }
@@ -113,7 +143,7 @@ export function getTagsByCategory(
 
 export function getCautionByCategory(
   category?: string | null,
-  hints?: Pick<StoreRow, "name" | "description" | "tags">
+  hints?: SearchCategoryCopyHints
 ): string {
   const kind = resolveSearchCategoryKind(category, hints);
   switch (kind) {
@@ -134,7 +164,7 @@ export function getCautionByCategory(
 
 export function getRoleLabelByCategory(
   category?: string | null,
-  hints?: Pick<StoreRow, "name" | "description" | "tags">
+  hints?: SearchCategoryCopyHints
 ): string {
   const kind = resolveSearchCategoryKind(category, hints);
   switch (kind) {
@@ -143,8 +173,9 @@ export function getRoleLabelByCategory(
     case "cafe":
       return "분위기 좋은 선택";
     case "kidscafe":
-    case "activity":
       return "아이랑 놀기 좋은 선택";
+    case "activity":
+      return allowKidsOrientedPresentation(kind, hints) ? "아이랑 놀기 좋은 선택" : "체험하기 좋은 선택";
     case "outdoor":
       return "야외 대안";
     default:
@@ -155,7 +186,14 @@ export function getRoleLabelByCategory(
 function roleKeyFromLabel(label: string): SearchV2ResultCard["roleKey"] {
   if (label === "가장 무난한 선택") return "safe";
   if (label === "분위기 좋은 선택") return "mood";
-  if (label === "야외 대안" || label === "아이랑 놀기 좋은 선택" || label === "가까운 대안") return "nearby";
+  if (
+    label === "야외 대안" ||
+    label === "아이랑 놀기 좋은 선택" ||
+    label === "체험하기 좋은 선택" ||
+    label === "가까운 대안"
+  ) {
+    return "nearby";
+  }
   return "safe";
 }
 
@@ -165,11 +203,9 @@ export function normalizeSearchV2ResultCard(
   query: string,
   row?: StoreRow
 ): SearchV2ResultCard {
-  const hints: Pick<StoreRow, "name" | "description" | "tags"> = row ?? {
-    name: card.name,
-    description: card.description,
-    tags: card.tags,
-  };
+  const hints: SearchCategoryCopyHints = row
+    ? { name: row.name, description: row.description, tags: row.tags, with_kids: row.with_kids }
+    : { name: card.name, description: card.description, tags: card.tags };
   const rawCategory = row?.category ?? card.category;
   const categoryLabel = getCategoryLabel(rawCategory, hints);
   const roleLabel = getRoleLabelByCategory(rawCategory, hints);

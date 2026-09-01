@@ -67,6 +67,7 @@ export type StoreRow = {
   description?: string | null;
   area?: string | null;
   address?: string | null;
+  with_kids?: boolean | null;
 };
 
 type FallbackTemplate = Omit<SearchV2ResultCard, "roleLabel"> & { role: string };
