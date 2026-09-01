@@ -1,12 +1,6 @@
 /**
- * 홈 — 입력 유도 + 빠른 시작만 (결정형 첫 화면).
- *
- * 홈에서 숨긴 것(기능 삭제 아님, 복구 가능):
- * - RecentIntentChips → 컴포넌트 유지, `/` 에서만 마운트 안 함. 필요 시 아래처럼 다시 추가.
- * - 최근 본 가로 스크롤 → 마이(`/my`)의「최근 본 카드」+ `?open=` 딥링크 로 유지.
- * - 홈 퀵 카테고리 → `QuickScenarioGrid` 의 `QUICK_CATEGORY_CANDIDATES` + `public/home` 일러스트.
- * - HomeTrustPickSection: 홈 자동 추천 카드 — `/` 에서 마운트 안 함 (검색·/search 결과에서만 노출).
- * 결과 화면 NextSuggestions 등에서 탐색·후속 추천은 그대로.
+ * Open Beta Home V4 — HEADER / CONTEXT / QUESTION / VOICE / SITUATIONS / SURPRISE.
+ * Home decides what to do. Results decides where to go. Engine unchanged.
  */
 "use client";
 
@@ -14,9 +8,11 @@ import React, { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { logEvent } from "@/lib/logEvent";
 import HomeTopBar from "./_components/HomeTopBar";
-import { HomeHero } from "./_components/home/HomeHero";
-import { QuickScenarioGrid } from "./_components/home/QuickScenarioGrid";
+import { SearchBottomSheet } from "./_components/home/SearchBottomSheet";
+import { HomePrompt } from "./_components/home/HomePrompt";
+import { HomeSurpriseMe, HOME_SURPRISE, TodaySituations, type HomeSituationItem } from "./_components/home/TodaySituations";
 import { HomeBottomNav } from "./_components/home/HomeBottomNav";
+import { HOME_BG, HOME_PAGE_X } from "./_components/home/homeBetaTheme";
 import { useRecent } from "./_hooks/useRecent";
 import { useGeoLocation } from "./_hooks/useGeoLocation";
 import { HamaEvents } from "@/lib/analytics/events";
@@ -26,12 +22,7 @@ import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { recordRecentIntent } from "@/lib/recentIntents";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { stashPlaceForSession } from "@/lib/session/placeSession";
-import { colors, pageBackground, space, radius } from "@/lib/designTokens";
-import {
-  loadActiveMission,
-  RECEIPT_VERIFY_PATH,
-  type HamaActiveMission,
-} from "@/lib/mission/hamaActiveMission";
+import { colors } from "@/lib/designTokens";
 import { parseUserProfile } from "@/lib/onboardingProfile";
 import { useHamaMe, type HamaMeUser } from "@/lib/auth/useHamaMe";
 import { kakaoLoginUrl } from "@/lib/auth/kakaoLogin";
@@ -63,16 +54,6 @@ interface PointLog {
 const USER_KEY = "hamaUser";
 const LOG_KEY = "hamaPointLogs";
 const EXPERIMENT_INTRO_SEEN_KEY = "hama_experiment_intro_seen";
-const DEFAULT_MISSION_SEARCH_QUERY = "아이랑 갈만한 곳";
-
-const SCENARIO_QUICK_CHIPS: { scenario: string; query: string }[] = [
-  { scenario: "아이랑", query: "아이랑 갈만한 곳" },
-  { scenario: "데이트", query: "데이트하기 좋은 곳" },
-  { scenario: "가족 외식", query: "가족 외식하기 좋은 식당" },
-  { scenario: "혼자 카페", query: "혼자 가기 좋은 카페" },
-  { scenario: "조용한 곳", query: "조용한 곳" },
-  { scenario: "주차 편한 곳", query: "주차 편한 곳" },
-];
 
 function loadUserFromStorage(): HamaUser {
   if (typeof window === "undefined") return { nickname: "게스트", points: 0 };
@@ -135,8 +116,8 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
   const searchParams = useSearchParams();
   const userLocation = useGeoLocation();
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
-  const [todayAskCount, setTodayAskCount] = useState<number | null>(null);
-  const [activeMission, setActiveMission] = useState<HamaActiveMission | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [voiceStartOnOpen, setVoiceStartOnOpen] = useState(false);
   const { recentCards, recordView } = useRecent();
 
   const openId = searchParams.get("open");
@@ -156,33 +137,6 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
   }, []);
 
   useEffect(() => {
-    const syncMission = () => setActiveMission(loadActiveMission());
-    syncMission();
-    window.addEventListener("pageshow", syncMission);
-    window.addEventListener("focus", syncMission);
-    return () => {
-      window.removeEventListener("pageshow", syncMission);
-      window.removeEventListener("focus", syncMission);
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const res = await fetch("/api/admin/stats", { cache: "no-store" });
-        if (!res.ok) return;
-        const json = await res.json();
-        const n = Number(json?.today?.card_views ?? 0);
-        if (alive && Number.isFinite(n)) setTodayAskCount(n);
-      } catch {}
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
     if (!openId) return;
     const c = recentCards.find((x) => x.id === openId);
     if (c) {
@@ -199,27 +153,6 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
       appendPointLog(amount, reason);
       return updated;
     });
-  };
-
-  const goSearch = (query: string, source: string, scenario?: string) => {
-    const q = query.trim();
-    if (!q) return;
-    if (scenario) {
-      logEvent("scenario_quick_click", { scenario, query: q, page: "home", source });
-    }
-    recordRecentIntent(q);
-    addPoints(3, "상황 검색");
-    const params = new URLSearchParams({ query: q });
-    if (userLocation) {
-      params.set("lat", String(userLocation.lat));
-      params.set("lng", String(userLocation.lng));
-    }
-    router.push(`/search?${params.toString()}`);
-  };
-
-  const handleMissionBannerStart = () => {
-    logEvent("mission_banner_click", { query: DEFAULT_MISSION_SEARCH_QUERY, page: "home" });
-    goSearch(DEFAULT_MISSION_SEARCH_QUERY, "mission_banner");
   };
 
   const goResults = (q: string, source: string, nav?: HomeResultsNavParams) => {
@@ -245,16 +178,48 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
       addPoints(3, "상황 검색");
     }
     const nextUrl = resolveHomeResultsUrl(t, nav);
-    console.log("[HAMA_HOME_NAV_TO_RESULTS]", { source, nextUrl });
+    const withGeo = (() => {
+      if (!userLocation) return nextUrl;
+      const usp = new URLSearchParams(nextUrl.split("?")[1] || "");
+      usp.set("lat", String(userLocation.lat));
+      usp.set("lng", String(userLocation.lng));
+      return `/results?${usp.toString()}`;
+    })();
+    console.log("[HAMA_HOME_NAV_TO_RESULTS]", { source, nextUrl: withGeo });
     logHamaTabClickTrace({
       source: `HomePage:${source}`,
       key: nav?.category ?? null,
       label: null,
       href: null,
       nav: nav ?? null,
-      nextUrl,
+      nextUrl: withGeo,
     });
-    router.push(nextUrl);
+    router.push(withGeo);
+  };
+
+  const handleSituationSelect = (item: HomeSituationItem) => {
+    logEvent(HamaEvents.home_quick_scenario, {
+      situation: item.id,
+      query: item.query,
+      hasLocation: Boolean(userLocation),
+      page: "home",
+    });
+    goResults(item.query, `situation_${item.id}`, item.nav);
+  };
+
+  const handleSurpriseMe = () => {
+    logEvent(HamaEvents.home_quick_scenario, {
+      situation: HOME_SURPRISE.id,
+      query: HOME_SURPRISE.query,
+      hasLocation: Boolean(userLocation),
+      page: "home",
+    });
+    goResults(HOME_SURPRISE.query, "surprise_me");
+  };
+
+  const openSearch = (withVoice: boolean) => {
+    setVoiceStartOnOpen(withVoice);
+    setSearchOpen(true);
   };
 
   const handleLoginClick = () => {
@@ -271,9 +236,9 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
     <main
       style={{
         minHeight: "100vh",
-        paddingBottom: "calc(102px + env(safe-area-inset-bottom, 0px))",
-        overflowX: "visible",
-        background: pageBackground,
+        paddingBottom: "calc(78px + env(safe-area-inset-bottom, 0px))",
+        overflowX: "hidden",
+        background: HOME_BG,
       }}
     >
       <style>{`
@@ -281,18 +246,17 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes hamaFloat {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-6px); }
-        }
       `}</style>
       <div
         style={{
           maxWidth: 430,
           margin: "0 auto",
-          padding: `4px ${space.pageX}px 0`,
-          paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
-          overflowX: "visible",
+          padding: `6px ${HOME_PAGE_X}px 0`,
+          paddingBottom: 10,
+          overflowX: "hidden",
+          boxSizing: "border-box",
+          minWidth: 0,
+          width: "100%",
         }}
       >
         <div style={{ animation: "hamaFadeUp 360ms ease both", position: "relative", zIndex: 40 }}>
@@ -302,185 +266,47 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
             onLoginClick={handleLoginClick}
             onLogoutClick={handleLogoutClick}
             onGoMy={() => router.push("/my")}
+            onSearchClick={() => {
+              logEvent("home_search_icon_click", { page: "home" });
+              openSearch(false);
+            }}
             onAlertClick={() => {
               logEvent("home_alert_click", { page: "home" });
             }}
           />
         </div>
         <div style={{ animation: "hamaFadeUp 360ms ease 80ms both", position: "relative", zIndex: 10 }}>
-          <div
-            style={{
-              marginBottom: 12,
-              borderRadius: radius.largeCard,
-              border: "1.5px solid #FFE0D0",
-              background: "linear-gradient(135deg, #FFF8F3 0%, #FFFFFF 100%)",
-              padding: "14px 16px",
-              boxShadow: "0 6px 16px rgba(255,107,53,0.08)",
+          <HomePrompt
+            onAsk={() => {
+              logEvent("home_search_icon_click", { page: "home", source: "primary_prompt" });
+              openSearch(false);
             }}
-          >
-            <div style={{ fontSize: 15, fontWeight: 900, color: colors.textPrimary, lineHeight: 1.35 }}>
-              🎁 오늘 하마 추천 방문 미션
-            </div>
-            <p
-              style={{
-                margin: "8px 0 12px",
-                fontSize: 13,
-                lineHeight: 1.5,
-                color: colors.textSecondary,
-                fontWeight: 600,
-              }}
-            >
-              하마가 추천한 곳 다녀오고 영수증 인증하면 커피 이벤트에 응모돼요.
-            </p>
-            <button
-              type="button"
-              onClick={handleMissionBannerStart}
-              style={{
-                width: "100%",
-                border: "none",
-                borderRadius: 12,
-                padding: "11px 14px",
-                background: "#FF6B35",
-                color: "#fff",
-                fontWeight: 800,
-                fontSize: 14,
-                cursor: "pointer",
-              }}
-            >
-              추천 받고 미션 시작하기
-            </button>
-          </div>
-        </div>
-        <div style={{ animation: "hamaFadeUp 360ms ease 120ms both", position: "relative", zIndex: 10 }}>
-          <HomeHero
-            onSubmitQuery={(q) => {
-              logEvent(HamaEvents.home_scenario_submit, { query: q, page: "home", source: "hero_natural_input" });
-              goResults(q, "hero_natural_input");
+            onVoice={() => {
+              logEvent(HamaEvents.voice_mic_click, { page: "home", source: "primary_prompt" });
+              openSearch(true);
             }}
           />
         </div>
-        <div style={{ animation: "hamaFadeUp 360ms ease 180ms both", position: "relative", zIndex: 10, marginBottom: 14 }}>
-          <h2
-            style={{
-              margin: "0 0 10px",
-              fontSize: 14,
-              fontWeight: 800,
-              color: colors.textPrimary,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            이럴 때 하마에게 골라달라고 해보세요
-          </h2>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-              gap: 8,
-            }}
-          >
-            {SCENARIO_QUICK_CHIPS.map((chip) => (
-              <button
-                key={chip.scenario}
-                type="button"
-                onClick={() => goSearch(chip.query, "scenario_quick", chip.scenario)}
-                style={{
-                  border: `1px solid ${colors.borderSubtle}`,
-                  borderRadius: 12,
-                  background: "#fff",
-                  padding: "10px 12px",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  color: colors.textPrimary,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  boxShadow: "0 2px 8px rgba(15,23,42,0.04)",
-                }}
-              >
-                {chip.scenario}
-              </button>
-            ))}
-          </div>
+        <div style={{ animation: "hamaFadeUp 360ms ease 140ms both", position: "relative", zIndex: 10 }}>
+          <TodaySituations onSelect={handleSituationSelect} />
         </div>
-        <div style={{ animation: "hamaFadeUp 360ms ease 240ms both", position: "relative", zIndex: 10 }}>
-          <QuickScenarioGrid
-            onPick={(q, nav) => {
-              logEvent(HamaEvents.home_quick_scenario, {
-                query: q,
-                page: "home",
-                explicit_intent: nav?.intent ?? null,
-                explicit_category: nav?.category ?? null,
-                explicit_mode: nav?.mode ?? null,
-              });
-              goResults(q, "quick_grid", nav);
-            }}
-          />
+        <div style={{ animation: "hamaFadeUp 360ms ease 180ms both", position: "relative", zIndex: 10 }}>
+          <HomeSurpriseMe onSelect={handleSurpriseMe} />
         </div>
-        {activeMission && !activeMission.verified && (
-          <div
-            id="hama-active-mission"
-            style={{
-              animation: "hamaFadeUp 360ms ease 300ms both",
-              position: "relative",
-              zIndex: 10,
-              marginTop: 14,
-              marginBottom: 14,
-              borderRadius: radius.largeCard,
-              border: `1px solid ${colors.borderSubtle}`,
-              background: "#fff",
-              padding: "14px 16px",
-              boxShadow: "0 6px 16px rgba(37,99,235,0.08)",
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#2563eb" }}>진행 중인 방문 미션</div>
-            <p style={{ margin: "8px 0 12px", fontSize: 14, lineHeight: 1.5, color: colors.textPrimary, fontWeight: 700 }}>
-              {activeMission.placeName} 다녀오셨나요?
-              <br />
-              <span style={{ fontWeight: 600, color: colors.textSecondary, fontSize: 13 }}>
-                영수증 인증하고 이벤트 응모하세요.
-              </span>
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                logEvent("mission_receipt_click", {
-                  placeName: activeMission.placeName,
-                  placeId: activeMission.placeId ?? null,
-                  page: "home",
-                });
-                // TODO: 전용 영수증 업로드 UI — 현재는 /receipt 안내 페이지로 연결
-                router.push(RECEIPT_VERIFY_PATH);
-              }}
-              style={{
-                width: "100%",
-                border: "none",
-                borderRadius: 12,
-                padding: "11px 14px",
-                background: "#2563eb",
-                color: "#fff",
-                fontWeight: 800,
-                fontSize: 14,
-                cursor: "pointer",
-              }}
-            >
-              영수증 인증하기
-            </button>
-          </div>
-        )}
-        {todayAskCount != null && todayAskCount >= 10 && (
-          <p
-            style={{
-              margin: "2px 0 0",
-              color: colors.textSecondary,
-              fontSize: 13,
-              fontWeight: 700,
-              textAlign: "center",
-            }}
-          >
-            오늘 {todayAskCount.toLocaleString()}명이 하마한테 물어봤어
-          </p>
-        )}
       </div>
       <HomeBottomNav active="home" />
+      <SearchBottomSheet
+        open={searchOpen}
+        startVoiceOnOpen={voiceStartOnOpen}
+        onClose={() => {
+          setSearchOpen(false);
+          setVoiceStartOnOpen(false);
+        }}
+        onSubmitQuery={(q) => {
+          logEvent(HamaEvents.home_scenario_submit, { query: q, page: "home", source: "search_sheet" });
+          goResults(q, "search_sheet");
+        }}
+      />
     </main>
   );
 }

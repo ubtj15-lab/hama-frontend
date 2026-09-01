@@ -3,7 +3,7 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { logEvent } from "@/lib/logEvent";
-import { colors, radius } from "@/lib/designTokens";
+import { HOME_PURPLE } from "./homeBetaTheme";
 
 type Props = {
   active?: "home" | "saved" | "history" | "my";
@@ -20,39 +20,36 @@ export function HomeBottomNav({ active = "home" }: Props) {
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      gap: 5,
-      color: on ? colors.accentPrimary : colors.textMuted,
-      fontSize: 13,
+      gap: 3,
+      color: on ? HOME_PURPLE : "#9A958C",
+      fontSize: 11,
       fontWeight: on ? 800 : 700,
       cursor: "pointer",
       minWidth: 56,
       flex: 1,
-      padding: "6px 0 4px",
+      padding: "8px 0 6px",
     }) as const;
 
-  const iconWrap = { fontSize: 26, lineHeight: 1 } as const;
+  const iconWrap = { fontSize: 22, lineHeight: 1 } as const;
 
   return (
     <nav
       style={{
         position: "fixed",
-        left: "50%",
-        transform: "translateX(-50%)",
-        bottom: "max(12px, env(safe-area-inset-bottom, 0px))",
-        width: "100%",
-        maxWidth: 430,
-        padding: "0 20px",
+        left: 0,
+        right: 0,
+        bottom: 0,
         zIndex: 100,
-        boxSizing: "border-box",
+        background: "#fff",
+        borderTop: "1px solid #EFEAE3",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
       <div
         style={{
-          minHeight: 76,
-          borderRadius: radius.card,
-          border: `1px solid ${colors.borderSubtle}`,
-          background: "#fff",
-          boxShadow: "0 8px 20px rgba(17,24,39,0.12)",
+          maxWidth: 430,
+          margin: "0 auto",
+          minHeight: 62,
           display: "flex",
           alignItems: "stretch",
           justifyContent: "space-around",
