@@ -90,7 +90,7 @@ export const DISCOVERY_BAND_MAX = 16;
 export const DISCOVERY_WEAK_LEADER_BAND_RATIO = 0.4;
 
 const EXPLICIT_MENU_OR_VENUE =
-  /키즈\s*카페|키즈카페|보드게임카페|방탈출\s*말고|실내\s*액티비티/;
+  /키즈\s*카페|키즈카페|보드게임카페|방탈출\s*말고/;
 const EXPLICIT_CAFE_REQUEST = /카페|커피|디저트|베이커리|빵집|브런치/;
 const EXPLICIT_KIDS_CAFE = /키즈\s*카페|키즈카페|놀이카페|키즈룸/;
 
@@ -103,6 +103,8 @@ const FAMILY_PH = /아이랑|애들이|애들|아이\s|유아|가족|초등|육�
 const INDOOR_PH = /실내|비\s*오|비오|장마/;
 const CULTURE_PH = /전시|도서관|관람|박물관|미술관/;
 const PLAY_PH = /놀\s*|체험|방탈출|보드게임|액티비티/;
+/** Indoor + do/play seeking — not rain-only shelter, not relax/cafe/meal. */
+const INDOOR_DO_PH = /뭐\s*하지|뭐하지|어디\s*가지|어디\s*갈까|놀까|놀\s*만|놀거리|할\s*곳/;
 
 const GENERIC_RESTAURANT_NAME =
   /국밥|순대|순댓|짬뽕|만두|찌개|백반|김밥|라면|분식|해장|설렁탕|감자탕|추어탕|칼국수(?!이)/;
@@ -156,6 +158,30 @@ function isKidsIndoorPlayIntent(raw: string, parsed: ScenarioObject): boolean {
   return isFamily && isIndoor && isPlay;
 }
 
+/**
+ * Generic indoor PLAY (Home "실내에서 놀까?" family).
+ * Requires explicit 실내 — rain-only "비 오는데 뭐하지" stays INDOOR.
+ * Does not imply kids and does not force every 실내 query into PLAY.
+ */
+export function isIndoorPlaySeekingQuery(query: string, parsed?: ScenarioObject | null): boolean {
+  const raw = String(query ?? parsed?.rawQuery ?? "").trim();
+  if (!raw) return false;
+  if (!/실내/.test(raw) && parsed?.indoorPreferred !== true) return false;
+  if (!/실내/.test(raw)) return false;
+  const focus = parsed ? focusTextForDiscovery(parsed, raw) : raw;
+  if (isMealSeekingFocus(focus) || isCafeSeekingFocus(focus)) return false;
+  if (/식당|레스토랑|맛집|밥집/.test(focus) && !PLAY_PH.test(raw)) return false;
+  const relaxOnly = RELAX_PH.test(raw) && !PLAY_PH.test(raw) && !INDOOR_DO_PH.test(raw);
+  if (relaxOnly) return false;
+  const purposes = parsed?.queryUnderstanding?.purposeIntents ?? [];
+  return (
+    PLAY_PH.test(raw) ||
+    INDOOR_DO_PH.test(raw) ||
+    purposes.includes("play") ||
+    purposes.includes("indoor_play")
+  );
+}
+
 export function classifyDiscoveryQuery(query: string, parsed: ScenarioObject): DiscoveryClassification {
   const raw = String(query ?? "").trim();
   const reasons: string[] = [];
@@ -179,12 +205,14 @@ export function classifyDiscoveryQuery(query: string, parsed: ScenarioObject): D
     // P1: ACTIVITY-strict "놀고" must not skip PLAY rerank for explicit kids+indoor+play.
     const kidsIndoorPlayOverlay =
       parsed.intentCategory === "ACTIVITY" && isKidsIndoorPlayIntent(raw, parsed);
+    const indoorPlayOverlay =
+      parsed.intentCategory === "ACTIVITY" && isIndoorPlaySeekingQuery(raw, parsed);
     const activityOverlay =
       parsed.intentCategory === "ACTIVITY" &&
       conversational.detected &&
       isGenericPlaySeekingWithoutVenue(focus) &&
       !isVenueSeekingFocus(focus);
-    if (!activityOverlay && !kidsIndoorPlayOverlay) {
+    if (!activityOverlay && !kidsIndoorPlayOverlay && !indoorPlayOverlay) {
       return {
         isDiscovery: false,
         role: null,
@@ -274,6 +302,7 @@ export function classifyDiscoveryQuery(query: string, parsed: ScenarioObject): D
     (isDate && !EXPLICIT_CAFE_REQUEST.test(focus)) ||
     isFamilyOuting ||
     isCulture ||
+    isIndoorPlaySeekingQuery(raw, parsed) ||
     (isPlay && !EXPLICIT_MENU_OR_VENUE.test(focus) && !EXPLICIT_CAFE_REQUEST.test(focus));
 
   const looksDiscovery = looksDiscoveryV1 || conversational.detected;
@@ -305,6 +334,9 @@ export function classifyDiscoveryQuery(query: string, parsed: ScenarioObject): D
   } else if (isKidsIndoorPlay) {
     role = "PLAY";
     reasons.push("kids_indoor_play");
+  } else if (isIndoorPlaySeekingQuery(raw, parsed)) {
+    role = "PLAY";
+    reasons.push("indoor_play");
   } else if (isIndoor && (isFamilyOuting || isOpen || conversational.detected)) {
     role = "INDOOR";
     reasons.push("indoor_phrase");
@@ -538,11 +570,18 @@ export function applyDiscoveryRerank<T>(
     picked.push(row);
   };
 
-  for (const row of preferred) take(row);
-  if (picked.length < deckSize) {
-    for (const row of weakOk) {
-      if (picked.some((p) => p.affinity === "weak") && preferred.length) break;
-      take(row);
+  const indoorPlayDeck =
+    role === "PLAY" && (isKidsIndoorPlayIntent(query, parsed) || isIndoorPlaySeekingQuery(query, parsed));
+  const strongPreferred = preferred.filter((a) => a.affinity === "strong");
+  if (indoorPlayDeck && strongPreferred.length > 0) {
+    for (const row of strongPreferred) take(row);
+  } else {
+    for (const row of preferred) take(row);
+    if (picked.length < deckSize) {
+      for (const row of weakOk) {
+        if (picked.some((p) => p.affinity === "weak") && preferred.length) break;
+        take(row);
+      }
     }
   }
   if (picked.length < deckSize) {
@@ -550,6 +589,7 @@ export function applyDiscoveryRerank<T>(
       const it = ranked.find((r) => r.id === id);
       if (!it) continue;
       const row = annotate(it);
+      if (indoorPlayDeck && row.affinity !== "strong") continue;
       if (row.affinity === "weak" && picked.length > 0) continue;
       take(row);
     }
