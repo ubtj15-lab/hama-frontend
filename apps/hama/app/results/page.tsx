@@ -39,6 +39,13 @@ import {
   RECOMMEND_DECK_SIZE,
   RECENT_EXCLUDE_LIMIT,
 } from "@/lib/recommend/recommendConstants";
+import { mergeExcludeForDisplayedDeck } from "@/lib/recommend/fallbackRecommend";
+import { readContextRecentExposedIds } from "@/lib/recommend/recentExposure";
+import {
+  repeatAvoidanceContextKey,
+  shouldApplyDateRepeatAvoidance,
+} from "@/lib/recommend/dateRepeatAvoidance";
+import { classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
 import {
   isSoloSituationIntentQuery,
   matchNamedFoodPreset,
@@ -189,6 +196,10 @@ function ResultsContent() {
 
   const [shuffleKey, setShuffleKey] = useState(0);
   const [rejectedMainPickIds, setRejectedMainPickIds] = useState<string[]>([]);
+  const [sessionRepeatAvoidIds, setSessionRepeatAvoidIds] = useState<string[]>(() => {
+    const parsed = parseScenarioIntent(qRaw);
+    return readContextRecentExposedIds(repeatAvoidanceContextKey(qRaw, parsed.scenario));
+  });
   const [contextualReject, setContextualReject] = useState<FrozenContextualReject | null>(null);
   const [courseFilter, setCourseFilter] = useState<"all" | "food" | "indoor" | "under3h">("all");
   const [retryInput, setRetryInput] = useState("");
@@ -237,6 +248,12 @@ function ResultsContent() {
   useEffect(() => {
     setRejectedMainPickIds([]);
     setContextualReject(null);
+  }, [qRaw]);
+
+  useEffect(() => {
+    const parsed = parseScenarioIntent(qRaw);
+    const key = repeatAvoidanceContextKey(qRaw, parsed.scenario);
+    setSessionRepeatAvoidIds(readContextRecentExposedIds(key));
   }, [qRaw]);
 
   useEffect(() => {
@@ -658,6 +675,7 @@ function ResultsContent() {
       userLng: userLoc?.lng ?? null,
       excludeStoreIds: recentExcludeIds,
       rejectedMainPickIds,
+      repeatAvoidPlaceIds: sessionRepeatAvoidIds,
       profileOverride,
       relaxPersonalRules,
       searchQuery: searchQueryForHomeCards,
@@ -1386,8 +1404,13 @@ function ResultsContent() {
   };
 
   const rejectMainAndRefresh = () => {
-    const id = primaryListCards[0]?.id;
+    const deck = primaryListCards.slice(0, RECOMMEND_DECK_SIZE);
+    const id = deck[0]?.id;
     if (!id) return;
+    const dateRepeat =
+      Boolean(effectiveScenario) &&
+      shouldApplyDateRepeatAvoidance(qRaw, effectiveScenario!, classifyDiscoveryQuery(qRaw, effectiveScenario!));
+    const deckIds = dateRepeat ? deck.map((c) => c.id).filter(Boolean) : [id];
     const recId = recommendSessionId;
     if (recId && effectiveScenario) {
       const now = new Date();
@@ -1421,7 +1444,7 @@ function ResultsContent() {
         },
       });
     }
-    setRejectedMainPickIds((prev) => [...new Set([...prev, id])]);
+    setRejectedMainPickIds((prev) => mergeExcludeForDisplayedDeck(prev, deckIds));
     setShuffleKey((k) => k + 1);
   };
 

@@ -10,6 +10,8 @@ const RECENT_EXPOSED_MAX = 50;
 const SEARCH_ATTEMPT_MAP_KEY = "hama_search_attempt_by_query_v1";
 const NF_PREV_TOP3_MAP_KEY = "hama_nf_prev_top3_fp_v1";
 const NF_TOP1_STREAK_MAP_KEY = "hama_nf_top1_streak_v1";
+/** query|scenario keyed — not a global penalty. Survives Results remount. */
+const CONTEXT_EXPOSED_MAP_KEY = "hama_recent_exposed_by_context_v1";
 
 /** 정규화된 쿼리 키 — 검색 회차·노출 키에 공통 사용 */
 export function normExposureQueryKey(raw: string): string {
@@ -49,6 +51,38 @@ export function readRecentExposedStoreIds(): string[] {
   } catch {
     return [];
   }
+}
+
+export function readContextRecentExposedIds(contextKey: string): string[] {
+  const key = String(contextKey ?? "").trim();
+  if (!key) return [];
+  const map = readJsonObjectMap(CONTEXT_EXPOSED_MAP_KEY);
+  const raw = map[key];
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => String(x ?? "").trim())
+    .filter(Boolean)
+    .slice(0, RECENT_EXPOSED_MAX);
+}
+
+export function saveContextRecentExposedIds(contextKey: string, exposedIds: string[]): string[] {
+  const key = String(contextKey ?? "").trim();
+  if (!key) return [];
+  const latest = exposedIds.map((x) => String(x ?? "").trim()).filter(Boolean);
+  const prev = readContextRecentExposedIds(key);
+  const merged = [...latest, ...prev];
+  const uniq: string[] = [];
+  const seen = new Set<string>();
+  for (const id of merged) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    uniq.push(id);
+    if (uniq.length >= RECENT_EXPOSED_MAX) break;
+  }
+  const map = readJsonObjectMap(CONTEXT_EXPOSED_MAP_KEY);
+  map[key] = uniq;
+  writeJsonObjectMap(CONTEXT_EXPOSED_MAP_KEY, map);
+  return uniq;
 }
 
 export function saveRecentExposedStoreIds(exposedIds: string[]): string[] {

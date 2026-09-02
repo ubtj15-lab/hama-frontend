@@ -17,7 +17,8 @@ import VisitFeedbackModal, { type VisitFeedbackPayload } from "@/_components/sha
 import { handleReceiptLoginRequired, isReceiptLoginRequiredResponse } from "@/lib/auth/receiptAuth";
 import { appendHamaUserIdToFormData } from "@/lib/visitPlacePhotoClient";
 import { shouldDiagVisitPhoto } from "@/lib/visitPhotoDiag";
-import { getCardExposureId, saveRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
+import { getCardExposureId, saveContextRecentExposedIds, saveRecentExposedStoreIds } from "@/lib/recommend/recentExposure";
+import { repeatAvoidanceContextKey } from "@/lib/recommend/dateRepeatAvoidance";
 import { RECOMMEND_DECK_SIZE } from "@/lib/recommend/recommendConstants";
 import { passesBeautyIndustryWhitelist, passesCultureIndustryWhitelist } from "@/lib/hamaResultCategoryCanonical";
 
@@ -477,12 +478,19 @@ export function RecommendationList({
       .filter(Boolean);
     if (exposedIds.length === 0) return;
     const storageAfterSave = saveRecentExposedStoreIds(exposedIds);
+    const contextKey = repeatAvoidanceContextKey(
+      scenarioObject?.rawQuery ?? "",
+      scenarioObject?.scenario ?? null
+    );
+    if (contextKey !== "|") {
+      saveContextRecentExposedIds(contextKey, exposedIds);
+    }
     console.log("[recent exposure saved]", {
       exposedIds,
       exposedNames: exposed.map((card) => card.name),
       storageAfterSave,
     });
-  }, [beautyV2HardMode, recommendationVisibleLogKey, renderedCards]);
+  }, [beautyV2HardMode, recommendationVisibleLogKey, renderedCards, scenarioObject?.rawQuery, scenarioObject?.scenario]);
 
   React.useEffect(() => {
     if (beautyV2HardMode === true) {

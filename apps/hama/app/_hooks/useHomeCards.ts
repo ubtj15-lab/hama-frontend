@@ -18,6 +18,8 @@ import type { IntentionType } from "@/lib/intention";
 import { buildTopRecommendations } from "@/lib/recommend/scoring";
 import type { RecommendScoreBreakdown, ScoredRecommendItem } from "@/lib/recommend/scoring";
 import { finalizeRecommendations } from "@/lib/recommend/finalizeRecommendations";
+import { classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
+import { shouldApplyDateRepeatAvoidance } from "@/lib/recommend/dateRepeatAvoidance";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassification";
 import { RECOMMEND_DECK_SIZE, RECOMMEND_POOL_SINGLE_TAB } from "@/lib/recommend/recommendConstants";
@@ -2683,7 +2685,18 @@ type SafetyDiversityOutcome = {
  * Shared semantic finalizer first (discovery on the full eligible pool).
  * Live-only safety/diversity runs only when discovery does not apply,
  * so PLAY / FAMILY_OUTING decks are not replaced by jittered cafe/restaurant.
+ * DATE discovery may then apply session-local repeat avoidance via avoidPlaceIds.
  */
+function dateDiscoveryRepeatActive(
+  query: string | null | undefined,
+  scenario: ScenarioObject | null | undefined
+): boolean {
+  if (!scenario) return false;
+  const q = String(query ?? "");
+  const classification = classifyDiscoveryQuery(q, scenario);
+  return shouldApplyDateRepeatAvoidance(q, scenario, classification);
+}
+
 function resolveFinalRecommendationDeck(
   picked: ScoredRecommendItem[],
   allRanked: ScoredRecommendItem[],
@@ -2700,6 +2713,7 @@ function resolveFinalRecommendationDeck(
       ranked: picked,
       scoredPool: allRanked,
       deckSize: cap,
+      avoidPlaceIds: diagnostics?.avoidPlaceIds,
     });
     if (finalized.applied) {
       return { deck: finalized.deck, recentExposureReplacements: 0 };
@@ -2722,6 +2736,7 @@ function applySafetyAndDiversity(
     /** 명시 음식 프리셋 등 — 덱 최대 5까지 */
     deckCap?: number;
     namedFoodPresetId?: string | null;
+    avoidPlaceIds?: readonly string[];
     /** 운동·생활·뷰티: 타 카테고리 보충·final constraint fallback 금지 */
     openBetaAccuracyFirst?: boolean;
     /** 명시 뷰티 URL — strict no-cross·STRICT_EMPTY 로그·교차 폴백 완화 */
@@ -3502,8 +3517,13 @@ export type UseHomeCardsOptions = {
    * Results: 매장명 검색이 이미 성공한 경우 뒤쪽 추천 로직이 화면/상태를 덮어쓰지 않게 할 때 사용.
    */
   skipFetch?: boolean;
-  /** 메인 추천 거절 등 — 해당 매장 id 는 재랭킹에서 제외 */
+  /** 메인 추천 거절 등 — 해당 매장 id 는 재랭킹에서 제외. DATE discovery는 soft-avoid. */
   rejectedMainPickIds?: string[];
+  /**
+   * Results remount snapshot of context-scoped recent exposure (DATE).
+   * Soft-avoid only; never a hard scoring exclude.
+   */
+  repeatAvoidPlaceIds?: string[];
   /**
    * 일회성 프로필 보정(결과 화면 칩/자유입력).
    * DB의 user_profile 은 바꾸지 않고 랭킹/카피에만 반영.
@@ -3541,16 +3561,28 @@ export function useHomeCards(
   const [isLoading, setIsLoading] = useState(false);
   const [deckIncomplete, setDeckIncomplete] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const dateRepeatSoftAvoid = dateDiscoveryRepeatActive(
+    options.searchQuery,
+    options.scenarioObject ?? null
+  );
   const excludeMerged = [
     ...new Set(
       [
         ...(options.excludeStoreIds ?? []),
-        ...(options.rejectedMainPickIds ?? []),
+        ...(dateRepeatSoftAvoid ? [] : (options.rejectedMainPickIds ?? [])),
         ...(options.scenarioObject?.conversationExcludePlaceIds ?? []),
       ].filter(Boolean)
     ),
   ];
+  const repeatAvoidPlaceIds = dateRepeatSoftAvoid
+    ? [
+        ...new Set(
+          [...(options.repeatAvoidPlaceIds ?? []), ...(options.rejectedMainPickIds ?? [])].filter(Boolean)
+        ),
+      ]
+    : [];
   const excludeKey = excludeMerged.join("|");
+  const avoidKey = repeatAvoidPlaceIds.join("|");
   const scenarioKey = options.scenarioObject
     ? `${options.scenarioObject.scenario}:${options.scenarioObject.intentType}:${options.scenarioObject.recommendationMode ?? ""}:${options.scenarioObject.intentCategory ?? ""}:${options.scenarioObject.foodSubCategory ?? ""}:${(options.scenarioObject.menuIntent ?? []).join(",")}:${(options.scenarioObject.foodPreference ?? []).join("|")}:${(options.scenarioObject.vibePreference ?? []).join("|")}:${(options.scenarioObject.hardConstraints ?? []).join("|")}:${options.scenarioObject.timeOfDay ?? ""}:${options.scenarioObject.distanceTolerance ?? ""}:${options.scenarioObject.parkingPreferred ? "p" : ""}:${(options.scenarioObject.conversationRejectedFoodSubs ?? []).join("|")}:${(options.scenarioObject.conversationExcludeMenuTerms ?? []).join("|")}:${options.scenarioObject.confidence ?? ""}`
     : "";
@@ -4410,6 +4442,7 @@ export function useHomeCards(
             ...(explicitBeautyScenarioBypass ? { explicitBeautyScenarioBypass: true as const } : {}),
             ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
             ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
+            ...(repeatAvoidPlaceIds.length ? { avoidPlaceIds: repeatAvoidPlaceIds } : {}),
           }
         );
         let picked = safetyDiversityOutcome.deck;
@@ -4440,6 +4473,7 @@ export function useHomeCards(
                 ...(explicitBeautyScenarioBypass ? { explicitBeautyScenarioBypass: true as const } : {}),
                 ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
                 ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
+                ...(repeatAvoidPlaceIds.length ? { avoidPlaceIds: repeatAvoidPlaceIds } : {}),
               }
             );
             picked = safetyDiversityOutcome.deck;
@@ -4516,6 +4550,7 @@ export function useHomeCards(
                 ...(explicitBeautyScenarioBypass ? { explicitBeautyScenarioBypass: true as const } : {}),
                 ...(deckCapDiag != null ? { deckCap: deckCapDiag } : {}),
                 ...(namedFoodPresetOpt ? { namedFoodPresetId: namedFoodPresetOpt.id } : {}),
+                ...(repeatAvoidPlaceIds.length ? { avoidPlaceIds: repeatAvoidPlaceIds } : {}),
               }
             );
             picked = safetyDiversityOutcome.deck;
@@ -5442,6 +5477,7 @@ export function useHomeCards(
     options.userLng,
     options.searchQuery,
     excludeKey,
+    avoidKey,
     scenarioKey,
     userProfile,
     effectiveUserProfile,

@@ -6,10 +6,12 @@
  *   merged ranked ∪ scored pool
  *   → kids-safety eligibility (adult venues never re-enter when kids context)
  *   → local distance eligibility (ordinary local hard cap; no far TOP3 backfill)
- *   → applyDiscoveryRerank once on the remaining pool
+ *   → applyDiscoveryRerank on the remaining pool
  *   → TOP-N deck
+ *   → optional DATE session-local repeat avoidance (avoidPlaceIds only;
+ *     empty avoid list leaves the discovery deck unchanged)
  *
- * Session suppression / bucket diversity stay outside (runtime-only).
+ * Browser session storage stays outside this module.
  */
 
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
@@ -25,6 +27,10 @@ import {
   type DiscoveryRerankResult,
 } from "./discoveryRole";
 import type { ScoredRecommendItem } from "./scoring";
+import {
+  applyRepeatAvoidanceToOrderedDeck,
+  shouldApplyDateRepeatAvoidance,
+} from "./dateRepeatAvoidance";
 
 export type FinalizeRecommendationsResult = {
   deck: ScoredRecommendItem[];
@@ -111,6 +117,7 @@ export function finalizeDiscoveryPool<T>(input: {
   ranked: DiscoveryRerankItem<T>[];
   scoredPool?: DiscoveryRerankItem<T>[];
   deckSize?: number;
+  avoidPlaceIds?: readonly string[];
 }): DiscoveryRerankResult<T> & { eligiblePool: DiscoveryRerankItem<T>[] } {
   const deckSize = input.deckSize ?? 3;
   const merged = mergeDiscoveryPool(input.ranked, input.scoredPool ?? []);
@@ -128,6 +135,20 @@ export function finalizeDiscoveryPool<T>(input: {
     poolLimit: DISCOVERY_POOL_LIMIT,
     naturalDeckIds,
   });
+  const avoid = (input.avoidPlaceIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean);
+  if (
+    result.applied &&
+    avoid.length > 0 &&
+    shouldApplyDateRepeatAvoidance(input.query, input.parsed, result.classification)
+  ) {
+    const expanded = applyDiscoveryRerank(eligiblePool, input.query, input.parsed, {
+      deckSize: Math.max(deckSize, eligiblePool.length),
+      poolLimit: DISCOVERY_POOL_LIMIT,
+      naturalDeckIds,
+    });
+    const nextDeck = applyRepeatAvoidanceToOrderedDeck(expanded.deck, avoid, deckSize);
+    return { ...result, deck: nextDeck, eligiblePool };
+  }
   return { ...result, eligiblePool };
 }
 
@@ -142,6 +163,7 @@ export function finalizeRecommendations(input: {
   ranked: ScoredRecommendItem[];
   scoredPool?: ScoredRecommendItem[];
   deckSize?: number;
+  avoidPlaceIds?: readonly string[];
 }): FinalizeRecommendationsResult {
   const ranked = input.ranked.map(scoredToDiscovery);
   const scoredPool = (input.scoredPool ?? []).map(scoredToDiscovery);
@@ -151,6 +173,7 @@ export function finalizeRecommendations(input: {
     ranked,
     scoredPool,
     deckSize: input.deckSize,
+    avoidPlaceIds: input.avoidPlaceIds,
   });
   const byId = new Map<string, ScoredRecommendItem>();
   for (const item of [...input.ranked, ...(input.scoredPool ?? [])]) {
