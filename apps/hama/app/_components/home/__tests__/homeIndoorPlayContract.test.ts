@@ -6,6 +6,7 @@ import { resolveHomeResultsUrl } from "@/lib/hamaTabClickTrace";
 import {
   classifyDiscoveryQuery,
   isIndoorPlaySeekingQuery,
+  shouldHideHoldemPokerForGenericIndoorPlay,
 } from "@/lib/recommend/discoveryRole";
 import { isExplicitKidsRecommendationContext } from "@/lib/recommend/finalizeRecommendations";
 import { getHomeSituationCandidate } from "../homeSituationCandidates";
@@ -42,6 +43,7 @@ describe("HOME_DISPLAY_INTENT_AND_QUERY_CONTRACT", () => {
     expect(classification.role).toBe("PLAY");
     expect(parsed.withKids).not.toBe(true);
     expect(isExplicitKidsRecommendationContext(parsed)).toBe(false);
+    expect(shouldHideHoldemPokerForGenericIndoorPlay(q!, parsed)).toBe(true);
   });
 
   it("Results path keeps indoor-evidence activities in the Home indoor PLAY pool", () => {

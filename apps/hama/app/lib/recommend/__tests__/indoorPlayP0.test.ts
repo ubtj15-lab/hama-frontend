@@ -3,7 +3,10 @@ import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import {
   classifyDiscoveryQuery,
   hasCredibleIndoorPlayEvidence,
+  isExplicitHoldemPokerQuery,
+  isHoldemPokerCodedVenue,
   isIndoorPlaySeekingQuery,
+  shouldHideHoldemPokerForGenericIndoorPlay,
   toDiscoveryItem,
 } from "../discoveryRole";
 import { getHomeSituationCandidate } from "@/_components/home/homeSituationCandidates";
@@ -84,6 +87,12 @@ const NEUNGI = card({
   category: "restaurant",
   tags: ["보양식", "아이동반"],
   with_kids: true,
+});
+const HOLDEM = card({
+  id: "act-holdem",
+  name: "홀덤펍보드카페",
+  category: "activity",
+  tags: ["홀덤", "보드게임", "실내"],
 });
 
 function classify(q: string) {
@@ -279,5 +288,39 @@ describe("P0 generic indoor PLAY bridge", () => {
     expect(classification.role).toBe("PLAY");
     expect(parsed.withKids).not.toBe(true);
     expect(isExplicitKidsRecommendationContext(parsed)).toBe(false);
+  });
+
+  it("generic indoor PLAY omits holdem/poker when ordinary indoor play exists", () => {
+    const homeQ = getHomeSituationCandidate("indoor")!.query;
+    expect(shouldHideHoldemPokerForGenericIndoorPlay(homeQ, parseScenarioIntent(homeQ))).toBe(true);
+    expect(isHoldemPokerCodedVenue(toDiscoveryItem(HOLDEM, 99))).toBe(true);
+    const parsed = parseScenarioIntent(homeQ);
+    const out = finalizeRecommendations({
+      query: homeQ,
+      parsed,
+      ranked: [scored(HOLDEM, 99), scored(BOARD, 70), scored(BOWLING, 68)],
+      scoredPool: [scored(HOLDEM, 99), scored(BOARD, 70), scored(BOWLING, 68), scored(ESCAPE, 66)],
+      deckSize: 3,
+    });
+    expect(out.deck.map((d) => d.card.name)).not.toContain("홀덤펍보드카페");
+    expect(out.deck).toHaveLength(3);
+    expect(out.deck.every((d) => d.card.category === "activity")).toBe(true);
+    expect(out.deck.some((d) => d.card.category === "restaurant")).toBe(false);
+  });
+
+  it("explicit holdem/poker queries keep holdem venues eligible", () => {
+    for (const q of ["홀덤 하고 싶어", "홀덤펍 추천해줘", "포커 할 곳", "포커펍 찾아줘"]) {
+      expect(isExplicitHoldemPokerQuery(q)).toBe(true);
+      expect(shouldHideHoldemPokerForGenericIndoorPlay(q, parseScenarioIntent(q))).toBe(false);
+      const parsed = parseScenarioIntent(q);
+      const out = finalizeRecommendations({
+        query: q,
+        parsed,
+        ranked: [scored(HOLDEM, 99), scored(BOARD, 70), scored(BOWLING, 68)],
+        scoredPool: [scored(HOLDEM, 99), scored(BOARD, 70), scored(BOWLING, 68)],
+        deckSize: 3,
+      });
+      expect(out.deck.map((d) => d.card.name)).toContain("홀덤펍보드카페");
+    }
   });
 });

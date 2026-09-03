@@ -118,6 +118,8 @@ const PLAY_ACTIVITY = /키즈|방탈출|보드게임|VR|볼링|만화|코인|체
  */
 const INDOOR_PLAY_VENUE =
   /실내|인도어|indoor|보드게임|보드카페|방탈출|볼링|vr|키즈카페|키즈룸|실내놀이|만화|코인|오락실|아케이드|스크린골프|스크린야구/;
+/** Adult-coded holdem/poker — not a global pub blacklist. */
+const HOLDEM_POKER_CODED = /홀덤|포커펍|포커/;
 
 function compact(s: string): string {
   return String(s ?? "").toLowerCase().replace(/\s+/g, "");
@@ -408,6 +410,19 @@ export function hasCredibleIndoorPlayEvidence(item: DiscoveryRerankItem<unknown>
   return playSuitable && indoorSuitable;
 }
 
+export function isHoldemPokerCodedVenue(item: DiscoveryRerankItem<unknown>): boolean {
+  return HOLDEM_POKER_CODED.test(item.name) || HOLDEM_POKER_CODED.test(hayOf(item));
+}
+
+export function isExplicitHoldemPokerQuery(query: string): boolean {
+  return HOLDEM_POKER_CODED.test(String(query ?? ""));
+}
+
+/** Generic indoor PLAY hides holdem/poker when the user did not ask for it. */
+export function shouldHideHoldemPokerForGenericIndoorPlay(query: string, parsed: ScenarioObject): boolean {
+  return isIndoorPlaySeekingQuery(query, parsed) && !isExplicitHoldemPokerQuery(query);
+}
+
 export function isGenericRestaurant(item: DiscoveryRerankItem<unknown>): boolean {
   const cat = String(item.category ?? "").toLowerCase();
   if (cat !== "restaurant") return false;
@@ -605,7 +620,11 @@ export function applyDiscoveryRerank<T>(
       return a.item.id.localeCompare(b.item.id);
     });
   if (indoorPlayDeck) {
-    for (const row of strongIndoorPlay) take(row);
+    const hideHoldem = shouldHideHoldemPokerForGenericIndoorPlay(query, parsed);
+    const indoorRows = hideHoldem
+      ? strongIndoorPlay.filter((a) => !isHoldemPokerCodedVenue(a.item))
+      : strongIndoorPlay;
+    for (const row of indoorRows) take(row);
   } else {
     for (const row of preferred) take(row);
     if (picked.length < deckSize) {
