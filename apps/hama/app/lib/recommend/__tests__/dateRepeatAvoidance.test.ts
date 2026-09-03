@@ -9,8 +9,10 @@ import { mergeExcludeForDisplayedDeck, mergeExcludeForMainReject } from "../fall
 import {
   applyRepeatAvoidanceToOrderedDeck,
   isDateRepeatAvoidanceContext,
+  isHomeFoodSituationQuery,
   repeatAvoidanceContextKey,
   shouldApplyDateRepeatAvoidance,
+  shouldApplyHomeSituationRepeatAvoidance,
 } from "../dateRepeatAvoidance";
 import {
   readContextRecentExposedIds,
@@ -245,6 +247,10 @@ describe("DATE repeat avoidance", () => {
     expect(shouldApplyDateRepeatAvoidance("뭐 먹지", foodParsed, classifyDiscoveryQuery("뭐 먹지", foodParsed))).toBe(
       false
     );
+    expect(isHomeFoodSituationQuery("뭐 먹지", foodParsed)).toBe(true);
+    expect(
+      shouldApplyHomeSituationRepeatAvoidance("뭐 먹지", foodParsed, classifyDiscoveryQuery("뭐 먹지", foodParsed))
+    ).toBe(true);
     installMemorySessionStorage();
     saveContextRecentExposedIds(dateKey, ["date-a", "date-b", "date-c"]);
     expect(readContextRecentExposedIds(foodKey)).toEqual([]);
@@ -311,5 +317,134 @@ describe("DATE repeat avoidance", () => {
       "e",
       "a",
     ]);
+  });
+});
+
+describe("Home situation repeat V1", () => {
+  const foodCards = ["food-a", "food-b", "food-c", "food-d", "food-e", "food-f"].map((id, i) =>
+    scored(
+      card({
+        id,
+        name: `한식당${i + 1}`,
+        category: "restaurant",
+        mood: ["한식"],
+        tags: ["한식", "식사"],
+        description: "점심 식사",
+        with_kids: null,
+        distanceKm: i + 1,
+      }),
+      90 - i
+    )
+  );
+  const indoorCards = ["in-a", "in-b", "in-c", "in-d", "in-e", "in-f"].map((id, i) =>
+    scored(
+      card({
+        id,
+        name: i % 2 === 0 ? `보드게임카페${i + 1}` : `볼링장${i + 1}`,
+        category: "activity",
+        mood: ["실내", "놀이"],
+        tags: i % 2 === 0 ? ["보드게임", "실내"] : ["볼링", "실내"],
+        description: "실내 놀이",
+        with_kids: null,
+        distanceKm: i + 1,
+      }),
+      90 - i
+    )
+  );
+  const relaxCards = ["rx-a", "rx-b", "rx-c", "rx-d", "rx-e", "rx-f"].map((id, i) =>
+    scored(
+      card({
+        id,
+        name: `조용한카페${i + 1}`,
+        category: "cafe",
+        mood: ["조용", "힐링"],
+        tags: ["조용", "카페"],
+        description: "조용히 시간 보내기 좋은 곳",
+        with_kids: null,
+        distanceKm: i + 1,
+      }),
+      90 - i
+    )
+  );
+
+  function run(query: string, pool: ScoredRecommendItem[], avoidPlaceIds: string[] = []) {
+    const parsed = parseScenarioIntent(query);
+    return finalizeRecommendations({
+      query,
+      parsed,
+      ranked: pool,
+      scoredPool: pool,
+      deckSize: 3,
+      avoidPlaceIds,
+    });
+  }
+
+  it("FOOD 뭐 먹지 reuses DATE two-pass on displayed TOP3 without DATE inheritance", () => {
+    const query = "뭐 먹지";
+    const parsed = parseScenarioIntent(query);
+    expect(shouldApplyDateRepeatAvoidance(query, parsed, classifyDiscoveryQuery(query, parsed))).toBe(false);
+    expect(shouldApplyHomeSituationRepeatAvoidance(query, parsed, classifyDiscoveryQuery(query, parsed))).toBe(
+      true
+    );
+    const first = run(query, foodCards);
+    const r1 = first.deck.map((d) => d.card.id);
+    expect(r1).toHaveLength(3);
+    const second = run(query, foodCards, r1);
+    const r2 = second.deck.map((d) => d.card.id);
+    expect(r2).toHaveLength(3);
+    for (const id of r1) expect(r2).not.toContain(id);
+    const third = run(query, foodCards, [...r1, ...r2]);
+    const r3 = third.deck.map((d) => d.card.id);
+    expect(r3).toHaveLength(3);
+    for (const id of r2) expect(r3).not.toContain(id);
+    expect(first.deck.every((d) => d.card.category === "restaurant")).toBe(true);
+    expect(second.deck.every((d) => d.card.category === "restaurant")).toBe(true);
+  });
+
+  it("INDOOR PLAY 오늘 실내에서 놀까? avoids previous displayed TOP3", () => {
+    const query = "오늘 실내에서 놀까?";
+    const parsed = parseScenarioIntent(query);
+    expect(shouldApplyHomeSituationRepeatAvoidance(query, parsed, classifyDiscoveryQuery(query, parsed))).toBe(
+      true
+    );
+    const first = run(query, indoorCards);
+    expect(first.classification.role).toBe("PLAY");
+    const r1 = first.deck.map((d) => d.card.id);
+    const second = run(query, indoorCards, r1);
+    const r2 = second.deck.map((d) => d.card.id);
+    expect(r2).toHaveLength(3);
+    for (const id of r1) expect(r2).not.toContain(id);
+    expect(first.deck.every((d) => d.card.category === "activity")).toBe(true);
+    expect(second.deck.every((d) => d.card.category === "activity")).toBe(true);
+  });
+
+  it("RELAX 조용히 시간 보낼 곳 avoids previous displayed TOP3", () => {
+    const query = "조용히 시간 보낼 곳";
+    const parsed = parseScenarioIntent(query);
+    expect(shouldApplyHomeSituationRepeatAvoidance(query, parsed, classifyDiscoveryQuery(query, parsed))).toBe(
+      true
+    );
+    const first = run(query, relaxCards);
+    expect(first.classification.role).toBe("RELAX");
+    const r1 = first.deck.map((d) => d.card.id);
+    const second = run(query, relaxCards, r1);
+    const r2 = second.deck.map((d) => d.card.id);
+    expect(r2).toHaveLength(3);
+    for (const id of r1) expect(r2).not.toContain(id);
+  });
+
+  it("kids family query does not activate Home situation TOP3 soft-avoid", () => {
+    const query = "아이랑 갈만한 곳";
+    const parsed = parseScenarioIntent(query);
+    expect(shouldApplyHomeSituationRepeatAvoidance(query, parsed, classifyDiscoveryQuery(query, parsed))).toBe(
+      false
+    );
+  });
+
+  it("다른 추천 보기 Home-situation wiring still merges the full displayed TOP3", () => {
+    const pageSrc = readFileSync(resolve(__dirname, "../../../results/page.tsx"), "utf8");
+    expect(pageSrc).toContain("shouldApplyHomeSituationRepeatAvoidance");
+    expect(pageSrc).toContain("mergeExcludeForDisplayedDeck");
+    expect(pageSrc).toMatch(/homeRepeat \? deck\.map\(\(c\) => c\.id\)/);
   });
 });

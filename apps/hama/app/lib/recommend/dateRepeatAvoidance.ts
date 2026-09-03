@@ -1,10 +1,16 @@
 /**
- * Session/context-local DATE repeat avoidance.
- * Does not change ranking weights. Empty avoid-ids → original discovery deck.
+ * Session/context-local repeat avoidance for Home discovery situations.
+ * DATE keeps its original DATE-only gate. Home Situation Repeat V1 reuses the
+ * same two-pass reorder for FOOD / INDOOR PLAY / RELAX.
+ * Does not change ranking weights. Empty avoid-ids → original deck.
  */
 
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
-import type { DiscoveryClassification } from "./discoveryRole";
+import {
+  classifyDiscoveryQuery,
+  isIndoorPlaySeekingQuery,
+  type DiscoveryClassification,
+} from "./discoveryRole";
 
 const DATE_QUERY_RE = /데이트|연인|커플/;
 
@@ -42,6 +48,47 @@ export function shouldApplyDateRepeatAvoidance(
 ): boolean {
   if (!isDateRepeatAvoidanceContext(query, parsed)) return false;
   return classification.isDiscovery === true && classification.role === "DATE";
+}
+
+/**
+ * Generic Home FOOD situation ("뭐 먹지" family). Named dishes, catalog menus,
+ * DATE/INDOOR/RELAX queries, and course stay out.
+ */
+export function isHomeFoodSituationQuery(
+  query: string,
+  parsed: ScenarioObject | null | undefined
+): boolean {
+  if (!parsed) return false;
+  if (parsed.recommendationMode === "course" || parsed.intentType === "course_generation") {
+    return false;
+  }
+  if (parsed.catalogMenu?.catalogMenuPrimary) return false;
+  const raw = String(query ?? parsed.rawQuery ?? "").trim();
+  if (!raw) return false;
+  if (/데이트|연인|커플/.test(raw)) return false;
+  if (/실내/.test(raw) && /놀/.test(raw)) return false;
+  return /뭐\s*먹지|맛있는\s*거\s*먹/.test(raw);
+}
+
+/**
+ * Home discovery situations that reuse DATE's TOP3 soft-avoid:
+ * DATE, generic FOOD, INDOOR PLAY, RELAX.
+ */
+export function shouldApplyHomeSituationRepeatAvoidance(
+  query: string,
+  parsed: ScenarioObject | null | undefined,
+  classification?: Pick<DiscoveryClassification, "isDiscovery" | "role">
+): boolean {
+  if (!parsed) return false;
+  if (parsed.recommendationMode === "course" || parsed.intentType === "course_generation") {
+    return false;
+  }
+  const cls = classification ?? classifyDiscoveryQuery(query, parsed);
+  if (shouldApplyDateRepeatAvoidance(query, parsed, cls)) return true;
+  if (isIndoorPlaySeekingQuery(query, parsed)) return true;
+  if (cls.role === "RELAX" && cls.isDiscovery) return true;
+  if (isHomeFoodSituationQuery(query, parsed)) return true;
+  return false;
 }
 
 /**

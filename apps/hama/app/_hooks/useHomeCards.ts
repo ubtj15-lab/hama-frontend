@@ -19,7 +19,7 @@ import { buildTopRecommendations } from "@/lib/recommend/scoring";
 import type { RecommendScoreBreakdown, ScoredRecommendItem } from "@/lib/recommend/scoring";
 import { finalizeRecommendations } from "@/lib/recommend/finalizeRecommendations";
 import { classifyDiscoveryQuery, hasCredibleIndoorPlayEvidence, isExplicitHoldemPokerQuery, isHoldemPokerCodedVenue, isIndoorPlaySeekingQuery, toDiscoveryItem } from "@/lib/recommend/discoveryRole";
-import { shouldApplyDateRepeatAvoidance } from "@/lib/recommend/dateRepeatAvoidance";
+import { shouldApplyHomeSituationRepeatAvoidance } from "@/lib/recommend/dateRepeatAvoidance";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassification";
 import { RECOMMEND_DECK_SIZE, RECOMMEND_POOL_SINGLE_TAB } from "@/lib/recommend/recommendConstants";
@@ -2685,16 +2685,17 @@ type SafetyDiversityOutcome = {
  * Shared semantic finalizer first (discovery on the full eligible pool).
  * Live-only safety/diversity runs only when discovery does not apply,
  * so PLAY / FAMILY_OUTING decks are not replaced by jittered cafe/restaurant.
- * DATE discovery may then apply session-local repeat avoidance via avoidPlaceIds.
+ * Home DATE / FOOD / INDOOR PLAY / RELAX may then apply session-local
+ * TOP3 repeat avoidance via avoidPlaceIds.
  */
-function dateDiscoveryRepeatActive(
+function homeSituationRepeatActive(
   query: string | null | undefined,
   scenario: ScenarioObject | null | undefined
 ): boolean {
   if (!scenario) return false;
   const q = String(query ?? "");
   const classification = classifyDiscoveryQuery(q, scenario);
-  return shouldApplyDateRepeatAvoidance(q, scenario, classification);
+  return shouldApplyHomeSituationRepeatAvoidance(q, scenario, classification);
 }
 
 function resolveFinalRecommendationDeck(
@@ -2716,6 +2717,10 @@ function resolveFinalRecommendationDeck(
       avoidPlaceIds: diagnostics?.avoidPlaceIds,
     });
     if (finalized.applied) {
+      return { deck: finalized.deck, recentExposureReplacements: 0 };
+    }
+    const avoid = diagnostics?.avoidPlaceIds ?? [];
+    if (avoid.length > 0 && homeSituationRepeatActive(query, scenario)) {
       return { deck: finalized.deck, recentExposureReplacements: 0 };
     }
   }
@@ -3561,7 +3566,7 @@ export function useHomeCards(
   const [isLoading, setIsLoading] = useState(false);
   const [deckIncomplete, setDeckIncomplete] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const dateRepeatSoftAvoid = dateDiscoveryRepeatActive(
+  const dateRepeatSoftAvoid = homeSituationRepeatActive(
     options.searchQuery,
     options.scenarioObject ?? null
   );

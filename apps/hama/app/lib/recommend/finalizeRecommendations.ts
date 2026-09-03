@@ -8,8 +8,8 @@
  *   → local distance eligibility (ordinary local hard cap; no far TOP3 backfill)
  *   → applyDiscoveryRerank on the remaining pool
  *   → TOP-N deck
- *   → optional DATE session-local repeat avoidance (avoidPlaceIds only;
- *     empty avoid list leaves the discovery deck unchanged)
+ *   → optional Home-situation session-local repeat avoidance (avoidPlaceIds
+ *     only; empty avoid list leaves the deck unchanged)
  *
  * Browser session storage stays outside this module.
  */
@@ -31,7 +31,7 @@ import {
 import type { ScoredRecommendItem } from "./scoring";
 import {
   applyRepeatAvoidanceToOrderedDeck,
-  shouldApplyDateRepeatAvoidance,
+  shouldApplyHomeSituationRepeatAvoidance,
 } from "./dateRepeatAvoidance";
 
 export type FinalizeRecommendationsResult = {
@@ -145,16 +145,17 @@ export function finalizeDiscoveryPool<T>(input: {
   });
   const avoid = (input.avoidPlaceIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean);
   if (
-    result.applied &&
     avoid.length > 0 &&
-    shouldApplyDateRepeatAvoidance(input.query, input.parsed, result.classification)
+    shouldApplyHomeSituationRepeatAvoidance(input.query, input.parsed, result.classification)
   ) {
-    const expanded = applyDiscoveryRerank(eligiblePool, input.query, input.parsed, {
-      deckSize: Math.max(deckSize, eligiblePool.length),
-      poolLimit: DISCOVERY_POOL_LIMIT,
-      naturalDeckIds,
-    });
-    const nextDeck = applyRepeatAvoidanceToOrderedDeck(expanded.deck, avoid, deckSize);
+    const ordered = result.applied
+      ? applyDiscoveryRerank(eligiblePool, input.query, input.parsed, {
+          deckSize: Math.max(deckSize, eligiblePool.length),
+          poolLimit: DISCOVERY_POOL_LIMIT,
+          naturalDeckIds,
+        }).deck
+      : eligiblePool;
+    const nextDeck = applyRepeatAvoidanceToOrderedDeck(ordered, avoid, deckSize);
     return { ...result, deck: nextDeck, eligiblePool };
   }
   return { ...result, eligiblePool };

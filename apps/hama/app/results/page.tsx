@@ -43,7 +43,7 @@ import { mergeExcludeForDisplayedDeck } from "@/lib/recommend/fallbackRecommend"
 import { readContextRecentExposedIds } from "@/lib/recommend/recentExposure";
 import {
   repeatAvoidanceContextKey,
-  shouldApplyDateRepeatAvoidance,
+  shouldApplyHomeSituationRepeatAvoidance,
 } from "@/lib/recommend/dateRepeatAvoidance";
 import { classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
 import {
@@ -1407,10 +1407,14 @@ function ResultsContent() {
     const deck = primaryListCards.slice(0, RECOMMEND_DECK_SIZE);
     const id = deck[0]?.id;
     if (!id) return;
-    const dateRepeat =
+    const homeRepeat =
       Boolean(effectiveScenario) &&
-      shouldApplyDateRepeatAvoidance(qRaw, effectiveScenario!, classifyDiscoveryQuery(qRaw, effectiveScenario!));
-    const deckIds = dateRepeat ? deck.map((c) => c.id).filter(Boolean) : [id];
+      shouldApplyHomeSituationRepeatAvoidance(
+        qRaw,
+        effectiveScenario!,
+        classifyDiscoveryQuery(qRaw, effectiveScenario!)
+      );
+    const deckIds = homeRepeat ? deck.map((c) => c.id).filter(Boolean) : [id];
     const recId = recommendSessionId;
     if (recId && effectiveScenario) {
       const now = new Date();
