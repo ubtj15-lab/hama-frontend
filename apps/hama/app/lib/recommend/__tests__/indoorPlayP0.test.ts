@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
-import { classifyDiscoveryQuery, isIndoorPlaySeekingQuery } from "../discoveryRole";
+import {
+  classifyDiscoveryQuery,
+  hasCredibleIndoorPlayEvidence,
+  isIndoorPlaySeekingQuery,
+  toDiscoveryItem,
+} from "../discoveryRole";
+import { getHomeSituationCandidate } from "@/_components/home/homeSituationCandidates";
+import { resolveHomeResultsUrl } from "@/lib/hamaTabClickTrace";
 import { finalizeRecommendations, isExplicitKidsRecommendationContext } from "../finalizeRecommendations";
 import { DEFAULT_LOCAL_MAX_KM, resolveLocalDistanceCapKm } from "../localDistanceSafety";
 import type { HomeCard } from "@/lib/storeTypes";
@@ -57,6 +64,27 @@ const ESCAPE = card({
   category: "activity",
   tags: ["방탈출", "실내"],
 });
+const PARK = card({
+  id: "park-dowon",
+  name: "도원공원",
+  category: "activity",
+  tags: ["아이동반", "액티비티"],
+  with_kids: true,
+});
+const NAMDO = card({
+  id: "food-namdo",
+  name: "남도연프리미엄",
+  category: "restaurant",
+  tags: ["한식", "아이동반"],
+  with_kids: true,
+});
+const NEUNGI = card({
+  id: "food-neungi",
+  name: "능이밥상 오산직영점",
+  category: "restaurant",
+  tags: ["보양식", "아이동반"],
+  with_kids: true,
+});
 
 function classify(q: string) {
   const parsed = parseScenarioIntent(q);
@@ -65,7 +93,17 @@ function classify(q: string) {
 
 function deck(q: string) {
   const parsed = parseScenarioIntent(q);
-  const pool = [scored(CAFE, 90), scored(JJAMPONG, 88), scored(MANDU, 86), scored(BOARD, 70), scored(BOWLING, 68), scored(ESCAPE, 66)];
+  const pool = [
+    scored(CAFE, 90),
+    scored(JJAMPONG, 88),
+    scored(MANDU, 86),
+    scored(NAMDO, 85),
+    scored(NEUNGI, 84),
+    scored(PARK, 82),
+    scored(BOARD, 70),
+    scored(BOWLING, 68),
+    scored(ESCAPE, 66),
+  ];
   return finalizeRecommendations({
     query: q,
     parsed,
@@ -172,5 +210,74 @@ describe("P0 generic indoor PLAY bridge", () => {
     );
     expect(classify("비 오는 날 카페").classification.role).not.toBe("PLAY");
     expect(classify("오늘 밥 먹으러 갈까").classification.isDiscovery).toBe(false);
+  });
+
+  it("E2 도원공원 is not indoor-play eligible", () => {
+    expect(hasCredibleIndoorPlayEvidence(toDiscoveryItem(PARK, 82))).toBe(false);
+    const names = deck("오늘 실내에서 놀까?").deck.map((d) => d.card.name);
+    expect(names).not.toContain("도원공원");
+  });
+
+  it("F restaurants do not pad indoor PLAY while valid indoor activities exist", () => {
+    const out = deck("오늘 실내에서 놀까?");
+    expect(out.deck).toHaveLength(3);
+    expect(out.deck.every((d) => d.card.category === "activity")).toBe(true);
+    expect(out.deck.some((d) => d.card.category === "restaurant" || d.card.category === "cafe")).toBe(false);
+    expect(out.deck.map((d) => d.card.name)).not.toEqual(expect.arrayContaining(["남도연프리미엄", "능이밥상 오산직영점"]));
+  });
+
+  it("G valid indoor activities remain eligible", () => {
+    expect(hasCredibleIndoorPlayEvidence(toDiscoveryItem(BOARD, 70))).toBe(true);
+    expect(hasCredibleIndoorPlayEvidence(toDiscoveryItem(BOWLING, 68))).toBe(true);
+    expect(hasCredibleIndoorPlayEvidence(toDiscoveryItem(ESCAPE, 66))).toBe(true);
+    const names = deck("오늘 실내에서 놀까?").deck.map((d) => d.card.name);
+    expect(names).toEqual(["보드게임카페 레드버튼", "볼링장", "방탈출카페"]);
+  });
+
+  it("does not drop indoor activities below the mixed top-80 band", () => {
+    const parsed = parseScenarioIntent("오늘 실내에서 놀까?");
+    const restaurants = Array.from({ length: 80 }, (_, i) =>
+      scored(
+        card({
+          id: `food-pad-${i}`,
+          name: `식당패딩${i}`,
+          category: "restaurant",
+          tags: ["한식"],
+        }),
+        90 - i * 0.01
+      )
+    );
+    const out = finalizeRecommendations({
+      query: "오늘 실내에서 놀까?",
+      parsed,
+      ranked: restaurants.slice(0, 3),
+      scoredPool: [...restaurants, scored(BOARD, 8), scored(BOWLING, 7), scored(ESCAPE, 6)],
+      deckSize: 3,
+    });
+    expect(out.deck).toHaveLength(3);
+    expect(out.deck.map((d) => d.card.name)).toEqual(["보드게임카페 레드버튼", "볼링장", "방탈출카페"]);
+  });
+
+  it("does not pad indoor PLAY to 3 with restaurants when only one indoor activity exists", () => {
+    const parsed = parseScenarioIntent("오늘 실내에서 놀까?");
+    const out = finalizeRecommendations({
+      query: "오늘 실내에서 놀까?",
+      parsed,
+      ranked: [scored(NAMDO, 90), scored(NEUNGI, 88), scored(PARK, 86)],
+      scoredPool: [scored(NAMDO, 90), scored(NEUNGI, 88), scored(PARK, 86), scored(BOARD, 40)],
+      deckSize: 3,
+    });
+    expect(out.deck).toHaveLength(1);
+    expect(out.deck[0]?.card.name).toBe("보드게임카페 레드버튼");
+  });
+
+  it("Home indoor candidate query reaches PLAY without implying child", () => {
+    const q = getHomeSituationCandidate("indoor")!.query;
+    const urlQ = new URLSearchParams(resolveHomeResultsUrl(q).split("?")[1] ?? "").get("q");
+    expect(urlQ).toBe(q);
+    const { parsed, classification } = classify(q);
+    expect(classification.role).toBe("PLAY");
+    expect(parsed.withKids).not.toBe(true);
+    expect(isExplicitKidsRecommendationContext(parsed)).toBe(false);
   });
 });

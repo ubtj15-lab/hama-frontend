@@ -44,6 +44,8 @@ describe("Home situation candidate library", () => {
     expect(byId.date.query).toBe("데이트");
     expect(byId.food.query).toBe("뭐 먹지");
     expect(byId.outdoor_walk.query).toBe("산책하다 들를 곳");
+    expect(byId.indoor.query).toBe("오늘 실내에서 놀까?");
+    expect(byId.indoor.query).not.toBe("실내");
   });
 });
 

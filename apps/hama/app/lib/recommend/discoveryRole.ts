@@ -112,6 +112,12 @@ const DATE_RESTAURANT =
   /스테이크|파스타|와인|오마카세|이탈|분위기|기념|데이트|빕스|레스토랑|브런치|스시|초밥|코스요리/;
 const PARK_NAME = /공원|호수공원|근린공원|숲|산책로|물놀이장/;
 const PLAY_ACTIVITY = /키즈|방탈출|보드게임|VR|볼링|만화|코인|체험|플레이|키즈카페|키즈룸/;
+/**
+ * Catalog keywords that already mark an indoor play venue.
+ * Not inferred from category=activity alone. Parks stay outdoor.
+ */
+const INDOOR_PLAY_VENUE =
+  /실내|인도어|indoor|보드게임|보드카페|방탈출|볼링|vr|키즈카페|키즈룸|실내놀이|만화|코인|오락실|아케이드|스크린골프|스크린야구/;
 
 function compact(s: string): string {
   return String(s ?? "").toLowerCase().replace(/\s+/g, "");
@@ -145,7 +151,7 @@ export function discoveryBandThreshold(bestScore: number, weakLeader: boolean): 
   return Math.max(tight, relaxed);
 }
 
-function isKidsIndoorPlayIntent(raw: string, parsed: ScenarioObject): boolean {
+export function isKidsIndoorPlayIntent(raw: string, parsed: ScenarioObject): boolean {
   const purposes = parsed.queryUnderstanding?.purposeIntents ?? [];
   const isFamily = FAMILY_PH.test(raw) || Boolean(parsed.withKids);
   const isIndoor =
@@ -156,6 +162,11 @@ function isKidsIndoorPlayIntent(raw: string, parsed: ScenarioObject): boolean {
     purposes.includes("play") ||
     purposes.includes("kids_cafe");
   return isFamily && isIndoor && isPlay;
+}
+
+/** PLAY deck that must satisfy play suitability AND indoor evidence. */
+export function isIndoorPlayRerankQuery(query: string, parsed: ScenarioObject): boolean {
+  return isKidsIndoorPlayIntent(query, parsed) || isIndoorPlaySeekingQuery(query, parsed);
 }
 
 /**
@@ -382,6 +393,21 @@ export function isParkOrWalkPlace(item: DiscoveryRerankItem<unknown>): boolean {
   return PARK_NAME.test(item.name) || PARK_NAME.test(hayOf(item));
 }
 
+/**
+ * Explicit indoor PLAY: play/activity suitability AND indoor suitability.
+ * Activity category alone is not enough. Outdoor parks never qualify.
+ */
+export function hasCredibleIndoorPlayEvidence(item: DiscoveryRerankItem<unknown>): boolean {
+  const cat = String(item.category ?? "").toLowerCase();
+  if (cat === "restaurant" || cat === "cafe" || cat === "salon") return false;
+  if (isParkOrWalkPlace(item)) return false;
+  const hay = hayOf(item);
+  if (/야외전용|야외에서만|오픈에어만/.test(hay)) return false;
+  const playSuitable = cat === "activity" && (PLAY_ACTIVITY.test(hay) || INDOOR_PLAY_VENUE.test(hay));
+  const indoorSuitable = INDOOR_PLAY_VENUE.test(hay);
+  return playSuitable && indoorSuitable;
+}
+
 export function isGenericRestaurant(item: DiscoveryRerankItem<unknown>): boolean {
   const cat = String(item.category ?? "").toLowerCase();
   if (cat !== "restaurant") return false;
@@ -570,11 +596,16 @@ export function applyDiscoveryRerank<T>(
     picked.push(row);
   };
 
-  const indoorPlayDeck =
-    role === "PLAY" && (isKidsIndoorPlayIntent(query, parsed) || isIndoorPlaySeekingQuery(query, parsed));
-  const strongPreferred = preferred.filter((a) => a.affinity === "strong");
-  if (indoorPlayDeck && strongPreferred.length > 0) {
-    for (const row of strongPreferred) take(row);
+  const indoorPlayDeck = role === "PLAY" && isIndoorPlayRerankQuery(query, parsed);
+  const strongIndoorPlay = annotated
+    .filter((a) => hasCredibleIndoorPlayEvidence(a.item))
+    .sort((a, b) => {
+      if (b.adjusted !== a.adjusted) return b.adjusted - a.adjusted;
+      if (b.item.score !== a.item.score) return b.item.score - a.item.score;
+      return a.item.id.localeCompare(b.item.id);
+    });
+  if (indoorPlayDeck) {
+    for (const row of strongIndoorPlay) take(row);
   } else {
     for (const row of preferred) take(row);
     if (picked.length < deckSize) {
@@ -583,15 +614,14 @@ export function applyDiscoveryRerank<T>(
         take(row);
       }
     }
-  }
-  if (picked.length < deckSize) {
-    for (const id of naturalIds) {
-      const it = ranked.find((r) => r.id === id);
-      if (!it) continue;
-      const row = annotate(it);
-      if (indoorPlayDeck && row.affinity !== "strong") continue;
-      if (row.affinity === "weak" && picked.length > 0) continue;
-      take(row);
+    if (picked.length < deckSize) {
+      for (const id of naturalIds) {
+        const it = ranked.find((r) => r.id === id);
+        if (!it) continue;
+        const row = annotate(it);
+        if (row.affinity === "weak" && picked.length > 0) continue;
+        take(row);
+      }
     }
   }
 

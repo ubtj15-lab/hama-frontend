@@ -20,6 +20,8 @@ import { applyLocalDistanceSafety } from "./localDistanceSafety";
 import {
   applyDiscoveryRerank,
   DISCOVERY_POOL_LIMIT,
+  hasCredibleIndoorPlayEvidence,
+  isIndoorPlayRerankQuery,
   toDiscoveryItem,
   type DiscoveryClassification,
   type DiscoveryItemDebug,
@@ -126,7 +128,13 @@ export function finalizeDiscoveryPool<T>(input: {
   const byScore = [...safe].sort((a, b) =>
     b.score !== a.score ? b.score - a.score : a.id.localeCompare(b.id)
   );
-  const eligiblePool = byScore.slice(0, Math.max(deckSize, DISCOVERY_POOL_LIMIT));
+  const indoorPlayEligible = isIndoorPlayRerankQuery(input.query, input.parsed)
+    ? byScore.filter((item) => hasCredibleIndoorPlayEvidence(item))
+    : [];
+  const eligiblePool =
+    indoorPlayEligible.length > 0
+      ? indoorPlayEligible
+      : byScore.slice(0, Math.max(deckSize, DISCOVERY_POOL_LIMIT));
   const naturalDeckIds = input.ranked
     .map((r) => r.id)
     .filter((id) => eligiblePool.some((p) => p.id === id));

@@ -92,7 +92,7 @@ export const HOME_SITUATION_CANDIDATES: HomeSituationCandidate[] = [
     line1: "오늘은",
     line2: "실내에서 놀까?",
     icon: "🏠",
-    query: "실내",
+    query: "오늘 실내에서 놀까?",
     semanticFamily: "indoor",
   },
   {

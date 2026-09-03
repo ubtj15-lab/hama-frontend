@@ -18,7 +18,7 @@ import type { IntentionType } from "@/lib/intention";
 import { buildTopRecommendations } from "@/lib/recommend/scoring";
 import type { RecommendScoreBreakdown, ScoredRecommendItem } from "@/lib/recommend/scoring";
 import { finalizeRecommendations } from "@/lib/recommend/finalizeRecommendations";
-import { classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
+import { classifyDiscoveryQuery, hasCredibleIndoorPlayEvidence, isIndoorPlaySeekingQuery, toDiscoveryItem } from "@/lib/recommend/discoveryRole";
 import { shouldApplyDateRepeatAvoidance } from "@/lib/recommend/dateRepeatAvoidance";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassification";
@@ -4324,6 +4324,15 @@ export function useHomeCards(
           options.scenarioObject ?? null,
           options.explicitIntent ?? null
         );
+        const indoorPlayQuery = isIndoorPlaySeekingQuery(String(options.searchQuery ?? ""), rankScenario);
+        if (indoorPlayQuery) {
+          fetchTabsTried.push("indoor_play:activity_catalog");
+          const indoorPlayActivities = await fetchHomeCardsByTab("activity", {
+            count: Math.max(RECOMMEND_POOL_SINGLE_TAB, 300),
+          });
+          fetched = mergeHomeCardsUniqueById(fetched, indoorPlayActivities);
+          countsByTab.indoor_play_activity = indoorPlayActivities.length;
+        }
 
         const ctx = {
           intent,
@@ -4347,6 +4356,15 @@ export function useHomeCards(
           : undefined;
 
         let rankedPrimary = await buildExpandedRankedPool(fetched, ctx, 50);
+        if (indoorPlayQuery) {
+          const indoorFetched = fetched.filter((c) => hasCredibleIndoorPlayEvidence(toDiscoveryItem(c, 0)));
+          if (indoorFetched.length) {
+            const indoorRanked = await buildExpandedRankedPool(indoorFetched, ctx, indoorFetched.length);
+            rankedPrimary = [...indoorRanked, ...rankedPrimary].filter(
+              (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
+            );
+          }
+        }
         rankedPrimary = applyNamedFoodPresetScoreBoost(rankedPrimary, namedFoodPresetOpt);
         if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
           const top30 = rankedPrimary.slice(0, 30);
