@@ -56,6 +56,37 @@ describe("discovery classification", () => {
     );
     expect(classifyDiscoveryQuery("조용히 책 읽을 곳", so({ rawQuery: "조용히 책 읽을 곳" })).role).toBe("RELAX");
   });
+
+  it("classifies rest/stay inflections as RELAX without bare 편하", () => {
+    const positives = [
+      "조용히 쉬다 올까?",
+      "오늘 좀 쉬고 싶어",
+      "편하게 쉬다 올 곳",
+      "복잡하지 않고 쉬기 좋은 곳",
+      "편하게 머물다 올 곳",
+      "차분하게 있을 곳",
+      "조용히 시간 보내고 싶어",
+      "잠깐 힐링하고 싶어",
+    ];
+    for (const q of positives) {
+      expect(classifyDiscoveryQuery(q, so({ rawQuery: q })).role).toBe("RELAX");
+    }
+  });
+
+  it("does not treat comfort-word meal/date/cafe controls as RELAX", () => {
+    expect(classifyDiscoveryQuery("편하게 밥 먹을 곳", so({ rawQuery: "편하게 밥 먹을 곳" })).role).not.toBe("RELAX");
+    expect(classifyDiscoveryQuery("편하게 밥 먹을 곳", so({ rawQuery: "편하게 밥 먹을 곳" })).isDiscovery).toBe(
+      false
+    );
+    expect(
+      classifyDiscoveryQuery("편하게 주차할 수 있는 식당", so({ rawQuery: "편하게 주차할 수 있는 식당" })).role
+    ).not.toBe("RELAX");
+    expect(classifyDiscoveryQuery("편한 카페 의자", so({ rawQuery: "편한 카페 의자" })).role).not.toBe("RELAX");
+    expect(classifyDiscoveryQuery("데이트하기 편한 곳", so({ rawQuery: "데이트하기 편한 곳" })).role).toBe("DATE");
+    expect(classifyDiscoveryQuery("아이랑 편하게 먹을 곳", so({ rawQuery: "아이랑 편하게 먹을 곳" })).role).not.toBe(
+      "RELAX"
+    );
+  });
 });
 
 describe("discovery rerank", () => {

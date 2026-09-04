@@ -97,7 +97,8 @@ const EXPLICIT_KIDS_CAFE = /키즈\s*카페|키즈카페|놀이카페|키즈룸/
 const OPEN_PLAY = /심심|뭐하지|뭐하고|갈\s*데|어디\s*갈|어디\s*가지|시간\s*남|놀지|놀거리/;
 const OUTDOOR_PH = /야외|공원|산책|나들이|날씨\s*좋|바람\s*쐬/;
 const WALK_PH = /산책|걷|둘레|호수/;
-const RELAX_PH = /조용|책\s*읽|힐링|시간\s*때울|시간\s*보낼|쉬고/;
+const RELAX_PH =
+  /조용|책\s*읽|힐링|시간\s*때울|시간\s*보내|쉬(?:다|고|기)|머물|차분/;
 const DATE_PH = /데이트|여자친구|남자친구|연인|커플|둘이/;
 const FAMILY_PH = /아이랑|애들이|애들|아이\s|유아|가족|초등|육아/;
 const INDOOR_PH = /실내|비\s*오|비오|장마/;
