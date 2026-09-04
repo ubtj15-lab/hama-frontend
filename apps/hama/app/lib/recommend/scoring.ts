@@ -29,6 +29,12 @@ import {
   foodMenuMatchNormalized,
   inferPlaceFoodSub,
 } from "./foodIntentRanking";
+import {
+  compareScoredFoodTieOrder,
+  collapseGenericFoodRealWorldDuplicatesWithinExactFinalScoreTies,
+  getConservativeRealWorldPlaceKeyForGenericFood,
+  isGenericFoodScoreTieBreakQuery,
+} from "./genericFoodScoreTieBreak";
 import { compositeIntentRawScore, violatesHardConstraints } from "./compositeRanking";
 import { buildCompositeTagsForCard } from "@/lib/scenarioEngine/compositeIntent";
 import { buildFoodTagsForCard } from "@/lib/scenarioEngine/foodIntent";
@@ -802,7 +808,20 @@ export function buildTopRecommendations(
     }
     scored = runPass(true);
   }
-  scored.sort((a, b) => b.breakdown.finalScore - a.breakdown.finalScore);
+  scored.sort((a, b) =>
+    compareScoredFoodTieOrder(a, b, ctx.searchQuery ?? so?.rawQuery ?? "", so)
+  );
+
+  const genericFoodProductTieEnabled =
+    strictFood &&
+    so &&
+    isGenericFoodScoreTieBreakQuery(ctx.searchQuery ?? so?.rawQuery ?? "", so);
+  if (genericFoodProductTieEnabled) {
+    scored = collapseGenericFoodRealWorldDuplicatesWithinExactFinalScoreTies(
+      scored,
+      getConservativeRealWorldPlaceKeyForGenericFood
+    );
+  }
 
   logScenarioEngineDebug({
     parsed: ctx.scenarioObject ?? undefined,
