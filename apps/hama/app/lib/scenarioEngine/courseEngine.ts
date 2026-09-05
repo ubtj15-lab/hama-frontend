@@ -14,6 +14,7 @@ import { getPatternBoostFromMap } from "@/lib/recommend/getPatternBoost";
 import type { LearnedBoostParts } from "@/lib/courseLearning/courseLearningTypes";
 import type { CourseLearningStore } from "@/lib/courseLearning/courseLearningStore";
 import { resolveDateTimeBand, defaultStartTimeForDateBand } from "./dateCourseContext";
+import { resolveCourseStartTime } from "./courseStartTime";
 import {
   rankTemplatesForScenario,
   scoreTemplateSelection,
@@ -578,7 +579,14 @@ export function generateCourses(
 
   const chosen = pickThreeDiverse(scoredPaths, courseObj).slice(0, maxCourses);
   const plans: CoursePlan[] = [];
-  const timelineConfig = configWithDateStart(courseObj, config);
+  const bandConfig = configWithDateStart(courseObj, config);
+  const resolvedStart = resolveCourseStartTime({
+    rawQuery: courseObj.rawQuery ?? obj.rawQuery ?? "",
+    obj: courseObj,
+    now: opts.now,
+    scenarioDefault: bandConfig.defaultStartTime ?? config.defaultStartTime,
+  });
+  const timelineConfig: ScenarioConfig = { ...bandConfig, defaultStartTime: resolvedStart };
 
   for (let idx = 0; idx < chosen.length; idx++) {
     const { def, cards, learned } = chosen[idx]!;
@@ -616,7 +624,7 @@ export function generateCourses(
     if (allowed.length === 0) return plans;
     const p0 = allowed.find((p) => businessStateFromCard(p as any) !== "CLOSED") ?? allowed[0]!;
     const tpl: PlaceType[] = [mapPlaceToPlaceType(p0)];
-    const { stops, totalMinutes } = buildTimelineInner([p0], tpl, config, "fallback");
+    const { stops, totalMinutes } = buildTimelineInner([p0], tpl, timelineConfig, "fallback");
     const summaryLine = summaryFromStops(stops);
     const courseRank = 0;
     const fid = "course-fallback-0";

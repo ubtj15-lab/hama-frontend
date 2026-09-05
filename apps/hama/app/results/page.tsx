@@ -780,9 +780,11 @@ function ResultsContent() {
     const pool = courseCandidatePool.length ? courseCandidatePool : candidatePool;
     if (!pool.length) return [];
     const cfg = resolveScenarioConfig(effectiveScenario);
+    const now = new Date();
     return generateCourses(pool, effectiveScenario, cfg, 3, {
       homeTab: "all",
       recommendationPatternBoostMap,
+      now,
     });
   }, [courseIdParam, effectiveScenario, candidatePool, courseCandidatePool, recommendationPatternBoostMap]);
 

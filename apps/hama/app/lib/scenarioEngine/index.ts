@@ -28,6 +28,7 @@ export {
   resolveDateTimeBand,
   defaultStartTimeForDateBand,
 } from "./dateCourseContext";
+export { resolveCourseStartTime, parseExplicitStartTime } from "./courseStartTime";
 export { inferDateCourseKind } from "./courseTemplateCatalog";
 export {
   CourseLearningStore,
