@@ -12,6 +12,10 @@
 
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import type { HomeCard } from "@/lib/storeTypes";
+import {
+  hasStrongerDiningOutOverrideContext,
+  isNeutralGenericDiningOutQuery,
+} from "@/lib/scenarioEngine/genericDiningOut";
 import { matchNamedFoodPreset } from "./namedFoodPresets";
 
 // "먹고 싶어" / "먹고" forms are common in Home FOOD cards.
@@ -38,11 +42,10 @@ export function isGenericFoodScoreTieBreakQuery(
   const raw = String(query ?? parsed.rawQuery ?? "").trim();
   if (!raw) return false;
   if (DATE_RE.test(raw)) return false;
-  // FOOD-07 ("오늘 외식할 곳") is a separate truncation/mixed-pool issue.
-  // Product tie-break must not affect it in this task.
-  if (/외식할/.test(raw)) return false;
+  if (hasStrongerDiningOutOverrideContext(raw)) return false;
   if (/실내/.test(raw) && /놀/.test(raw)) return false;
   if (matchNamedFoodPreset(raw)) return false;
+  if (isNeutralGenericDiningOutQuery(raw)) return true;
   if (!MEAL_GENERIC_RE.test(raw)) return false;
   return true;
 }

@@ -16,6 +16,7 @@ import type { HomeTabKey } from "@/lib/storeTypes";
 import type { HomeCard } from "@/lib/storeTypes";
 import { normIntentQuery } from "./intentQueryNormalize";
 import { inferRecommendationMode } from "./recommendationMode";
+import { isNeutralGenericDiningOutQuery } from "./genericDiningOut";
 
 export { normIntentQuery } from "./intentQueryNormalize";
 export { explainCourseGenerationMatch, isCourseGenerationQuery } from "./courseTriggerPatterns";
@@ -100,6 +101,8 @@ function countHintHits(q: string, hints: string[]): number {
 export function detectStrictCategory(rawQuery: string): IntentCategory | null {
   const q = normIntentQuery(rawQuery);
   if (!q) return null;
+
+  if (isNeutralGenericDiningOutQuery(rawQuery)) return "FOOD";
 
   const scores: Record<IntentCategory, number> = {
     FOOD: countHintHits(q, FOOD_HINTS),

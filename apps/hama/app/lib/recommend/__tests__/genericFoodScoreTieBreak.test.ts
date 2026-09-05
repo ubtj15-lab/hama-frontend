@@ -22,7 +22,7 @@ function sortTies(query: string, candidates: TieCandidate[]) {
 describe("generic FOOD product tie-break (distance + duplicate collapse)", () => {
   it("applies only to generic meal queries, not DATE / INDOOR / named food", () => {
     expect(isGenericFoodScoreTieBreakQuery("뭐 먹지", parseScenarioIntent("뭐 먹지"))).toBe(true);
-    expect(isGenericFoodScoreTieBreakQuery("오늘 외식할 곳", parseScenarioIntent("오늘 외식할 곳"))).toBe(false);
+    expect(isGenericFoodScoreTieBreakQuery("오늘 외식할 곳", parseScenarioIntent("오늘 외식할 곳"))).toBe(true);
     expect(isGenericFoodScoreTieBreakQuery("오늘 맛있는 거 먹고 싶어", parseScenarioIntent("오늘 맛있는 거 먹고 싶어"))).toBe(true);
     expect(isGenericFoodScoreTieBreakQuery("그냥 맛있는 거 먹고 싶어", parseScenarioIntent("그냥 맛있는 거 먹고 싶어"))).toBe(true);
     expect(isGenericFoodScoreTieBreakQuery("데이트", parseScenarioIntent("데이트"))).toBe(false);
