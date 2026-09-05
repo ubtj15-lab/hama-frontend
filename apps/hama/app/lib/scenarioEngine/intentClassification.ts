@@ -17,6 +17,7 @@ import type { HomeCard } from "@/lib/storeTypes";
 import { normIntentQuery } from "./intentQueryNormalize";
 import { inferRecommendationMode } from "./recommendationMode";
 import { isNeutralGenericDiningOutQuery } from "./genericDiningOut";
+import { isExplicitDateMealTimeOnlyFoodLeak } from "./dateMealTimePrecedence";
 
 export { normIntentQuery } from "./intentQueryNormalize";
 export { explainCourseGenerationMatch, isCourseGenerationQuery } from "./courseTriggerPatterns";
@@ -103,6 +104,7 @@ export function detectStrictCategory(rawQuery: string): IntentCategory | null {
   if (!q) return null;
 
   if (isNeutralGenericDiningOutQuery(rawQuery)) return "FOOD";
+  if (isExplicitDateMealTimeOnlyFoodLeak(q)) return null;
 
   const scores: Record<IntentCategory, number> = {
     FOOD: countHintHits(q, FOOD_HINTS),

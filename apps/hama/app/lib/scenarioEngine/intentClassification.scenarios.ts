@@ -37,6 +37,14 @@ export function runIntentClassificationChecks(): string[] {
       expect: { intentType: "search_strict", intentCategory: "FOOD", scenario: "date" },
     },
     {
+      q: "저녁에 데이트할 곳",
+      expect: { intentType: "scenario_recommendation", scenario: "date" },
+    },
+    {
+      q: "저녁 데이트",
+      expect: { intentType: "scenario_recommendation", scenario: "date" },
+    },
+    {
       q: "아이랑 밥 먹기 좋은 곳",
       expect: { intentType: "search_strict", intentCategory: "FOOD", scenario: "family_kids" },
     },
