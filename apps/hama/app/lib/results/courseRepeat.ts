@@ -15,6 +15,26 @@ export const EMPTY_COURSE_REPEAT_AVOIDANCE: CourseRepeatAvoidance = {
   unorderedSignatures: [],
 };
 
+export const COURSE_REFRESH_BUTTON_COPY = "다른 코스 보기";
+
+export function shouldShowCourseRefreshButton(
+  showCourseDeck: boolean,
+  coursePlanCount: number
+): boolean {
+  return Boolean(showCourseDeck) && coursePlanCount > 0;
+}
+
+/** Actual Course refresh click: re-read session exposure. Does not clear storage. */
+export function applyCourseRefreshClick(contextKey: string): {
+  courseRepeatAvoid: CourseRepeatAvoidance;
+  nextRefreshVersion: (current: number) => number;
+} {
+  return {
+    courseRepeatAvoid: readCourseRepeatAvoidance(contextKey),
+    nextRefreshVersion: (current) => current + 1,
+  };
+}
+
 const COURSE_REPEAT_STORAGE_KEY = "hama_course_repeat_v1";
 const MAX_PLACE_IDS = 80;
 const MAX_SIGNATURES = 30;

@@ -9,9 +9,12 @@ import { usePlaceNameSearchResults } from "@/_hooks/usePlaceNameSearchResults";
 import { explainPlaceNameSearchGate, normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
 import { resolveOrdinaryRecommendationListVisible } from "@/lib/results/courseResultVisibility";
 import {
+  COURSE_REFRESH_BUTTON_COPY,
+  applyCourseRefreshClick,
   courseRepeatContextKey,
   readCourseRepeatAvoidance,
   recordDisplayedCoursePlans,
+  shouldShowCourseRefreshButton,
 } from "@/lib/results/courseRepeat";
 import { isDirectSearchModeQuery, logDirectSearchPipeline } from "@/lib/search/directSearch";
 import {
@@ -211,6 +214,7 @@ function ResultsContent() {
     return courseRepeatContextKey(qRaw, parsed.scenario);
   }, [qRaw]);
   const [courseRepeatAvoid, setCourseRepeatAvoid] = useState(() => readCourseRepeatAvoidance(courseRepeatKey));
+  const [courseRefreshVersion, setCourseRefreshVersion] = useState(0);
   const [contextualReject, setContextualReject] = useState<FrozenContextualReject | null>(null);
   const [courseFilter, setCourseFilter] = useState<"all" | "food" | "indoor" | "under3h">("all");
   const [retryInput, setRetryInput] = useState("");
@@ -266,6 +270,7 @@ function ResultsContent() {
     const key = repeatAvoidanceContextKey(qRaw, parsed.scenario);
     setSessionRepeatAvoidIds(readContextRecentExposedIds(key));
     setCourseRepeatAvoid(readCourseRepeatAvoidance(courseRepeatContextKey(qRaw, parsed.scenario)));
+    setCourseRefreshVersion(0);
   }, [qRaw]);
 
   useEffect(() => {
@@ -799,7 +804,7 @@ function ResultsContent() {
       now,
       courseRepeat: courseRepeatAvoid,
     });
-  }, [courseIdParam, effectiveScenario, candidatePool, courseCandidatePool, recommendationPatternBoostMap, courseRepeatAvoid]);
+  }, [courseIdParam, effectiveScenario, candidatePool, courseCandidatePool, recommendationPatternBoostMap, courseRepeatAvoid, courseRefreshVersion]);
 
   useEffect(() => {
     if (courseIdParam || coursePlans.length === 0) return;
@@ -1426,6 +1431,12 @@ function ResultsContent() {
     setContextualReject(null);
   };
 
+  const refreshCourseDeck = () => {
+    const next = applyCourseRefreshClick(courseRepeatKey);
+    setCourseRepeatAvoid(next.courseRepeatAvoid);
+    setCourseRefreshVersion(next.nextRefreshVersion);
+  };
+
   const rejectMainAndRefresh = () => {
     const deck = primaryListCards.slice(0, RECOMMEND_DECK_SIZE);
     const id = deck[0]?.id;
@@ -1943,6 +1954,27 @@ function ResultsContent() {
               );
             })}
             </div>
+
+            {shouldShowCourseRefreshButton(showCourseDeck, coursePlans.length) && (
+              <div style={{ display: "grid", gap: 6, paddingTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={refreshCourseDeck}
+                  style={{
+                    minHeight: 44,
+                    borderRadius: 14,
+                    border: `1.5px dashed ${colors.borderSubtle}`,
+                    background: colors.primaryLight,
+                    color: colors.accentPrimary,
+                    fontSize: 14,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {COURSE_REFRESH_BUTTON_COPY}
+                </button>
+              </div>
+            )}
 
           </section>
         )}
