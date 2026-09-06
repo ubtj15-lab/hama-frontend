@@ -36,6 +36,7 @@ import {
   compareEqualScoreUnseenFirst,
   courseRepeatsDisplayed,
   hasCourseRepeatAvoidance,
+  selectCourseDeckAvoidingRepeat,
   type CourseRepeatAvoidance,
 } from "@/lib/results/courseRepeat";
 
@@ -482,18 +483,19 @@ function pickThreeDiverseAvoidingRepeat(
   if (!hasCourseRepeatAvoidance(avoid) || paths.length === 0) {
     return pickThreeDiverse(paths, obj);
   }
-  const fresh = paths.filter((p) => !courseRepeatsDisplayed(p.cards.map((c) => c.id), avoid));
-  if (fresh.length === 0) return pickThreeDiverse(paths, obj);
-  const picked = pickThreeDiverse(fresh, obj);
-  if (picked.length >= 3) return picked.slice(0, 3);
-  const usedDef = new Set(picked.map((p) => p.def.id));
-  for (const p of pickThreeDiverse(paths, obj)) {
-    if (picked.length >= 3) break;
-    if (usedDef.has(p.def.id)) continue;
-    picked.push(p);
-    usedDef.add(p.def.id);
-  }
-  return picked.slice(0, 3);
+  const unseen = paths.filter((p) => !courseRepeatsDisplayed(p.cards.map((c) => c.id), avoid));
+  const preferredUnseen = unseen.length > 0 ? pickThreeDiverse(unseen, obj) : [];
+  return selectCourseDeckAvoidingRepeat(
+    paths.map((p) => ({
+      item: p,
+      placeIds: p.cards.map((c) => c.id),
+      score: p.finalScore,
+      key: `${p.def.id}|${p.cards.map((c) => c.id).join(">")}`,
+    })),
+    avoid,
+    preferredUnseen,
+    3
+  );
 }
 
 /** @deprecated 호환용 — catalog 기반 `mergeTemplateDefinitions` 사용 권장 */

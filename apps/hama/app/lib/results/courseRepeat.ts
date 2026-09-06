@@ -95,6 +95,87 @@ export function hasCourseRepeatAvoidance(avoid: CourseRepeatAvoidance | null | u
   );
 }
 
+export type CourseDeckCandidate<T> = {
+  item: T;
+  placeIds: readonly string[];
+  score: number;
+  key: string;
+};
+
+/**
+ * Deck-wide Course Repeat: fill all visible slots from unseen signatures first.
+ * Score order among unseen is preserved. Same-deck reorder is skipped while
+ * a different valid plan exists. Previously shown plans are fallback only.
+ */
+export function selectCourseDeckAvoidingRepeat<T>(
+  candidates: readonly CourseDeckCandidate<T>[],
+  avoid: CourseRepeatAvoidance | null | undefined,
+  preferredUnseen: readonly T[] | null,
+  limit = 3
+): T[] {
+  if (candidates.length === 0 || limit <= 0) return [];
+  if (!hasCourseRepeatAvoidance(avoid)) {
+    return (preferredUnseen ?? candidates.map((c) => c.item)).slice(0, limit);
+  }
+
+  const byItem = new Map<T, CourseDeckCandidate<T>>();
+  for (const c of candidates) {
+    if (!byItem.has(c.item)) byItem.set(c.item, c);
+  }
+  const unseen = candidates
+    .filter((c) => !courseRepeatsDisplayed(c.placeIds, avoid))
+    .sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+  const seen = candidates
+    .filter((c) => courseRepeatsDisplayed(c.placeIds, avoid))
+    .sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+
+  const picked: T[] = [];
+  const usedKeys = new Set<string>();
+  const usedOrdered = new Set<string>();
+  const usedUnordered = new Set<string>();
+
+  const tryAdd = (item: T, allowSameDeckSignature: boolean): boolean => {
+    const c = byItem.get(item);
+    if (!c || usedKeys.has(c.key)) return false;
+    const ordered = orderedCourseSignature(c.placeIds);
+    const unordered = unorderedCourseSignature(c.placeIds);
+    if (!allowSameDeckSignature) {
+      if (ordered && usedOrdered.has(ordered)) return false;
+      if (unordered && usedUnordered.has(unordered)) return false;
+    }
+    picked.push(item);
+    usedKeys.add(c.key);
+    if (ordered) usedOrdered.add(ordered);
+    if (unordered) usedUnordered.add(unordered);
+    return true;
+  };
+
+  if (preferredUnseen) {
+    for (const item of preferredUnseen) {
+      if (picked.length >= limit) break;
+      const c = byItem.get(item);
+      if (!c || courseRepeatsDisplayed(c.placeIds, avoid)) continue;
+      tryAdd(item, false);
+    }
+  }
+  for (const c of unseen) {
+    if (picked.length >= limit) break;
+    tryAdd(c.item, false);
+  }
+  for (const c of seen) {
+    if (picked.length >= limit) break;
+    tryAdd(c.item, false);
+  }
+  if (picked.length < limit) {
+    const rest = [...candidates].sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
+    for (const c of rest) {
+      if (picked.length >= limit) break;
+      tryAdd(c.item, true);
+    }
+  }
+  return picked.slice(0, limit);
+}
+
 function getSessionStorage(): Storage | null {
   if (typeof window === "undefined") return null;
   try {
