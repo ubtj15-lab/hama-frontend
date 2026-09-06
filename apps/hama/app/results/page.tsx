@@ -7,6 +7,7 @@ import { useHomeMode } from "@/_hooks/useHomeMode";
 import { useRecent } from "@/_hooks/useRecent";
 import { usePlaceNameSearchResults } from "@/_hooks/usePlaceNameSearchResults";
 import { explainPlaceNameSearchGate, normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
+import { resolveOrdinaryRecommendationListVisible } from "@/lib/results/courseResultVisibility";
 import { isDirectSearchModeQuery, logDirectSearchPipeline } from "@/lib/search/directSearch";
 import {
   parseScenarioIntent,
@@ -1010,8 +1011,12 @@ function ResultsContent() {
       primaryListCards.length > 0
   );
   const forceShowListByCards = cards.length > 0 || (directSearchMode && placeHits.length > 0);
-  const showRecommendationList =
-    baseShowRecommendationList || forceSituationRecommendationListVisible || forceShowListByCards;
+  const showRecommendationList = resolveOrdinaryRecommendationListVisible({
+    showCourseDeck,
+    baseShowRecommendationList,
+    forceSituationRecommendationListVisible,
+    forceShowListByCards,
+  });
   const recommendationListVisible = showRecommendationList && primaryListCards.length > 0;
   const recommendationMode = scenarioObject?.intentType ?? effectiveScenario?.recommendationMode ?? effectiveMode;
   const baseShowEmptyState = Boolean(

@@ -96,5 +96,7 @@ describe("Results V2 card/list copy", () => {
     expect(cardSrc).toContain("hama-top1-hero");
     expect(cardSrc).toContain("176px");
     expect(pageSrc).toContain("RESULTS_CONTENT_MAX_WIDTH");
+    expect(pageSrc).toContain("resolveOrdinaryRecommendationListVisible");
+    expect(pageSrc).toContain("showCourseDeck");
   });
 });
