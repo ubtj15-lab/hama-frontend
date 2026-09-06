@@ -32,6 +32,12 @@ import { inferServingTypeForPlace, servingOkForStep } from "./courseServingType"
 import { isHardExcludedForKidsScenario } from "@/lib/recommend/childFriendlyScore";
 import { familyKidsBeamStepRejects } from "@/lib/recommend/placeFamilyClassification";
 import { scenarioCourseFlowBias } from "@/lib/recommend/scenarioForcedRules";
+import {
+  compareEqualScoreUnseenFirst,
+  courseRepeatsDisplayed,
+  hasCourseRepeatAvoidance,
+  type CourseRepeatAvoidance,
+} from "@/lib/results/courseRepeat";
 
 const TAB_CATEGORY_BOOST = 25;
 const BEAM_WIDTH = 10;
@@ -143,11 +149,25 @@ function gatherCandidatesForStep(
 
 type BeamState = { cards: HomeCard[]; stepScoreSum: number };
 
+function pickBestBeam(
+  beams: BeamState[],
+  avoid?: CourseRepeatAvoidance
+): BeamState | undefined {
+  if (beams.length === 0) return undefined;
+  const sorted = [...beams].sort((a, b) => b.stepScoreSum - a.stepScoreSum);
+  const bestSum = sorted[0]!.stepScoreSum;
+  const tied = sorted.filter((b) => b.stepScoreSum === bestSum);
+  if (!hasCourseRepeatAvoidance(avoid)) return tied[0];
+  return tied.find((b) => !courseRepeatsDisplayed(b.cards.map((c) => c.id), avoid)) ?? tied[0];
+}
+
 function beamFillTemplate(
   template: PlaceType[],
   byType: CandidatesByType,
   obj: ScenarioObject,
-  config: ScenarioConfig
+  config: ScenarioConfig,
+  seenPlaceIds?: ReadonlySet<string>,
+  avoid?: CourseRepeatAvoidance
 ): HomeCard[] | null {
   const nearOnly = obj.distanceTolerance === "near_only";
   const mealReq = obj.mealRequired === true;
@@ -191,7 +211,9 @@ function beamFillTemplate(
           return { card, sc };
         })
         .filter((x): x is { card: HomeCard; sc: number } => x != null && x.sc > 8)
-        .sort((a, b) => b.sc - a.sc)
+        .sort((a, b) =>
+          compareEqualScoreUnseenFirst(a.sc, a.card.id, b.sc, b.card.id, seenPlaceIds ?? new Set())
+        )
         .slice(0, TOP_BRANCH);
 
       for (const { card, sc } of scored) {
@@ -207,7 +229,7 @@ function beamFillTemplate(
     beams = nextBeams.slice(0, BEAM_WIDTH);
   }
 
-  const best = beams[0];
+  const best = pickBestBeam(beams, avoid);
   return best && best.cards.length === template.length ? best.cards : null;
 }
 
@@ -452,6 +474,28 @@ function pickThreeDiverse(paths: ScoredPath[], obj: ScenarioObject): ScoredPath[
   return out.slice(0, 3);
 }
 
+function pickThreeDiverseAvoidingRepeat(
+  paths: ScoredPath[],
+  obj: ScenarioObject,
+  avoid: CourseRepeatAvoidance | undefined
+): ScoredPath[] {
+  if (!hasCourseRepeatAvoidance(avoid) || paths.length === 0) {
+    return pickThreeDiverse(paths, obj);
+  }
+  const fresh = paths.filter((p) => !courseRepeatsDisplayed(p.cards.map((c) => c.id), avoid));
+  if (fresh.length === 0) return pickThreeDiverse(paths, obj);
+  const picked = pickThreeDiverse(fresh, obj);
+  if (picked.length >= 3) return picked.slice(0, 3);
+  const usedDef = new Set(picked.map((p) => p.def.id));
+  for (const p of pickThreeDiverse(paths, obj)) {
+    if (picked.length >= 3) break;
+    if (usedDef.has(p.def.id)) continue;
+    picked.push(p);
+    usedDef.add(p.def.id);
+  }
+  return picked.slice(0, 3);
+}
+
 /** @deprecated 호환용 — catalog 기반 `mergeTemplateDefinitions` 사용 권장 */
 export function selectCourseTemplates(obj: ScenarioObject, config: ScenarioConfig): PlaceType[][] {
   return mergeTemplateDefinitions(obj, config, undefined).map((d) => d.steps);
@@ -543,6 +587,8 @@ export function generateCourses(
     learningStore?: CourseLearningStore;
     /** `fetchRecommendationPatternBoostMap` 결과 — `recommendation_pattern_stats` */
     recommendationPatternBoostMap?: ReadonlyMap<string, number>;
+    /** Session-local Course Repeat V1. Empty → identical to pre-repeat generation. */
+    courseRepeat?: CourseRepeatAvoidance;
   } = {}
 ): CoursePlan[] {
   const homeTab = opts.homeTab ?? "all";
@@ -561,10 +607,11 @@ export function generateCourses(
   }
   const byType = collectCandidatesByType(pool, config, { homeTab });
   const defs = mergeTemplateDefinitions(courseObj, config, opts.learningStore).slice(0, MAX_TEMPLATES_TRY);
+  const seenPlaceIds = new Set(opts.courseRepeat?.placeIds ?? []);
 
   const scoredPaths: ScoredPath[] = [];
   for (const def of defs) {
-    const filled = beamFillTemplate(def.steps, byType, courseObj, config);
+    const filled = beamFillTemplate(def.steps, byType, courseObj, config, seenPlaceIds, opts.courseRepeat);
     if (!filled) continue;
     const sp = scorePath(
       def,
@@ -577,7 +624,10 @@ export function generateCourses(
     if (sp) scoredPaths.push(sp);
   }
 
-  const chosen = pickThreeDiverse(scoredPaths, courseObj).slice(0, maxCourses);
+  const chosen = pickThreeDiverseAvoidingRepeat(scoredPaths, courseObj, opts.courseRepeat).slice(
+    0,
+    maxCourses
+  );
   const plans: CoursePlan[] = [];
   const bandConfig = configWithDateStart(courseObj, config);
   const resolvedStart = resolveCourseStartTime({

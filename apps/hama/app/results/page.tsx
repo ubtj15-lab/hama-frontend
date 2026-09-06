@@ -8,6 +8,11 @@ import { useRecent } from "@/_hooks/useRecent";
 import { usePlaceNameSearchResults } from "@/_hooks/usePlaceNameSearchResults";
 import { explainPlaceNameSearchGate, normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
 import { resolveOrdinaryRecommendationListVisible } from "@/lib/results/courseResultVisibility";
+import {
+  courseRepeatContextKey,
+  readCourseRepeatAvoidance,
+  recordDisplayedCoursePlans,
+} from "@/lib/results/courseRepeat";
 import { isDirectSearchModeQuery, logDirectSearchPipeline } from "@/lib/search/directSearch";
 import {
   parseScenarioIntent,
@@ -201,6 +206,11 @@ function ResultsContent() {
     const parsed = parseScenarioIntent(qRaw);
     return readContextRecentExposedIds(repeatAvoidanceContextKey(qRaw, parsed.scenario));
   });
+  const courseRepeatKey = useMemo(() => {
+    const parsed = parseScenarioIntent(qRaw);
+    return courseRepeatContextKey(qRaw, parsed.scenario);
+  }, [qRaw]);
+  const [courseRepeatAvoid, setCourseRepeatAvoid] = useState(() => readCourseRepeatAvoidance(courseRepeatKey));
   const [contextualReject, setContextualReject] = useState<FrozenContextualReject | null>(null);
   const [courseFilter, setCourseFilter] = useState<"all" | "food" | "indoor" | "under3h">("all");
   const [retryInput, setRetryInput] = useState("");
@@ -255,6 +265,7 @@ function ResultsContent() {
     const parsed = parseScenarioIntent(qRaw);
     const key = repeatAvoidanceContextKey(qRaw, parsed.scenario);
     setSessionRepeatAvoidIds(readContextRecentExposedIds(key));
+    setCourseRepeatAvoid(readCourseRepeatAvoidance(courseRepeatContextKey(qRaw, parsed.scenario)));
   }, [qRaw]);
 
   useEffect(() => {
@@ -786,8 +797,9 @@ function ResultsContent() {
       homeTab: "all",
       recommendationPatternBoostMap,
       now,
+      courseRepeat: courseRepeatAvoid,
     });
-  }, [courseIdParam, effectiveScenario, candidatePool, courseCandidatePool, recommendationPatternBoostMap]);
+  }, [courseIdParam, effectiveScenario, candidatePool, courseCandidatePool, recommendationPatternBoostMap, courseRepeatAvoid]);
 
   useEffect(() => {
     if (courseIdParam || coursePlans.length === 0) return;
@@ -995,6 +1007,10 @@ function ResultsContent() {
   const showCourseDeck = Boolean(
     !pageBusy && isCourseMode && coursePlans.length > 0 && !showNameSearch && !courseIdParam
   );
+  useEffect(() => {
+    if (!showCourseDeck || coursePlans.length === 0) return;
+    recordDisplayedCoursePlans(courseRepeatKey, coursePlans.slice(0, 3));
+  }, [showCourseDeck, coursePlans, courseRepeatKey]);
   const courseFallbackActive = Boolean(
     !pageBusy && isCourseMode && coursePlans.length === 0 && !courseIdParam
   );
