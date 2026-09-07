@@ -39,6 +39,7 @@ import {
   selectCourseDeckAvoidingRepeat,
   type CourseRepeatAvoidance,
 } from "@/lib/results/courseRepeat";
+import { filterNeutralDateActivityCandidates } from "./courseHoldemPolicy";
 
 const TAB_CATEGORY_BOOST = 25;
 const BEAM_WIDTH = 10;
@@ -88,7 +89,7 @@ export type CandidatesByType = Record<PlaceType, HomeCard[]>;
 export function collectCandidatesByType(
   places: HomeCard[],
   config: ScenarioConfig,
-  opts: { maxPerType?: number; homeTab?: HomeTabKey } = {}
+  opts: { maxPerType?: number; homeTab?: HomeTabKey; courseObj?: ScenarioObject } = {}
 ): CandidatesByType {
   const maxPer = opts.maxPerType ?? 24;
   const homeTab = opts.homeTab ?? "all";
@@ -106,8 +107,15 @@ export function collectCandidatesByType(
     return st !== "CLOSED";
   });
 
+  const activityUsable = filterNeutralDateActivityCandidates(
+    usable.filter((p) => mapPlaceToPlaceType(p) === "ACTIVITY"),
+    opts.courseObj
+  );
+  const activityIds = new Set(activityUsable.map((p) => p.id));
+
   for (const p of usable) {
     const t = mapPlaceToPlaceType(p);
+    if (t === "ACTIVITY" && !activityIds.has(p.id)) continue;
     if (bucket[t].length < maxPer) bucket[t].push(p);
   }
 
@@ -607,7 +615,7 @@ export function generateCourses(
   ) {
     pool = places.filter((p) => !isHardExcludedForKidsScenario(p, { rawQuery: obj.rawQuery ?? "" }));
   }
-  const byType = collectCandidatesByType(pool, config, { homeTab });
+  const byType = collectCandidatesByType(pool, config, { homeTab, courseObj });
   const defs = mergeTemplateDefinitions(courseObj, config, opts.learningStore).slice(0, MAX_TEMPLATES_TRY);
   const seenPlaceIds = new Set(opts.courseRepeat?.placeIds ?? []);
 
