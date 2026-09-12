@@ -1,4 +1,5 @@
 import type { SearchV2ResultCard, StoreRow } from "./searchV2Results";
+import { isExcludedFromHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import {
   getCategoryLabel,
   getCautionByCategory,
@@ -185,6 +186,7 @@ export function enrichResultByCategory(
 
 function isEligibleForFamilyDefault(row: StoreRow): boolean {
   if (!row?.name || !String(row.name).trim()) return false;
+  if (isExcludedFromHamaV1UserCatalog(row)) return false;
   const category = classifyRowCategory(row);
   if (isExcludedForFamilyDefault(category)) return false;
   if (isOutdoorCategory(category, row.name)) return false;

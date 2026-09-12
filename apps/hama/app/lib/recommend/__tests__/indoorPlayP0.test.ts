@@ -308,7 +308,7 @@ describe("P0 generic indoor PLAY bridge", () => {
     expect(out.deck.some((d) => d.card.category === "restaurant")).toBe(false);
   });
 
-  it("explicit holdem/poker queries keep holdem venues eligible", () => {
+  it("explicit holdem/poker queries still expose zero holdem venues for HAMA V1", () => {
     for (const q of ["홀덤 하고 싶어", "홀덤펍 추천해줘", "포커 할 곳", "포커펍 찾아줘"]) {
       expect(isExplicitHoldemPokerQuery(q)).toBe(true);
       expect(shouldHideHoldemPokerForGenericIndoorPlay(q, parseScenarioIntent(q))).toBe(false);
@@ -320,7 +320,11 @@ describe("P0 generic indoor PLAY bridge", () => {
         scoredPool: [scored(HOLDEM, 99), scored(BOARD, 70), scored(BOWLING, 68)],
         deckSize: 3,
       });
-      expect(out.deck.map((d) => d.card.name)).toContain("홀덤펍보드카페");
+      expect(out.deck.map((d) => d.card.name)).not.toContain("홀덤펍보드카페");
+      expect(out.eligiblePool.map((d) => d.card.name)).not.toContain("홀덤펍보드카페");
+      expect(out.deck.some((d) => d.card.name === "보드게임카페 레드버튼" || d.card.name === "볼링장")).toBe(
+        true
+      );
     }
   });
 });

@@ -1,4 +1,5 @@
 import { toHomeCard, type StoreRow } from "@/lib/storeRepository";
+import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import type { HomeCard } from "@/lib/storeTypes";
 import { matchNamedFoodPreset } from "@/lib/recommend/namedFoodPresets";
 import { normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
@@ -93,7 +94,7 @@ export async function fetchDirectSearchHomeCards(query: string): Promise<HomeCar
         supabaseErrors: json.supabaseErrors,
       });
     }
-    return (json.items ?? []).map((row) => toHomeCard(row));
+    return filterHamaV1UserCatalog((json.items ?? []).map((row) => toHomeCard(row)));
   } catch {
     return [];
   }

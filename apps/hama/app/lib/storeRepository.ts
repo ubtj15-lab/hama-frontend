@@ -17,6 +17,7 @@ import {
   passesTonkatsuJapaneseRelaxGate,
 } from "@/lib/recommend/namedFoodPresets";
 import { normalizeStoreTagsFromRow } from "@/lib/storeTagNormalizer";
+import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 
 export type NamedFoodPresetRepoPhase = "strict" | "broad" | "tonkatsu_relax";
 
@@ -268,6 +269,14 @@ const STORES_EMERGENCY_SIMPLE_SELECT = "id,name,category,area,address,lat,lng,ta
 
 const VALID_STORE_CATEGORIES = new Set(["restaurant", "cafe", "salon", "activity", "library", "bk9", "beauty"]);
 
+/** Extra rows so holdem/poker exclusion does not consume the requested fetch cap. */
+const HAMA_V1_USER_CATALOG_FETCH_PAD = 8;
+
+function userFacingHomeCards(cards: HomeCard[], limit?: number): HomeCard[] {
+  const filtered = filterHamaV1UserCatalog(cards);
+  return typeof limit === "number" ? filtered.slice(0, Math.max(0, limit)) : filtered;
+}
+
 function fetchTabAuditSamples(cards: HomeCard[]) {
   return cards.slice(0, 10).map((card) => ({
     name: card.name,
@@ -283,13 +292,14 @@ export async function fetchHomeCardsByTab(
   options: FetchHomeOptions = {}
 ): Promise<HomeCard[]> {
   const count = options.count ?? (tab === "all" ? 12 : 6);
+  const fetchLimit = count + HAMA_V1_USER_CATALOG_FETCH_PAD;
   let categoriesRaw = categoriesForHomeTab(tab);
   if (options.useBeautySalonCategoryCodes && tab === "salon") {
     categoriesRaw = ["salon", "bk9", "beauty"];
   }
   const categories = categoriesRaw?.filter((c) => VALID_STORE_CATEGORIES.has(String(c ?? "").toLowerCase())) ?? null;
 
-  let q = supabase.from("stores").select(STORES_HOME_CARD_SELECT).limit(count);
+  let q = supabase.from("stores").select(STORES_HOME_CARD_SELECT).limit(fetchLimit);
 
   if (categories && categories.length > 0) {
     q = q.in("category", categories);
@@ -322,7 +332,7 @@ export async function fetchHomeCardsByTab(
             .select(STORES_HOME_CARD_SELECT_FALLBACK)
             .eq("category", category)
             .order("updated_at", { ascending: false, nullsFirst: false })
-            .limit(Math.max(3, Math.ceil(count / Math.max(1, fallbackCategories.length))));
+            .limit(Math.max(3, Math.ceil(fetchLimit / Math.max(1, fallbackCategories.length))));
           if (oneError) {
             console.error("[fetchHomeCardsByTab fallback category failed]", {
               tab,
@@ -341,7 +351,7 @@ export async function fetchHomeCardsByTab(
           .from("stores")
           .select(STORES_HOME_CARD_SELECT_FALLBACK)
           .order("updated_at", { ascending: false, nullsFirst: false })
-          .limit(Math.max(12, count));
+          .limit(Math.max(12, fetchLimit));
         if (allError) {
           console.error("[fetchHomeCardsByTab fallback all failed]", {
             tab,
@@ -361,8 +371,8 @@ export async function fetchHomeCardsByTab(
         if (!id || dedup.has(id)) continue;
         dedup.set(id, row);
       }
-      const rows = filterRowsByServiceRegion(Array.from(dedup.values())).slice(0, count);
-      const cards = rows.map(toHomeCard);
+      const rows = filterRowsByServiceRegion(Array.from(dedup.values()));
+      const cards = userFacingHomeCards(rows.map(toHomeCard), count);
       console.log("[fetchHomeCardsByTab fallback success]", {
         tab,
         categories: fallbackCategories ?? "all",
@@ -377,7 +387,7 @@ export async function fetchHomeCardsByTab(
   }
 
   const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
-  const cards = rows.map(toHomeCard);
+  const cards = userFacingHomeCards(rows.map(toHomeCard), count);
   console.log("[fetch tab audit]", {
     tab,
     categories: categories ?? "all",
@@ -400,7 +410,7 @@ export async function fetchHomeCardsByStoreCategories(
     .from("stores")
     .select(STORES_HOME_CARD_SELECT)
     .in("category", safeCategories)
-    .limit(count)
+    .limit(count + HAMA_V1_USER_CATALOG_FETCH_PAD)
     .order("updated_at", { ascending: false, nullsFirst: false });
 
   const { data, error } = await q;
@@ -409,7 +419,7 @@ export async function fetchHomeCardsByStoreCategories(
     return [];
   }
   const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
-  return rows.map(toHomeCard);
+  return userFacingHomeCards(rows.map(toHomeCard), count);
 }
 
 function hashSeedToNonNegativeInt(seed: string | undefined): number {
@@ -502,7 +512,7 @@ export async function fetchEmergencySimpleCardsByCategories(
     scenarioStripBeautySalon: Boolean(options.scenarioStripBeautySalon),
     first: cards[0] ?? rows[0] ?? null,
   });
-  return cards;
+  return userFacingHomeCards(cards);
 }
 
 function sanitizeCultureIlikeToken(t: string): string {
@@ -530,7 +540,7 @@ async function fetchCultureStoresBySingleNameToken(token: string, limit: number)
     return [];
   }
   const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
-  return rows.map(toHomeCard);
+  return userFacingHomeCards(rows.map(toHomeCard));
 }
 
 /** 문화 버튼 browse — 카테고리 탭에 없는 박물관 행을 이름 ilike로 보강 (매장명 검색과 동일 원천) */
@@ -565,7 +575,7 @@ export async function fetchCultureStoresByNameHints(options: { limit?: number } 
     return [];
   }
   const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
-  return rows.map(toHomeCard);
+  return userFacingHomeCards(rows.map(toHomeCard));
 }
 
 /**
@@ -759,7 +769,7 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
   }
 
   const rows = filterRowsByServiceRegion((data ?? []) as StoreRow[]);
-  return rows.map(toHomeCard);
+  return userFacingHomeCards(rows.map(toHomeCard), limit);
 }
 function homeTabCount(tab: HomeTabKey): number {
   if (tab === "restaurant") return 4;

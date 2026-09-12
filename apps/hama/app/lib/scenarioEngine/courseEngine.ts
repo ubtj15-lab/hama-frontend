@@ -39,7 +39,6 @@ import {
   selectCourseDeckAvoidingRepeat,
   type CourseRepeatAvoidance,
 } from "@/lib/results/courseRepeat";
-import { filterNeutralDateActivityCandidates } from "./courseHoldemPolicy";
 
 const TAB_CATEGORY_BOOST = 25;
 const BEAM_WIDTH = 10;
@@ -107,15 +106,8 @@ export function collectCandidatesByType(
     return st !== "CLOSED";
   });
 
-  const activityUsable = filterNeutralDateActivityCandidates(
-    usable.filter((p) => mapPlaceToPlaceType(p) === "ACTIVITY"),
-    opts.courseObj
-  );
-  const activityIds = new Set(activityUsable.map((p) => p.id));
-
   for (const p of usable) {
     const t = mapPlaceToPlaceType(p);
-    if (t === "ACTIVITY" && !activityIds.has(p.id)) continue;
     if (bucket[t].length < maxPer) bucket[t].push(p);
   }
 

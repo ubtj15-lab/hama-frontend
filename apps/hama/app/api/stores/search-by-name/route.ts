@@ -15,6 +15,7 @@ import {
 import { orderRowsServiceRegionFirst } from "@/lib/serviceRegion";
 import type { StoreRow } from "@/lib/storeTypes";
 import { isAlcoholNightlifeHaystack } from "@/lib/recommend/childFriendlyScore";
+import { isExcludedFromHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import {
   applyStoreSuppression,
   fetchActiveStoreSuppressionRules,
@@ -883,7 +884,9 @@ export async function GET(req: Request) {
 
     const qualityFilteredCount = qualityFiltered.length;
 
-    const pipelineFiltered = filterQualityForStrictLibraryQuery(searchQuery, safe, qualityFiltered);
+    const pipelineFiltered = filterQualityForStrictLibraryQuery(searchQuery, safe, qualityFiltered).filter(
+      ({ row }) => !isExcludedFromHamaV1UserCatalog(row)
+    );
     if (isStrictLibraryNameQuery(safe)) {
       const libraryLikeCount = pipelineFiltered.filter(({ row }) => isLibraryCandidateRow(row)).length;
       const removedMuseumLikeNames = qualityFiltered

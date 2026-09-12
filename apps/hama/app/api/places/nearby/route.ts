@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
+import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 
 export const dynamic = "force-dynamic";
 
@@ -304,7 +305,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const cards = merged.filter(storeRowMatchesServiceRegion).map(rowToHomeCard);
+    const cards = filterHamaV1UserCatalog(merged.filter(storeRowMatchesServiceRegion).map(rowToHomeCard));
     return NextResponse.json({ ok: true, cards });
   } catch (e: any) {
     console.error("[/api/places/nearby]", e);

@@ -17,6 +17,7 @@ import {
   resolveWeatherCondition,
 } from "./familyCourseContext";
 import { resolveDateTimeBand } from "./dateCourseContext";
+import { isExcludedFromHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 
 /**
  * 단계 점수 가중치 (합 1.0) — rule-based, 학습은 별도 가산.
@@ -34,8 +35,9 @@ export const STEP_SCORE_WEIGHTS = {
   /** date/solo/family 등 시나리오 전용 보정은 가산(별도 블록) */
 } as const;
 
-/** 코스 추천에서 제외: 미용/금융/의료/부동산 등 */
+/** 코스 추천에서 제외: HAMA V1 catalog + 미용/금융/의료/부동산 등 */
 export function isExcludedFromCoursePool(card: HomeCard): boolean {
+  if (isExcludedFromHamaV1UserCatalog(card)) return true;
   const c = String(card.category ?? "").toLowerCase();
   const hay = `${card.name ?? ""} ${c}`.toLowerCase();
   if (c === "salon") return true;

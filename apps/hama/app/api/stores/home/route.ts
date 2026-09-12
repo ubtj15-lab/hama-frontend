@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { StoreRecord } from "../../../lib/storeTypes";
 import { storeRowMatchesServiceRegion } from "../../../lib/serviceRegion";
+import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
@@ -20,7 +21,7 @@ export async function GET() {
       return NextResponse.json({ items: [], error: error.message }, { status: 500 });
     }
 
-    const items = ((data ?? []) as StoreRecord[]).filter(storeRowMatchesServiceRegion);
+    const items = filterHamaV1UserCatalog(((data ?? []) as StoreRecord[]).filter(storeRowMatchesServiceRegion));
     return NextResponse.json({ items });
   } catch (e) {
     return NextResponse.json({ items: [], error: "unknown" }, { status: 500 });

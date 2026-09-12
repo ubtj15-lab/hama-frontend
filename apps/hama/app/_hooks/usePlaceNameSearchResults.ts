@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import { toHomeCard, type StoreRow as RepoStoreRow } from "@/lib/storeRepository";
+import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import { attachDistanceToCard } from "@/lib/results/attachDistanceToCard";
 import {
   getOrCreateHamaSearchSeed,
@@ -108,7 +109,7 @@ export function usePlaceNameSearchResults(
           console.warn("[usePlaceNameSearchResults]", res.status, json.error ?? json);
         }
         const cards = rows.map((r) => toHomeCard(r)).map((c) => attachDistanceToCard(c, userLat, userLng));
-        setItems(cards);
+        setItems(filterHamaV1UserCatalog(cards));
       } catch (err) {
         if (process.env.NODE_ENV === "development") {
           // eslint-disable-next-line no-console

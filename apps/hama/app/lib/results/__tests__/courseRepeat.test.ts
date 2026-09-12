@@ -59,8 +59,8 @@ describe("Course Repeat V1 generateCourses", () => {
   const pool: HomeCard[] = [
     card("food-seen", "restaurant", "돌고래마차"),
     card("food-alt", "restaurant", "와다이"),
-    card("act-seen", "activity", "홀덤펍보드카페"),
-    card("act-alt", "activity", "프렌즈홀덤"),
+    card("act-seen", "activity", "아케이드엑스 오산동탄점"),
+    card("act-alt", "activity", "바운스테마파크 오산점"),
     card("cafe-lead", "cafe", "송강커피"),
     card("cafe-alt", "cafe", "그래이스그래니"),
   ];

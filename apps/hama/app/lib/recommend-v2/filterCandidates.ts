@@ -1,5 +1,6 @@
 import type { HomeCard } from "@/lib/storeTypes";
 import { evaluateBeautyStrictWhitelist, evaluateCultureStrictWhitelist } from "@/lib/hamaResultCategoryCanonical";
+import { isExcludedFromHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import type { RecommendVertical } from "./normalizeRequest";
 import { getVerticalRules, verticalUsesStrictWhitelist } from "./verticalRules";
 
@@ -78,6 +79,10 @@ export function filterCandidatesV2(
   const cultureStrict = options?.cultureStrict === true;
 
   for (const card of cards) {
+    if (isExcludedFromHamaV1UserCatalog(card)) {
+      pushRej(card, "hama_v1_catalog_excluded");
+      continue;
+    }
     const blob = cardBlob(card);
     const cat = rawCategory(card);
     const label = String(card.categoryLabel ?? "").toLowerCase();

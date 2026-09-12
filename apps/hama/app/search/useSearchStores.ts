@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@hama/shared";
 import type { StoreRecord } from "@lib/storeTypes";
 import { storeRowMatchesServiceRegion } from "@/lib/serviceRegion";
+import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 
 
 export type StoreCategory = "cafe" | "restaurant" | "salon" | "activity";
@@ -209,7 +210,7 @@ export function useSearchStores({
         }))
         .filter((s: Store) => storeRowMatchesServiceRegion({ area: null, address: s.address }));
 
-      setStores(cleaned);
+      setStores(filterHamaV1UserCatalog(cleaned));
       setLoading(false);
     };
 

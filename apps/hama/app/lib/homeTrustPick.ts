@@ -1,6 +1,7 @@
 import type { HomeCard } from "@/lib/storeTypes";
 import type { StoreRow } from "@/lib/storeRepository";
 import { toHomeCard } from "@/lib/storeRepository";
+import { filterHamaV1UserCatalog, isExcludedFromHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import { inferNeutralRecommendationVoice } from "@/lib/recommend/scoring";
 import type { RecommendScenarioKey } from "@/lib/recommend/scenarioWeights";
 
@@ -37,7 +38,9 @@ function withInferredVoice(c: HomeCard): ScoredPick {
 
 /** 카테고리 + 시나리오 축이 겹치지 않게 최대 3장(가능하면 서로 다른 voice). */
 export function pickDiverseHomeCards(cards: HomeCard[], max = HOME_TRUST_PICK_MAX): HomeCard[] {
-  const pool = [...cards].filter((c) => c.name?.trim()).map(withInferredVoice);
+  const pool = [...cards]
+    .filter((c) => c.name?.trim() && !isExcludedFromHamaV1UserCatalog(c))
+    .map(withInferredVoice);
   if (pool.length === 0) return [];
 
   const seen = new Set<string>();
@@ -121,7 +124,7 @@ export async function fetchTrustPickPlaceCards(count = 12): Promise<HomeCard[]> 
     if (res.ok) {
       const json = (await res.json()) as { items?: StoreRow[] };
       const items = json.items ?? [];
-      if (items.length > 0) return mapRows(items as StoreRow[]);
+      if (items.length > 0) return filterHamaV1UserCatalog(mapRows(items as StoreRow[]));
     }
   } catch {
     // 다음 폴백으로
@@ -133,7 +136,7 @@ export async function fetchTrustPickPlaceCards(count = 12): Promise<HomeCard[]> 
     if (res.ok) {
       const json = (await res.json()) as { items?: StoreRow[] };
       const items = json.items ?? [];
-      if (items.length > 0) return mapRows(items as StoreRow[]);
+      if (items.length > 0) return filterHamaV1UserCatalog(mapRows(items as StoreRow[]));
     }
   } catch {
     // ignore

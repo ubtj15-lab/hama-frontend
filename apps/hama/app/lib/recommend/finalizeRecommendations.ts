@@ -4,6 +4,7 @@
  *
  * Order:
  *   merged ranked ∪ scored pool
+ *   → HAMA V1 user-catalog eligibility (holdem/poker never enter the pool)
  *   → kids-safety eligibility (adult venues never re-enter when kids context)
  *   → local distance eligibility (ordinary local hard cap; no far TOP3 backfill)
  *   → applyDiscoveryRerank on the remaining pool
@@ -17,6 +18,7 @@
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { isHighConfidenceAdultVenueHaystack } from "./childFriendlyScore";
 import { applyLocalDistanceSafety } from "./localDistanceSafety";
+import { isExcludedFromHamaV1UserCatalog } from "./hamaV1UserCatalog";
 import {
   applyDiscoveryRerank,
   DISCOVERY_POOL_LIMIT,
@@ -123,7 +125,8 @@ export function finalizeDiscoveryPool<T>(input: {
 }): DiscoveryRerankResult<T> & { eligiblePool: DiscoveryRerankItem<T>[] } {
   const deckSize = input.deckSize ?? 3;
   const merged = mergeDiscoveryPool(input.ranked, input.scoredPool ?? []);
-  const kidsSafe = applyKidsSafetyToDiscoveryPool(merged, input.parsed);
+  const catalogEligible = merged.filter((item) => !isExcludedFromHamaV1UserCatalog(item));
+  const kidsSafe = applyKidsSafetyToDiscoveryPool(catalogEligible, input.parsed);
   const safe = applyLocalDistanceToDiscoveryPool(kidsSafe, input.query, input.parsed);
   const byScore = [...safe].sort((a, b) =>
     b.score !== a.score ? b.score - a.score : a.id.localeCompare(b.id)

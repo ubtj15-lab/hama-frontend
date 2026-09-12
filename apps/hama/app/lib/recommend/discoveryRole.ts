@@ -419,7 +419,8 @@ export function isExplicitHoldemPokerQuery(query: string): boolean {
   return HOLDEM_POKER_CODED.test(String(query ?? ""));
 }
 
-/** Generic indoor PLAY hides holdem/poker when the user did not ask for it. */
+/** Generic indoor PLAY hides holdem/poker when the user did not ask for it.
+ * HAMA V1 also excludes holdem globally via isExcludedFromHamaV1UserCatalog. */
 export function shouldHideHoldemPokerForGenericIndoorPlay(query: string, parsed: ScenarioObject): boolean {
   return isIndoorPlaySeekingQuery(query, parsed) && !isExplicitHoldemPokerQuery(query);
 }
@@ -531,7 +532,8 @@ export function applyDiscoveryRerank<T>(
 ): DiscoveryRerankResult<T> {
   const classification = classifyDiscoveryQuery(query, parsed);
   const deckSize = options.deckSize ?? 3;
-  const ranked = [...items].sort((a, b) => (b.score !== a.score ? b.score - a.score : a.id.localeCompare(b.id)));
+  const catalogEligible = items.filter((item) => !isHoldemPokerCodedVenue(item));
+  const ranked = [...catalogEligible].sort((a, b) => (b.score !== a.score ? b.score - a.score : a.id.localeCompare(b.id)));
   const naturalIds = (options.naturalDeckIds ?? []).filter((id) => ranked.some((r) => r.id === id));
   const passthrough = (): DiscoveryRerankResult<T> => {
     const deck = (naturalIds.length ? naturalIds.map((id) => ranked.find((r) => r.id === id)!).filter(Boolean) : ranked).slice(
@@ -621,10 +623,7 @@ export function applyDiscoveryRerank<T>(
       return a.item.id.localeCompare(b.item.id);
     });
   if (indoorPlayDeck) {
-    const hideHoldem = shouldHideHoldemPokerForGenericIndoorPlay(query, parsed);
-    const indoorRows = hideHoldem
-      ? strongIndoorPlay.filter((a) => !isHoldemPokerCodedVenue(a.item))
-      : strongIndoorPlay;
+    const indoorRows = strongIndoorPlay.filter((a) => !isHoldemPokerCodedVenue(a.item));
     for (const row of indoorRows) take(row);
   } else {
     for (const row of preferred) take(row);

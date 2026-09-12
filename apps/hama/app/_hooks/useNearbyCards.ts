@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { HomeCard, HomeTabKey } from "@/lib/storeTypes";
+import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import type { IntentionType } from "@/lib/intention";
 
 type LatLng = { lat: number; lng: number } | null | undefined;
@@ -124,7 +125,8 @@ function intentScore(card: HomeCard, intent: IntentionType): number {
 }
 
 function rankAndPick(pool: HomeCard[], intent: IntentionType, n: number): HomeCard[] {
-  const ranked = pool
+  const eligible = filterHamaV1UserCatalog(pool);
+  const ranked = eligible
     .map((card) => {
       const jitter = Math.random() * 5;
       const score = baseScore(card) + intentScore(card, intent) + jitter;

@@ -1,4 +1,5 @@
 import { normalizeSearchV2ResultCard, normalizeSearchV2ResultCards } from "./searchV2CategoryCopy";
+import { filterHamaV1UserCatalog, isExcludedFromHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import {
   buildFamilyDefaultResults,
   enrichResultByCategory,
@@ -531,6 +532,7 @@ export function scoreStoreForFamilyDefault(row: StoreRow): number {
 function filterFamilyDefaultPool(pool: StoreRow[]): StoreRow[] {
   return pool.filter((row) => {
     if (!row?.name || !String(row.name).trim()) return false;
+    if (isExcludedFromHamaV1UserCatalog(row)) return false;
     return !isFamilyDefaultExcluded(row);
   });
 }
@@ -568,6 +570,7 @@ export function filterStoresForQuery(stores: StoreRow[], query: string): StoreRo
   const intent = detectSearchQueryIntent(query);
   return stores.filter((row) => {
     if (!row?.name || !String(row.name).trim()) return false;
+    if (isExcludedFromHamaV1UserCatalog(row)) return false;
     return !isExcludedCategoryForQuery(row, intent);
   });
 }
@@ -730,7 +733,7 @@ async function fetchStorePool(query: string): Promise<StoreRow[]> {
       ...cafes.map((r) => ({ ...r, category: r.category || "cafe" })),
       ...activities.map((r) => ({ ...r, category: r.category || "activity" })),
     ];
-    return dedupeStores(tagged);
+    return filterHamaV1UserCatalog(dedupeStores(tagged));
   }
 
   const tab =

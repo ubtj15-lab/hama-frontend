@@ -18,7 +18,8 @@ import type { IntentionType } from "@/lib/intention";
 import { buildTopRecommendations } from "@/lib/recommend/scoring";
 import type { RecommendScoreBreakdown, ScoredRecommendItem } from "@/lib/recommend/scoring";
 import { finalizeRecommendations } from "@/lib/recommend/finalizeRecommendations";
-import { classifyDiscoveryQuery, hasCredibleIndoorPlayEvidence, isExplicitHoldemPokerQuery, isHoldemPokerCodedVenue, isIndoorPlaySeekingQuery, toDiscoveryItem } from "@/lib/recommend/discoveryRole";
+import { classifyDiscoveryQuery, hasCredibleIndoorPlayEvidence, isIndoorPlaySeekingQuery, toDiscoveryItem } from "@/lib/recommend/discoveryRole";
+import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import { shouldApplyHomeSituationRepeatAvoidance } from "@/lib/recommend/dateRepeatAvoidance";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
 import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassification";
@@ -990,7 +991,7 @@ async function fetchMuseumCardsViaSearchByNameApi(q: string): Promise<HomeCard[]
     });
     if (!res.ok) return [];
     const json = (await res.json()) as { items?: StoreRow[] };
-    return (json.items ?? []).map((row) => toHomeCard(row));
+    return filterHamaV1UserCatalog((json.items ?? []).map((row) => toHomeCard(row)));
   } catch {
     return [];
   }
@@ -3877,7 +3878,7 @@ export function useHomeCards(
           intent: options.explicitIntent ?? null,
         });
 
-        const courseFetched = wantCourse ? await fetchHomeCourseCandidatePool() : [];
+        const courseFetched = wantCourse ? filterHamaV1UserCatalog(await fetchHomeCourseCandidatePool()) : [];
 
         let fetchedRaw: HomeCard[] = [];
         const applySituationPresetEnrichment = async (base: HomeCard[]): Promise<HomeCard[]> => {
@@ -4330,13 +4331,13 @@ export function useHomeCards(
           options.explicitIntent ?? null
         );
         const indoorPlayQuery = isIndoorPlaySeekingQuery(String(options.searchQuery ?? ""), rankScenario);
-        const explicitHoldemQuery = isExplicitHoldemPokerQuery(String(options.searchQuery ?? ""));
-        if (indoorPlayQuery || explicitHoldemQuery) {
-          fetchTabsTried.push(indoorPlayQuery ? "indoor_play:activity_catalog" : "explicit_holdem:activity_catalog");
+        fetched = filterHamaV1UserCatalog(fetched);
+        if (indoorPlayQuery) {
+          fetchTabsTried.push("indoor_play:activity_catalog");
           const indoorPlayActivities = await fetchHomeCardsByTab("activity", {
             count: Math.max(RECOMMEND_POOL_SINGLE_TAB, 300),
           });
-          fetched = mergeHomeCardsUniqueById(fetched, indoorPlayActivities);
+          fetched = filterHamaV1UserCatalog(mergeHomeCardsUniqueById(fetched, indoorPlayActivities));
           countsByTab.indoor_play_activity = indoorPlayActivities.length;
         }
 
@@ -4367,14 +4368,6 @@ export function useHomeCards(
           if (indoorFetched.length) {
             const indoorRanked = await buildExpandedRankedPool(indoorFetched, ctx, indoorFetched.length);
             rankedPrimary = [...indoorRanked, ...rankedPrimary].filter(
-              (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
-            );
-          }
-        } else if (explicitHoldemQuery) {
-          const holdemFetched = fetched.filter((c) => isHoldemPokerCodedVenue(toDiscoveryItem(c, 0)));
-          if (holdemFetched.length) {
-            const holdemRanked = await buildExpandedRankedPool(holdemFetched, ctx, holdemFetched.length);
-            rankedPrimary = [...holdemRanked, ...rankedPrimary].filter(
               (item, idx, arr) => arr.findIndex((x) => x.card.id === item.card.id) === idx
             );
           }

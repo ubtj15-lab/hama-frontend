@@ -138,14 +138,15 @@ describe("kids-context adult venue filter", () => {
   });
 });
 
-describe("non-kids controls remain eligible", () => {
+describe("non-kids controls still drop holdem via HAMA V1 catalog", () => {
   const controls = ["홀덤펍 찾아줘", "오늘 밤 놀 곳", "친구들이랑 놀 곳"];
 
-  it.each(controls)("does not globally drop holdem for: %s", (query) => {
+  it.each(controls)("globally drops holdem for: %s", (query) => {
     const { parsed, out } = run(query);
     expect(parsed.withKids).not.toBe(true);
     expect(isExplicitKidsRecommendationContext(parsed)).toBe(false);
-    expect(holdemIdsIn(out.eligiblePool).length).toBe(3);
+    expect(holdemIdsIn(out.eligiblePool)).toEqual([]);
+    expect(holdemIdsIn(out.deck)).toEqual([]);
   });
 });
 
@@ -159,7 +160,8 @@ describe("bare family does not trigger the strong kids guard", () => {
       expect.arrayContaining(["kids_cafe", "indoor_play"])
     );
     expect(isExplicitKidsRecommendationContext(parsed)).toBe(false);
-    expect(holdemIdsIn(out.eligiblePool).length).toBe(3);
+    expect(holdemIdsIn(out.eligiblePool)).toEqual([]);
+    expect(holdemIdsIn(out.deck)).toEqual([]);
   });
 });
 

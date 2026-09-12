@@ -36,6 +36,7 @@ import {
   isGenericFoodScoreTieBreakQuery,
 } from "./genericFoodScoreTieBreak";
 import { compositeIntentRawScore, violatesHardConstraints } from "./compositeRanking";
+import { isExcludedFromHamaV1UserCatalog } from "./hamaV1UserCatalog";
 import { buildCompositeTagsForCard } from "@/lib/scenarioEngine/compositeIntent";
 import { buildFoodTagsForCard } from "@/lib/scenarioEngine/foodIntent";
 import { dedupeTags } from "./recommendationBadge";
@@ -461,9 +462,9 @@ export function buildTopRecommendations(
     so.intentCategory === "CAFE" &&
     so.intentStrict !== false;
 
-  let pool = candidates;
+  let pool = candidates.filter((card) => !isExcludedFromHamaV1UserCatalog(card));
   if (strictFood && so) {
-    pool = filterFoodCandidatesByMenuIntent(candidates, so);
+    pool = filterFoodCandidatesByMenuIntent(pool, so);
   }
 
   const runPass = (relaxed: boolean): ScoredRecommendItem[] => {
