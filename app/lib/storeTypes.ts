@@ -70,6 +70,12 @@ export type HomeCard = {
   // “0.5km” 같이 표시하는 경우가 있어서 optional로 둠
   distanceKm?: number;
 
+  // 추천/정렬 보조 필드들(일부 API에서만 내려올 수 있음)
+  reasonText?: string;
+  curated_score?: number;
+  source?: string | null;
+  place_key?: string | null;
+
   with_kids?: boolean | null;
   for_work?: boolean | null;
   reservation_required?: boolean | null;
