@@ -4,8 +4,9 @@ export const HAMA_USER_ID_COOKIE = "hama_user_id";
 export const HAMA_USER_NICKNAME_COOKIE = "hama_user_nickname";
 export const HAMA_KAKAO_ID_COOKIE = "hama_kakao_id";
 export const HAMA_IS_NEW_USER_COOKIE = "hama_is_new_user";
+export const HAMA_SESSION_COOKIE = "hama_session";
 
-const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
+export const HAMA_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const NEW_USER_MAX_AGE = 60 * 60 * 24 * 3;
 
 export function authSessionCookieOptions() {
@@ -14,7 +15,7 @@ export function authSessionCookieOptions() {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
-    maxAge: SESSION_MAX_AGE,
+    maxAge: HAMA_SESSION_MAX_AGE_SECONDS,
   };
 }
 
@@ -42,4 +43,5 @@ export function clearAuthSessionCookies(res: NextResponse): void {
   res.cookies.set(HAMA_USER_NICKNAME_COOKIE, "", clear);
   res.cookies.set(HAMA_KAKAO_ID_COOKIE, "", clear);
   res.cookies.set(HAMA_IS_NEW_USER_COOKIE, "", clear);
+  res.cookies.set(HAMA_SESSION_COOKIE, "", clear);
 }

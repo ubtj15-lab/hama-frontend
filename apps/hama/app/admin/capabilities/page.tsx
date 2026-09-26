@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
+import { adminAccessMessage } from "../adminAccessMessage";
 
 type Coverage = {
   field: string;
@@ -76,7 +77,7 @@ export default function AdminCapabilitiesPage() {
       const res = await fetch("/api/admin/capabilities/audit");
       const data = (await res.json()) as AuditResponse;
       if (!res.ok) {
-        setMsg(data.error ?? "점검 실패");
+        setMsg(adminAccessMessage(res.status) ?? data.error ?? "점검 실패");
       } else {
         setAudit(data);
       }
@@ -127,7 +128,7 @@ export default function AdminCapabilitiesPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setMsg(data.error ?? "저장 실패");
+        setMsg(adminAccessMessage(res.status) ?? data.error ?? "저장 실패");
       } else {
         setMsg(`저장 완료: ${store.name}`);
         setAudit((prev) =>

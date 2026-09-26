@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { adminAccessMessage } from "../adminAccessMessage";
 
 type PendingItem = {
   id: string;
@@ -90,7 +91,7 @@ export default function AdminBetaVerificationsPage() {
       if (!res.ok || !json.ok) {
         setLastLoadStatus("error");
         setLastLoadInfo({ ok: false, error: json.error, detail: json.detail });
-        setMsg(json.error ?? "로드 실패");
+        setMsg(adminAccessMessage(res.status) ?? json.error ?? "로드 실패");
         return;
       }
       const nextPending = Array.isArray(json.pending) ? json.pending : [];
@@ -154,7 +155,10 @@ export default function AdminBetaVerificationsPage() {
       const httpOk = res.ok;
       const businessOk = json.ok === true || json.success === true;
       if (!httpOk || !businessOk) {
-        const errText = [json.error, json.detail, json.details].filter(Boolean).join(" · ") || "unknown";
+        const errText =
+          adminAccessMessage(res.status) ||
+          [json.error, json.detail, json.details].filter(Boolean).join(" · ") ||
+          "unknown";
         setMsg(`${action === "approve" ? "승인" : "거절"} 실패: ${errText}`);
         alert(`${action === "approve" ? "승인" : "거절"} 실패: ${errText}`);
         return;

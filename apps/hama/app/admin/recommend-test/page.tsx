@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { adminAccessMessage } from "../adminAccessMessage";
 import { useMemo, useState } from "react";
 
 type TestInput = {
@@ -124,7 +125,7 @@ export default function AdminRecommendTestPage() {
       });
       const json = (await res.json()) as ApiResult;
       if (!res.ok || json.error) {
-        setMsg(json.error ?? "추천 테스트 실패");
+        setMsg(adminAccessMessage(res.status) ?? json.error ?? "추천 테스트 실패");
         setResult(null);
       } else {
         setResult(json);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
+import { enforceAdmin, isUuid } from "@/lib/server/adminAccess";
 
 type Body = {
   action?: "approve" | "reject";
@@ -23,12 +24,10 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ verificationId: string }> }
 ) {
-  const supabase = getSupabaseAdmin();
-  if (!supabase) {
-    return failJson("supabase_unavailable", 500);
-  }
+  const denied = await enforceAdmin(req, { mutate: true });
+  if (denied) return denied;
   const { verificationId } = await params;
-  if (!verificationId) {
+  if (!verificationId || !isUuid(verificationId)) {
     return failJson("verification_id_required", 400);
   }
 
@@ -41,6 +40,11 @@ export async function PATCH(
   const action = body.action;
   if (action !== "approve" && action !== "reject") {
     return failJson("invalid_action", 400);
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return failJson("supabase_unavailable", 500);
   }
 
   try {

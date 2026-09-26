@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { enforceAdmin } from "@/lib/server/adminAccess";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseKey =
@@ -17,6 +18,8 @@ function getSupabase() {
  * 관리자용: 유저 목록 (id, nickname), 닉네임 검색
  */
 export async function GET(req: NextRequest) {
+  const denied = await enforceAdmin(req);
+  if (denied) return denied;
   const supabase = getSupabase();
   if (!supabase) {
     return NextResponse.json({ users: [] }, { status: 500 });

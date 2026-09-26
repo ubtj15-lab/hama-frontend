@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { enforceAdmin } from "@/lib/server/adminAccess";
 import { buildTopRecommendations, type BuildRecommendationsContext } from "@/lib/recommend/scoring";
 import type { HomeCard } from "@/lib/storeTypes";
 import type { IntentionType } from "@/lib/intention";
@@ -109,9 +110,37 @@ function mapStoreToHomeCard(row: any): HomeCard {
   return card;
 }
 
+const RECOMMEND_CATEGORIES = new Set(["food", "cafe", "beauty", "activity", "course"]);
+const RECOMMEND_COMPANIONS = new Set(["가족", "혼자", "친구", "연인", "동료"]);
+const RECOMMEND_DIETARY = new Set(["채식", "할랄", "없음"]);
+const RECOMMEND_INTERESTS = new Set(["액티비티", "만화카페/보드게임카페", "영화/공연", "전시/박물관"]);
+
+function isRecommendTestInput(body: unknown): body is ReqBody {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const input = body as ReqBody;
+  if (input.category !== undefined && !RECOMMEND_CATEGORIES.has(String(input.category))) return false;
+  if (input.companions !== undefined && !RECOMMEND_COMPANIONS.has(String(input.companions))) return false;
+  if (input.dietary !== undefined && !RECOMMEND_DIETARY.has(String(input.dietary))) return false;
+  if (input.interests !== undefined) {
+    if (!Array.isArray(input.interests) || input.interests.length > 8) return false;
+    if (input.interests.some((item) => !RECOMMEND_INTERESTS.has(String(item)))) return false;
+  }
+  if (input.userLat !== undefined && input.userLat !== null) {
+    if (typeof input.userLat !== "number" || !Number.isFinite(input.userLat) || input.userLat < -90 || input.userLat > 90) {
+      return false;
+    }
+  }
+  if (input.userLng !== undefined && input.userLng !== null) {
+    if (typeof input.userLng !== "number" || !Number.isFinite(input.userLng) || input.userLng < -180 || input.userLng > 180) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function POST(req: NextRequest) {
-  const supabase = getSupabase();
-  if (!supabase) return NextResponse.json({ error: "DB not configured" }, { status: 500 });
+  const denied = await enforceAdmin(req, { mutate: true });
+  if (denied) return denied;
 
   let input: ReqBody;
   try {
@@ -119,6 +148,12 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+  if (!isRecommendTestInput(input)) {
+    return NextResponse.json({ error: "invalid_input" }, { status: 400 });
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) return NextResponse.json({ error: "DB not configured" }, { status: 500 });
 
   const { data, error } = await supabase
     .from("stores")

@@ -15,9 +15,13 @@ export function useSaved() {
     if (!userId || userId.startsWith("server")) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/saved?user_id=${encodeURIComponent(userId)}`
-      );
+      const res = await fetch("/api/saved", { credentials: "include" });
+      if (res.status === 401) {
+        setSavedIds(new Set());
+        setSavedCards([]);
+        return;
+      }
+      if (!res.ok) return;
       const json = await res.json();
       setSavedIds(new Set(json.saved_ids ?? []));
       setSavedCards((json.stores ?? []).map((s: Record<string, unknown>) => storeToHomeCard(s)));
@@ -42,8 +46,9 @@ export function useSaved() {
       try {
         const res = await fetch("/api/saved", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: userId, store_id: storeId }),
+          body: JSON.stringify({ store_id: storeId }),
         });
         const json = await res.json();
         if (!json.ok) {

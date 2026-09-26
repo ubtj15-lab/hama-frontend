@@ -50,6 +50,7 @@ export function logRecommendationEvent(
 
     fetch("/api/recommendation/log", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }).catch((e) => {

@@ -1,6 +1,8 @@
 // app/api/auth/kakao/callback/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { applyAuthSessionCookies } from "@/lib/server/authCookies";
+import { HAMA_IS_NEW_USER_COOKIE, HAMA_USER_NICKNAME_COOKIE, authSessionCookieOptions } from "@/lib/server/authCookies";
+import { clearOAuthStateCookie, consumeOAuthState, HAMA_KAKAO_OAUTH_COOKIE } from "@/lib/server/kakaoOAuthState";
+import { issueServerSession, setSessionCookie } from "@/lib/server/verifiedSession";
 import { getKakaoAuthEnv } from "@/lib/server/kakaoAuthConfig";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
 
@@ -11,17 +13,9 @@ function loginFailedRedirect(req: NextRequest, reason: string): NextResponse {
   const url = new URL("/", req.url);
   url.searchParams.set("login", "failed");
   url.searchParams.set("reason", reason.slice(0, 180));
-  return NextResponse.redirect(url);
-}
-
-function safeReturnPath(state: string | null): string {
-  if (!state) return "/";
-  try {
-    const decoded = decodeURIComponent(state);
-    return decoded.startsWith("/") ? decoded : "/";
-  } catch {
-    return "/";
-  }
+  const res = NextResponse.redirect(url);
+  clearOAuthStateCookie(res);
+  return res;
 }
 
 export async function GET(req: NextRequest) {
@@ -33,24 +27,26 @@ export async function GET(req: NextRequest) {
   }
 
   const { clientId, clientSecret, redirectUri } = envResult.env;
-  const returnTo = safeReturnPath(req.nextUrl.searchParams.get("state"));
+  const oauth = consumeOAuthState(
+    req.cookies.get(HAMA_KAKAO_OAUTH_COOKIE)?.value,
+    req.nextUrl.searchParams.get("state")
+  );
+  if (!oauth.ok) {
+    console.error("[kakao/callback] oauth state rejected", { reason: oauth.reason });
+    return loginFailedRedirect(req, oauth.reason);
+  }
+  const returnTo = oauth.returnTo;
 
   const kakaoError = req.nextUrl.searchParams.get("error");
-  const kakaoErrorDescription = req.nextUrl.searchParams.get("error_description");
   if (kakaoError) {
     const reason = `kakao_oauth_error:${kakaoError}`;
-    console.error("[kakao/callback] Kakao OAuth error", {
-      error: kakaoError,
-      error_description: kakaoErrorDescription,
-    });
+    console.error("[kakao/callback] Kakao OAuth error", { error: kakaoError });
     return loginFailedRedirect(req, reason);
   }
 
   const code = req.nextUrl.searchParams.get("code");
   if (!code) {
-    console.error("[kakao/callback] authorization code missing", {
-      search: req.nextUrl.search,
-    });
+    console.error("[kakao/callback] authorization code missing");
     return loginFailedRedirect(req, "missing_code");
   }
 
@@ -88,10 +84,7 @@ export async function GET(req: NextRequest) {
     const kakaoMsg = tokenJson.error_description || tokenJson.error || tokenRaw.slice(0, 200);
     console.error("[kakao/callback] token request failed", {
       status: tokenRes.status,
-      redirectUri,
       kakaoError: tokenJson.error,
-      kakaoErrorDescription: tokenJson.error_description,
-      body: tokenRaw.slice(0, 500),
     });
     const reason =
       tokenJson.error === "invalid_grant" && /redirect/i.test(String(kakaoMsg))
@@ -102,9 +95,7 @@ export async function GET(req: NextRequest) {
 
   const accessToken = tokenJson.access_token;
   if (!accessToken) {
-    console.error("[kakao/callback] access_token missing in token response", {
-      body: tokenRaw.slice(0, 500),
-    });
+    console.error("[kakao/callback] access_token missing in token response");
     return loginFailedRedirect(req, "missing_access_token");
   }
 
@@ -123,7 +114,6 @@ export async function GET(req: NextRequest) {
   if (!userRes.ok) {
     console.error("[kakao/callback] user info request failed", {
       status: userRes.status,
-      body: userRaw.slice(0, 500),
     });
     return loginFailedRedirect(req, `user_info_failed:${userRes.status}`);
   }
@@ -136,7 +126,7 @@ export async function GET(req: NextRequest) {
   try {
     kakaoUser = JSON.parse(userRaw) as typeof kakaoUser;
   } catch {
-    console.error("[kakao/callback] user info JSON parse failed", { body: userRaw.slice(0, 500) });
+    console.error("[kakao/callback] user info JSON parse failed");
     return loginFailedRedirect(req, "user_info_parse_failed");
   }
 
@@ -147,7 +137,7 @@ export async function GET(req: NextRequest) {
     "카카오 사용자";
 
   if (!kakaoId) {
-    console.error("[kakao/callback] kakao user id missing", { kakaoUser });
+    console.error("[kakao/callback] kakao user id missing");
     return loginFailedRedirect(req, "missing_kakao_user_id");
   }
 
@@ -244,8 +234,25 @@ export async function GET(req: NextRequest) {
     return loginFailedRedirect(req, "missing_user_id");
   }
 
+  const session = await issueServerSession(userId);
+  if (!session) {
+    console.error("[kakao/callback] server session issue failed", { userId });
+    return loginFailedRedirect(req, "session_unavailable");
+  }
+
   const res = NextResponse.redirect(new URL(returnTo, req.url));
-  applyAuthSessionCookies(res, { userId, nickname, kakaoId, isNewUser });
-  console.info("[kakao/callback] login success", { userId, kakaoId, isNewUser, returnTo });
+  clearOAuthStateCookie(res);
+  setSessionCookie(res, session.token, session.expiresAt);
+  const display = authSessionCookieOptions();
+  res.cookies.set(HAMA_USER_NICKNAME_COOKIE, encodeURIComponent(nickname), {
+    ...display,
+    httpOnly: false,
+  });
+  res.cookies.set(HAMA_IS_NEW_USER_COOKIE, isNewUser ? "1" : "0", {
+    ...display,
+    httpOnly: false,
+    maxAge: 60 * 60 * 24 * 3,
+  });
+  console.info("[kakao/callback] login success", { userId, isNewUser, returnTo });
   return res;
 }

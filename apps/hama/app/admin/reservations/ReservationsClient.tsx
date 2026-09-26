@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -23,10 +23,8 @@ type Reservation = {
 
 /* ---------- 상단 네비/로그아웃 바 ---------- */
 function AdminTopbar() {
-  const router = useRouter();
   const onLogout = async () => {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.replace("/admin/login");
+    window.location.href = "/api/auth/kakao/logout";
   };
   return (
     <div className="flex justify-end items-center gap-3 mb-4">

@@ -1,6 +1,12 @@
 // app/api/auth/kakao/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { sanitizeReturnPath } from "@/lib/auth/safeReturnPath";
 import { getKakaoAuthEnv } from "@/lib/server/kakaoAuthConfig";
+import {
+  HAMA_KAKAO_OAUTH_COOKIE,
+  oauthStateCookieOptions,
+  sealOAuthState,
+} from "@/lib/server/kakaoOAuthState";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,20 +27,20 @@ export async function GET(req: NextRequest) {
   }
 
   const { clientId, redirectUri } = envResult.env;
-
-  const returnTo =
+  const requested =
     req.nextUrl.searchParams.get("next")?.trim() ||
     req.nextUrl.searchParams.get("return_to")?.trim() ||
     "";
-  const state = returnTo ? encodeURIComponent(returnTo) : "";
+  const issued = sealOAuthState(requested || "/");
 
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
+    state: issued.state,
   });
-  if (state) params.set("state", state);
 
-  const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?${params.toString()}`;
-  return NextResponse.redirect(kakaoAuthUrl);
+  const res = NextResponse.redirect(`https://kauth.kakao.com/oauth/authorize?${params.toString()}`);
+  res.cookies.set(HAMA_KAKAO_OAUTH_COOKIE, issued.cookie, oauthStateCookieOptions());
+  return res;
 }

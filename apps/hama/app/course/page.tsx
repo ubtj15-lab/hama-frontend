@@ -82,6 +82,7 @@ function CourseDetailInner() {
     void (async () => {
       try {
         const res = await fetch("/api/admin/stats", { cache: "no-store" });
+        // 관리자 통계다. 일반 사용자는 403이며, 코스 본문은 유지하고 인원 표시만 생략한다.
         if (!res.ok) return;
         const json = await res.json();
         const n = Number(json?.today?.card_views ?? 0);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { enforceAdmin, isSafeResourceId, parseStoreCapabilityBody } from "@/lib/server/adminAccess";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseKey =
@@ -16,45 +17,29 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ storeId: string }> }
 ) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: "DB not configured" }, { status: 500 });
-  }
+  const denied = await enforceAdmin(req, { mutate: true });
+  if (denied) return denied;
 
   const { storeId } = await params;
-  if (!storeId) {
+  if (!storeId || !isSafeResourceId(storeId)) {
     return NextResponse.json({ error: "storeId required" }, { status: 400 });
   }
 
-  let body: Record<string, unknown>;
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const allowed = [
-    "solo_friendly",
-    "group_seating",
-    "private_room",
-    "alcohol_available",
-    "fast_food",
-    "formal_atmosphere",
-    "quick_service",
-    "vegan_available",
-    "halal_available",
-    "with_kids",
-    "max_group_size",
-  ] as const;
-
-  const update: Record<string, unknown> = {};
-  for (const k of allowed) {
-    if (Object.prototype.hasOwnProperty.call(body, k)) {
-      update[k] = body[k];
-    }
-  }
-  if (!Object.keys(update).length) {
+  const update = parseStoreCapabilityBody(body);
+  if (!update) {
     return NextResponse.json({ error: "No valid fields provided" }, { status: 400 });
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    return NextResponse.json({ error: "DB not configured" }, { status: 500 });
   }
 
   try {

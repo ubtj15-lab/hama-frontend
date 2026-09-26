@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { adminAccessMessage } from "./adminAccessMessage";
 import { PARTNER_APP_URL } from "../lib/partnerUrl";
 
 type Stats = {
@@ -39,7 +40,7 @@ export default function AdminDashboardPage() {
         const res = await fetch("/api/admin/stats");
         const data = await res.json();
         if (!res.ok) {
-          if (!cancelled) setErr(data.error || "통계를 불러오지 못했어요.");
+          if (!cancelled) setErr(adminAccessMessage(res.status) || data.error || "통계를 불러오지 못했어요.");
           return;
         }
         if (!cancelled) setStats(data);

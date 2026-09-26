@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { enforceAdmin } from "@/lib/server/adminAccess";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseKey =
@@ -17,6 +18,8 @@ function getSupabase() {
  * 관리자용: 매장 전체 검색 (owner_id 무관)
  */
 export async function GET(req: NextRequest) {
+  const denied = await enforceAdmin(req);
+  if (denied) return denied;
   const supabase = getSupabase();
   if (!supabase) {
     return NextResponse.json({ stores: [] }, { status: 500 });
