@@ -65,6 +65,7 @@ export function logHamaEvent(input: HamaEventInput): void {
 
     void fetch("/api/events", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     })
@@ -98,6 +99,7 @@ export function logEvent(event: string, payload: LogPayload = {}) {
     const userId = getDbUserId();
     fetch("/api/log", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         user_id: userId,

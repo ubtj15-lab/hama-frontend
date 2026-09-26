@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import {
   mergeImpressionHistory,
   type RecommendationSessionSnapshot,
@@ -10,55 +9,11 @@ import {
   shouldSkipRecommendationEventsTable,
 } from "@/lib/analytics/contextualRejectFeedback";
 import { isRecommendationRejectReason } from "@/lib/analytics/recommendationRejectReasons";
+import { boundedRecord, clipText, isAllowedRecommendationLogEvent } from "@/lib/server/activityEventGuard";
+import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
+import { getVerifiedUserId } from "@/lib/server/verifiedSession";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string | undefined;
-const supabaseServiceKey =
-  (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) as string | undefined;
-
-function getSupabase() {
-  if (!supabaseUrl || !supabaseAnonKey) return null;
-  return createClient(supabaseUrl, supabaseAnonKey);
-}
-
-function getSupabaseService() {
-  if (!supabaseUrl || !supabaseServiceKey) return null;
-  return createClient(supabaseUrl, supabaseServiceKey);
-}
-
-function normalizeClientUserId(v: string | null | undefined): string | null {
-  if (!v) return null;
-  const t = String(v).trim();
-  if (!t || t.startsWith("session_")) return null;
-  if (t.startsWith("user_")) return t.slice(5);
-  return t;
-}
-
-async function resolvePublicUserId(
-  req: NextRequest,
-  supabase: ReturnType<typeof getSupabase>,
-  incoming: string | null | undefined
-): Promise<string | null> {
-  const normalized = normalizeClientUserId(incoming);
-  if (normalized) return normalized;
-
-  const cookieUserId = req.cookies.get("hama_user_id")?.value?.trim();
-  if (cookieUserId) return cookieUserId;
-
-  const kakaoId = req.cookies.get("hama_kakao_id")?.value?.trim();
-  if (!kakaoId || !supabase) return null;
-  try {
-    const { data, error } = await supabase.from("users").select("id").eq("kakao_id", kakaoId).single();
-    if (error) {
-      console.error("resolvePublicUserId(recommendation by kakao_id) failed:", error.message);
-      return null;
-    }
-    return data?.id ?? null;
-  } catch (e) {
-    console.error("resolvePublicUserId(recommendation) failed:", e);
-    return null;
-  }
-}
+export const dynamic = "force-dynamic";
 
 type Body = {
   session_id: string;
@@ -107,12 +62,12 @@ type Body = {
   };
 };
 
-async function insertAnalyticsV2(body: Body, resolvedUserId: string | null) {
+async function insertAnalyticsV2(body: Body, resolvedUserId: string | null): Promise<boolean> {
   const v2 = body.analytics_v2;
-  if (!v2) return;
+  if (!v2) return true;
 
-  const svc = getSupabaseService();
-  if (!svc) return;
+  const svc = getSupabaseAdmin();
+  if (!svc) return false;
 
   const sessionId = String(body.session_id ?? "").trim() || null;
   const recommendationId = typeof v2.recommendation_id === "string" && v2.recommendation_id ? v2.recommendation_id : null;
@@ -153,54 +108,65 @@ async function insertAnalyticsV2(body: Body, resolvedUserId: string | null) {
       const { error } = await svc.from("recommendations").insert(row);
       if (error) {
         const isDup = error.code === "23505" || /duplicate key/i.test(String(error.message ?? ""));
-        if (isDup) {
-          try {
-            const { data: existing } = await svc
-              .from("recommendations")
-              .select("metadata")
-              .eq("id", recommendationId)
-              .maybeSingle();
-            const prev =
-              existing?.metadata && typeof existing.metadata === "object"
-                ? (existing.metadata as Record<string, unknown>)
-                : {};
-            const merged = snapshot
-              ? mergeImpressionHistory({ ...prev, ...baseMetadata }, snapshot, atIso)
-              : { ...prev, ...baseMetadata };
-            const { error: upErr } = await svc
-              .from("recommendations")
-              .update({
-                shown_place_ids: v2.shown_place_ids ?? [],
-                main_pick_id: v2.main_pick_id ?? null,
-                recommendation_reasons: v2.recommendation_reasons ?? {},
-                weights: v2.weights ?? {},
-                weather: v2.weather ?? null,
-                scenario: v2.scenario ?? body.scenario ?? null,
-                metadata: merged,
-                day_of_week: v2.day_of_week ?? null,
-                time_of_day: v2.time_of_day ?? null,
-              })
-              .eq("id", recommendationId);
-            if (upErr) console.error("recommendations update:", upErr.message);
-          } catch (e) {
-            console.error("recommendations upsert failed:", e);
+        if (!isDup || !resolvedUserId) {
+          console.error("recommendations insert", error.code);
+          return false;
+        }
+        try {
+          const { data: existing, error: readError } = await svc
+            .from("recommendations")
+            .select("metadata")
+            .eq("id", recommendationId)
+            .eq("user_id", resolvedUserId)
+            .maybeSingle();
+          if (readError || !existing) {
+            console.error("recommendations owner read", readError?.code ?? "not_owner");
+            return false;
           }
-        } else {
-          console.error("recommendations insert:", error.message);
+          const prev =
+            existing?.metadata && typeof existing.metadata === "object"
+              ? (existing.metadata as Record<string, unknown>)
+              : {};
+          const merged = snapshot
+            ? mergeImpressionHistory({ ...prev, ...baseMetadata }, snapshot, atIso)
+            : { ...prev, ...baseMetadata };
+          const { data: updated, error: upErr } = await svc
+            .from("recommendations")
+            .update({
+              shown_place_ids: v2.shown_place_ids ?? [],
+              main_pick_id: v2.main_pick_id ?? null,
+              recommendation_reasons: v2.recommendation_reasons ?? {},
+              weights: v2.weights ?? {},
+              weather: v2.weather ?? null,
+              scenario: v2.scenario ?? body.scenario ?? null,
+              metadata: merged,
+              day_of_week: v2.day_of_week ?? null,
+              time_of_day: v2.time_of_day ?? null,
+            })
+            .eq("id", recommendationId)
+            .eq("user_id", resolvedUserId)
+            .select("id");
+          if (upErr || !updated?.length) {
+            console.error("recommendations update", upErr?.code ?? "not_owner");
+            return false;
+          }
+        } catch (e) {
+          console.error("recommendations upsert failed", e instanceof Error ? e.name : "error");
+          return false;
         }
       }
-      return;
+      return true;
     }
 
     if (body.event_name === "contextual_reject" && recommendationId) {
       if (!isRecommendationRejectReason(v2.reject_reason)) {
         console.warn("contextual_reject ignored: invalid reject_reason");
-        return;
+        return true;
       }
       const placeId = String(v2.selected_place_id ?? body.entity_id ?? "").trim();
       if (!placeId) {
         console.warn("contextual_reject ignored: missing place_id");
-        return;
+        return true;
       }
       const meta = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
       const row = buildContextualRejectResponseRow({
@@ -229,8 +195,11 @@ async function insertAnalyticsV2(body: Body, resolvedUserId: string | null) {
         sourcePage: body.source_page ?? null,
       });
       const { error } = await svc.from("recommendation_responses").insert(row);
-      if (error) console.error("recommendation_responses insert:", error.message);
-      return;
+      if (error) {
+        console.error("recommendation_responses insert", error.code);
+        return false;
+      }
+      return true;
     }
 
     if (
@@ -255,8 +224,11 @@ async function insertAnalyticsV2(body: Body, resolvedUserId: string | null) {
           raw_metadata: body.metadata ?? {},
         },
       });
-      if (error) console.error("recommendation_responses insert:", error.message);
-      return;
+      if (error) {
+        console.error("recommendation_responses insert", error.code);
+        return false;
+      }
+      return true;
     }
 
     if (body.event_name === "correction_event" && recommendationId) {
@@ -272,53 +244,74 @@ async function insertAnalyticsV2(body: Body, resolvedUserId: string | null) {
           raw_metadata: body.metadata ?? {},
         },
       });
-      if (error) console.error("corrections insert:", error.message);
+      if (error) {
+        console.error("corrections insert", error.code);
+        return false;
+      }
     }
+    return true;
   } catch (e) {
-    console.error("analytics_v2 insert failed:", e);
+    console.error("analytics_v2 insert failed", e instanceof Error ? e.name : "error");
+    return false;
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as Body;
-    const supabase = getSupabase();
-    const resolvedUserId = supabase ? await resolvePublicUserId(req, supabase, body.user_id ?? null) : null;
-    const skipEventsTable = shouldSkipRecommendationEventsTable(body.event_name);
-    if (supabase && !skipEventsTable) {
+    const eventName = clipText(body.event_name, 64);
+    if (!eventName || !isAllowedRecommendationLogEvent(eventName)) {
+      return NextResponse.json({ ok: false, error: "invalid_event_type" }, { status: 400 });
+    }
+    const metadata = boundedRecord(body.metadata);
+    if (!metadata) {
+      return NextResponse.json({ ok: false, error: "invalid_event_data" }, { status: 400 });
+    }
+    const resolvedUserId = await getVerifiedUserId(req);
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      return NextResponse.json({ ok: false, error: "supabase_unavailable" }, { status: 500 });
+    }
+    const skipEventsTable = shouldSkipRecommendationEventsTable(eventName);
+    if (!skipEventsTable) {
       const row = {
-        session_id: body.session_id ?? "unknown",
+        session_id: clipText(body.session_id, 128) ?? "unknown",
         user_id: resolvedUserId,
-        event_name: body.event_name,
+        event_name: eventName,
         entity_type: body.entity_type ?? null,
-        entity_id: body.entity_id ?? null,
+        entity_id: clipText(body.entity_id, 80),
         rank_position: body.recommendation_rank ?? null,
-        scenario: body.scenario ?? null,
-        child_age_group: body.child_age_group ?? null,
-        weather_condition: body.weather_condition ?? null,
-        time_of_day: body.time_of_day ?? null,
-        date_time_band: body.date_time_band ?? null,
-        source_page: body.source_page ?? null,
+        scenario: clipText(body.scenario, 80),
+        child_age_group: clipText(body.child_age_group, 40),
+        weather_condition: clipText(body.weather_condition, 40),
+        time_of_day: clipText(body.time_of_day, 40),
+        date_time_band: clipText(body.date_time_band, 40),
+        source_page: clipText(body.source_page, 80),
         created_at: body.created_at ?? new Date().toISOString(),
-        template_id: body.template_id ?? null,
-        step_pattern: body.step_pattern ?? null,
-        place_ids: body.place_ids ?? [],
+        template_id: clipText(body.template_id, 80),
+        step_pattern: clipText(body.step_pattern, 80),
+        place_ids: Array.isArray(body.place_ids) ? body.place_ids.slice(0, 30) : [],
         metadata: {
-          ...(body.metadata ?? {}),
+          ...metadata,
           place_snapshot: body.place_snapshot ?? null,
           course_snapshot: body.course_snapshot ?? null,
           recommendation_rank: body.recommendation_rank ?? null,
         },
       };
       const { error } = await supabase.from("recommendation_events").insert(row);
-      if (error) console.error("recommendation_events insert:", error);
+      if (error) {
+        console.error("recommendation_events insert", error.code);
+        return NextResponse.json({ ok: false, error: "event_write_failed" }, { status: 500 });
+      }
     }
 
-    // v2 tables (best-effort; migration 미반영 환경은 조용히 실패)
-    await insertAnalyticsV2(body, resolvedUserId);
+    const wrote = await insertAnalyticsV2({ ...body, event_name: eventName }, resolvedUserId);
+    if (!wrote) {
+      return NextResponse.json({ ok: false, error: "event_write_failed" }, { status: 500 });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error("recommendation log", e);
-    return NextResponse.json({ ok: false }, { status: 500 });
+    console.error("recommendation log", e instanceof Error ? e.name : "error");
+    return NextResponse.json({ ok: false, error: "event_write_failed" }, { status: 500 });
   }
 }

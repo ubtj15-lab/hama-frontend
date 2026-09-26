@@ -15,9 +15,12 @@ export function useRecent() {
     if (!userId || userId.startsWith("server")) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/recent?user_id=${encodeURIComponent(userId)}&limit=20`
-      );
+      const res = await fetch("/api/recent?limit=20", { credentials: "include" });
+      if (res.status === 401) {
+        setRecentCards([]);
+        return;
+      }
+      if (!res.ok) return;
       const json = await res.json();
       const stores = json.stores ?? [];
       setRecentCards(
@@ -36,11 +39,13 @@ export function useRecent() {
     async (storeId: string) => {
       if (!userId || userId.startsWith("server")) return;
       try {
-        await fetch("/api/recent/record", {
+        const res = await fetch("/api/recent/record", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: userId, store_id: storeId }),
+          body: JSON.stringify({ store_id: storeId }),
         });
+        if (!res.ok) return;
         await fetchRecent();
       } catch {
         // ignore

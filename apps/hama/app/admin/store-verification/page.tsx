@@ -2,6 +2,7 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { adminAccessMessage } from "../adminAccessMessage";
 
 type Capability = {
   solo_friendly: boolean | null;
@@ -70,7 +71,7 @@ export default function AdminStoreVerificationPage() {
     try {
       const res = await fetch("/api/admin/store-verification?limit=40");
       const json = (await res.json()) as VerifyResponse;
-      if (!res.ok) setMsg(json.error ?? "로드 실패");
+      if (!res.ok) setMsg(adminAccessMessage(res.status) ?? json.error ?? "로드 실패");
       else setData(json);
     } catch {
       setMsg("로드 중 오류");
@@ -134,7 +135,7 @@ export default function AdminStoreVerificationPage() {
         body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (!res.ok) setMsg(json.error ?? "저장 실패");
+      if (!res.ok) setMsg(adminAccessMessage(res.status) ?? json.error ?? "저장 실패");
       else {
         setMsg(`확정 저장 완료: ${store.name}`);
         setData((prev) =>

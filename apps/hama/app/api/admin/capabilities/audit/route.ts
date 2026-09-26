@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { enforceAdmin } from "@/lib/server/adminAccess";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseKey =
@@ -33,7 +34,9 @@ function hasData(v: unknown): boolean {
   return true;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await enforceAdmin(req);
+  if (denied) return denied;
   const supabase = getSupabase();
   if (!supabase) return NextResponse.json({ error: "DB not configured" }, { status: 500 });
 

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { adminAccessMessage } from "../adminAccessMessage";
 import { PARTNER_APP_URL } from "../../lib/partnerUrl";
 
 type Store = {
@@ -35,6 +36,11 @@ export default function AdminStoresPage() {
     try {
       const res = await fetch(`/api/admin/stores?q=${encodeURIComponent(q)}&limit=30`);
       const data = await res.json();
+      if (!res.ok) {
+        setStores([]);
+        setMessage({ type: "err", text: adminAccessMessage(res.status) || data.error || "매장을 불러오지 못했어요." });
+        return;
+      }
       setStores(data.stores ?? []);
     } catch {
       setStores([]);
@@ -48,6 +54,11 @@ export default function AdminStoresPage() {
     try {
       const res = await fetch(`/api/admin/users?q=${encodeURIComponent(q)}&limit=30`);
       const data = await res.json();
+      if (!res.ok) {
+        setUsers([]);
+        setMessage({ type: "err", text: adminAccessMessage(res.status) || data.error || "사용자를 불러오지 못했어요." });
+        return;
+      }
       setUsers(data.users ?? []);
     } catch {
       setUsers([]);
@@ -89,7 +100,7 @@ export default function AdminStoresPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessage({ type: "err", text: data.error || "저장 실패" });
+        setMessage({ type: "err", text: adminAccessMessage(res.status) || data.error || "저장 실패" });
         return;
       }
       setMessage({ type: "ok", text: "저장했어요." });
@@ -114,7 +125,7 @@ export default function AdminStoresPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessage({ type: "err", text: data.error || "해제 실패" });
+        setMessage({ type: "err", text: adminAccessMessage(res.status) || data.error || "해제 실패" });
         return;
       }
       setMessage({ type: "ok", text: "연결 해제했어요." });

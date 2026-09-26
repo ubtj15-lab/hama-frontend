@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdmin } from "@/lib/server/supabaseAdmin";
+import { enforceAdmin } from "@/lib/server/adminAccess";
 import { VISIT_PLACE_PHOTO_BUCKET } from "@/lib/server/visitPlacePhotoUpload";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,8 @@ type VisitPhotoRow = {
 };
 
 export async function GET(req: NextRequest) {
+  const denied = await enforceAdmin(req);
+  if (denied) return denied;
   let supabase: ReturnType<typeof createSupabaseAdmin>;
   try {
     supabase = createSupabaseAdmin();

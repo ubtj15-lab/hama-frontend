@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
-import { getUserIdFromAuthCookie } from "@/lib/server/userResolver";
+import { getVerifiedUserId } from "@/lib/server/verifiedSession";
 import {
   formHasVisitPhotoKeys,
   parseVisitPhotoFilesFromForm,
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const userId = getUserIdFromAuthCookie(req);
+  const userId = await getVerifiedUserId(req);
   if (!userId) {
     return NextResponse.json({ ok: false, error: "LOGIN_REQUIRED" }, { status: 401 });
   }
@@ -109,13 +109,11 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (selectedDecision.error) {
-      return NextResponse.json(
-        { ok: false, error: "selected_place_read_failed", detail: selectedDecision.error.message },
-        { status: 200 }
-      );
+      console.error("[receipt-verify] selected place read failed", selectedDecision.error.code);
+      return NextResponse.json({ ok: false, error: "selected_place_read_failed" }, { status: 500 });
     }
     if (!selectedDecision.data) {
-      return NextResponse.json({ ok: false, error: "selected_place_not_found" }, { status: 200 });
+      return NextResponse.json({ ok: false, error: "selected_place_not_found" }, { status: 404 });
     }
 
     const selected = selectedDecision.data;
@@ -140,10 +138,8 @@ export async function POST(req: NextRequest) {
         upsert: false,
       });
     if (upload.error) {
-      return NextResponse.json(
-        { ok: false, error: "storage_upload_failed", detail: upload.error.message },
-        { status: 500 }
-      );
+      console.error("[receipt-verify] storage upload failed");
+      return NextResponse.json({ ok: false, error: "storage_upload_failed" }, { status: 500 });
     }
 
     const inserted = await supabase
@@ -161,10 +157,8 @@ export async function POST(req: NextRequest) {
       .select("id")
       .single();
     if (inserted.error) {
-      return NextResponse.json(
-        { ok: false, error: "receipt_verification_insert_failed", detail: inserted.error.message },
-        { status: 200 }
-      );
+      console.error("[receipt-verify] insert failed", inserted.error.code);
+      return NextResponse.json({ ok: false, error: "receipt_verification_insert_failed" }, { status: 500 });
     }
 
     const verificationId = inserted.data?.id ? String(inserted.data.id) : null;

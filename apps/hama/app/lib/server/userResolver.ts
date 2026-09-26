@@ -1,41 +1,23 @@
 import type { NextRequest } from "next/server";
-import { HAMA_USER_ID_COOKIE } from "./authCookies";
-import { getSupabaseAdmin } from "./supabaseAdmin";
+import { getVerifiedUserId } from "./verifiedSession";
 
-function normalizeClientUserId(v: string | null | undefined): string | null {
-  if (!v) return null;
-  const t = String(v).trim();
-  if (!t || t.startsWith("session_")) return null;
-  if (t.startsWith("user_")) return t.slice(5);
-  return t;
+/** 서버가 발급한 세션만 사용자 식별에 사용한다. */
+export async function getVerifiedUserIdFromRequest(req: NextRequest): Promise<string | null> {
+  return getVerifiedUserId(req);
 }
 
-/** 영수증 인증 등 — httpOnly `hama_user_id` 쿠키만 허용 */
-export function getUserIdFromAuthCookie(req: NextRequest): string | null {
-  const id = req.cookies.get(HAMA_USER_ID_COOKIE)?.value?.trim();
-  return id || null;
+/**
+ * 서명 없는 `hama_user_id` 쿠키는 신원이 아니다.
+ * 기존 라우트가 `getUserIdFromAuthCookie(req)`로 호출하므로 인자는 유지한다.
+ */
+export function getUserIdFromAuthCookie(_req: NextRequest): string | null {
+  return null;
 }
 
+/** 요청 본문의 user_id와 레거시 쿠키는 무시하고 서버 세션만 본다. */
 export async function resolveUserIdFromRequest(
   req: NextRequest,
-  incomingUserId?: string | null
+  _incomingUserId?: string | null
 ): Promise<string | null> {
-  const cookieUserId = getUserIdFromAuthCookie(req);
-  if (cookieUserId) return cookieUserId;
-
-  const normalized = normalizeClientUserId(incomingUserId ?? null);
-  if (normalized) return normalized;
-
-  const kakaoId = req.cookies.get("hama_kakao_id")?.value?.trim();
-  if (!kakaoId) return null;
-  const supabase = getSupabaseAdmin();
-  if (!supabase) return null;
-
-  try {
-    const { data, error } = await supabase.from("users").select("id").eq("kakao_id", kakaoId).single();
-    if (error) return null;
-    return data?.id ?? null;
-  } catch {
-    return null;
-  }
+  return getVerifiedUserId(req);
 }

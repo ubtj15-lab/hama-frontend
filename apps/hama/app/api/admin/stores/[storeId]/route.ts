@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { enforceAdmin, isSafeResourceId, isUuid } from "@/lib/server/adminAccess";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string | undefined;
 const supabaseKey =
@@ -21,13 +22,11 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ storeId: string }> }
 ) {
-  const supabase = getSupabase();
-  if (!supabase) {
-    return NextResponse.json({ error: "DB not configured" }, { status: 500 });
-  }
+  const denied = await enforceAdmin(req, { mutate: true });
+  if (denied) return denied;
 
   const { storeId } = await params;
-  if (!storeId) {
+  if (!storeId || !isSafeResourceId(storeId)) {
     return NextResponse.json({ error: "storeId required" }, { status: 400 });
   }
 
@@ -39,6 +38,14 @@ export async function PATCH(
   }
 
   const owner_id = body.owner_id === undefined ? undefined : body.owner_id === null ? null : String(body.owner_id);
+  if (owner_id !== null && (owner_id === undefined || !isUuid(owner_id))) {
+    return NextResponse.json({ error: "invalid_owner_id" }, { status: 400 });
+  }
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    return NextResponse.json({ error: "DB not configured" }, { status: 500 });
+  }
 
   try {
     const { data, error } = await supabase

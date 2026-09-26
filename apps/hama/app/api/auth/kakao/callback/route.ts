@@ -1,6 +1,7 @@
 // app/api/auth/kakao/callback/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { applyAuthSessionCookies } from "@/lib/server/authCookies";
+import { HAMA_IS_NEW_USER_COOKIE, HAMA_USER_NICKNAME_COOKIE, authSessionCookieOptions } from "@/lib/server/authCookies";
+import { issueServerSession, setSessionCookie } from "@/lib/server/verifiedSession";
 import { getKakaoAuthEnv } from "@/lib/server/kakaoAuthConfig";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
 
@@ -244,8 +245,24 @@ export async function GET(req: NextRequest) {
     return loginFailedRedirect(req, "missing_user_id");
   }
 
+  const session = await issueServerSession(userId);
+  if (!session) {
+    console.error("[kakao/callback] server session issue failed", { userId });
+    return loginFailedRedirect(req, "session_unavailable");
+  }
+
   const res = NextResponse.redirect(new URL(returnTo, req.url));
-  applyAuthSessionCookies(res, { userId, nickname, kakaoId, isNewUser });
-  console.info("[kakao/callback] login success", { userId, kakaoId, isNewUser, returnTo });
+  setSessionCookie(res, session.token, session.expiresAt);
+  const display = authSessionCookieOptions();
+  res.cookies.set(HAMA_USER_NICKNAME_COOKIE, encodeURIComponent(nickname), {
+    ...display,
+    httpOnly: false,
+  });
+  res.cookies.set(HAMA_IS_NEW_USER_COOKIE, isNewUser ? "1" : "0", {
+    ...display,
+    httpOnly: false,
+    maxAge: 60 * 60 * 24 * 3,
+  });
+  console.info("[kakao/callback] login success", { userId, isNewUser, returnTo });
   return res;
 }

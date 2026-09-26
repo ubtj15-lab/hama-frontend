@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { HAMA_USER_ID_COOKIE } from "@/lib/server/authCookies";
 import { getSupabaseAdmin } from "@/lib/server/supabaseAdmin";
+import { getVerifiedUserId } from "@/lib/server/verifiedSession";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const userId = req.cookies.get(HAMA_USER_ID_COOKIE)?.value?.trim();
+  const userId = await getVerifiedUserId(req);
   if (!userId) {
     return NextResponse.json({ user: null });
   }
