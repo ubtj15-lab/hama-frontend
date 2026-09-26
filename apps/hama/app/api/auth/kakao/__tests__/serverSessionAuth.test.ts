@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { HAMA_SESSION_COOKIE, HAMA_USER_ID_COOKIE } from "@/lib/server/authCookies";
+import { HAMA_KAKAO_OAUTH_COOKIE, resetOAuthStateReuseForTests, sealOAuthState } from "@/lib/server/kakaoOAuthState";
 import { hashSessionToken } from "@/lib/server/verifiedSession";
 import { GET as kakaoCallback } from "../callback/route";
 import { GET as kakaoLogout } from "../logout/route";
@@ -134,10 +135,17 @@ vi.mock("@/lib/server/supabaseAdmin", () => ({
   getSupabaseAdmin: () => harness.admin(),
 }));
 
-function callbackRequest(query = ""): NextRequest {
-  return new NextRequest(`http://localhost:3000/api/auth/kakao/callback${query}`, {
-    headers: { host: "localhost:3000" },
-  });
+function callbackRequest(query = "", cookie = ""): NextRequest {
+  const headers = new Headers({ host: "localhost:3000" });
+  if (cookie) headers.set("cookie", cookie);
+  return new NextRequest(`http://localhost:3000/api/auth/kakao/callback${query}`, { headers });
+}
+
+function callbackWithState(returnTo: string, code?: string): NextRequest {
+  const issued = sealOAuthState(returnTo);
+  const params = new URLSearchParams({ state: issued.state });
+  if (code !== undefined) params.set("code", code);
+  return callbackRequest(`?${params.toString()}`, `${HAMA_KAKAO_OAUTH_COOKIE}=${issued.cookie}`);
 }
 
 function cookieHeader(cookies: Record<string, string>): string {
@@ -187,6 +195,7 @@ describe("kakao server session", () => {
 
   beforeEach(() => {
     harness.reset();
+    resetOAuthStateReuseForTests();
     consoleError.mockClear();
     consoleInfo.mockClear();
     vi.stubEnv("KAKAO_REST_API_KEY", "test-kakao-rest-key");
@@ -211,7 +220,7 @@ describe("kakao server session", () => {
 
   it("issues an httpOnly session after kakao verification and returns the safe path", async () => {
     kakaoSuccess();
-    const res = await kakaoCallback(callbackRequest("?code=test-code&state=%2Fresults"));
+    const res = await kakaoCallback(callbackWithState("/results", "test-code"));
     expect(res.status).toBeGreaterThanOrEqual(300);
     expect(res.headers.get("location")).toBe("http://localhost:3000/results");
 
@@ -230,6 +239,7 @@ describe("kakao server session", () => {
     expect(JSON.stringify(harness.state.sessions[0])).not.toContain(token!);
     expect(loggedText()).not.toContain(token!);
     expect(loggedText()).not.toContain("kakao-access-test");
+    expect(loggedText()).not.toContain("test-code");
 
     const meRes = await me(
       new NextRequest("http://localhost:3000/api/me", {
@@ -241,11 +251,15 @@ describe("kakao server session", () => {
     });
   });
 
-  it("keeps an external oauth state on the home path", async () => {
+  it("rejects an external oauth state that is not bound to this browser", async () => {
     kakaoSuccess();
     const res = await kakaoCallback(callbackRequest("?code=test-code&state=https%3A%2F%2Fevil.example%2Fphish"));
-    expect(res.headers.get("location")).toBe("http://localhost:3000/");
-    expect(cookieValue(res, HAMA_SESSION_COOKIE)).toBeTruthy();
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("login=failed");
+    expect(location).toContain("reason=state_missing");
+    expect(location).not.toContain("evil.example");
+    expect(cookieValue(res, HAMA_SESSION_COOKIE)).toBeNull();
+    expect(harness.state.sessions).toHaveLength(0);
   });
 
   it("fails login when kakao rejects the code and does not issue a session", async () => {
@@ -253,7 +267,7 @@ describe("kakao server session", () => {
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }))
     );
-    const res = await kakaoCallback(callbackRequest("?code=bad-code"));
+    const res = await kakaoCallback(callbackWithState("/", "bad-code"));
     expect(res.headers.get("location")).toContain("login=failed");
     expect(res.headers.get("location")).toContain("reason=token_request_failed");
     expect(setCookieLines(res).join("\n")).not.toContain(HAMA_SESSION_COOKIE);
@@ -262,15 +276,17 @@ describe("kakao server session", () => {
   });
 
   it("fails login when the authorization code is missing", async () => {
-    const res = await kakaoCallback(callbackRequest(""));
+    const res = await kakaoCallback(callbackWithState("/", ""));
     expect(res.headers.get("location")).toContain("reason=missing_code");
+    const bare = await kakaoCallback(callbackRequest(""));
+    expect(bare.headers.get("location")).toContain("reason=state_missing");
     expect(harness.state.sessions).toHaveLength(0);
   });
 
   it("fails login when session issuance fails and does not fall back to a user id cookie", async () => {
     kakaoSuccess();
     harness.state.sessionWriteError = "insert rejected";
-    const res = await kakaoCallback(callbackRequest("?code=test-code&state=%2F"));
+    const res = await kakaoCallback(callbackWithState("/", "test-code"));
     const location = res.headers.get("location") ?? "";
     expect(location).toContain("login=failed");
     expect(location).toContain("reason=session_unavailable");
@@ -283,7 +299,7 @@ describe("kakao server session", () => {
 
   it("rejects a tampered session cookie even when a user id cookie is present", async () => {
     kakaoSuccess();
-    const login = await kakaoCallback(callbackRequest("?code=test-code"));
+    const login = await kakaoCallback(callbackWithState("/", "test-code"));
     const meRes = await me(
       new NextRequest("http://localhost:3000/api/me", {
         headers: {
@@ -300,7 +316,7 @@ describe("kakao server session", () => {
 
   it("rejects an expired session", async () => {
     kakaoSuccess();
-    const login = await kakaoCallback(callbackRequest("?code=test-code"));
+    const login = await kakaoCallback(callbackWithState("/", "test-code"));
     const token = cookieValue(login, HAMA_SESSION_COOKIE)!;
     harness.state.sessions[0].expires_at = new Date(Date.now() - 1000).toISOString();
     const meRes = await me(
@@ -318,7 +334,7 @@ describe("kakao server session", () => {
 
   it("revokes the server session on logout so the old cookie cannot be reused", async () => {
     kakaoSuccess();
-    const login = await kakaoCallback(callbackRequest("?code=test-code"));
+    const login = await kakaoCallback(callbackWithState("/", "test-code"));
     const token = cookieValue(login, HAMA_SESSION_COOKIE)!;
     const logout = await kakaoLogout(
       new NextRequest("http://localhost:3000/api/auth/kakao/logout", {

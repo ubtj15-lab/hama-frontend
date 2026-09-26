@@ -1,6 +1,7 @@
 // app/api/auth/kakao/logout/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { clearAuthSessionCookies } from "@/lib/server/authCookies";
+import { clearOAuthStateCookie } from "@/lib/server/kakaoOAuthState";
 import { revokeServerSession } from "@/lib/server/verifiedSession";
 
 export async function GET(req: NextRequest) {
@@ -12,6 +13,7 @@ export async function GET(req: NextRequest) {
     const res = NextResponse.redirect(new URL("/", req.url));
     await revokeServerSession(req);
     clearAuthSessionCookies(res);
+    clearOAuthStateCookie(res);
     return res;
   }
 
@@ -41,5 +43,6 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.redirect(kakaoLogoutUrl);
   await revokeServerSession(req);
   clearAuthSessionCookies(res);
+  clearOAuthStateCookie(res);
   return res;
 }
