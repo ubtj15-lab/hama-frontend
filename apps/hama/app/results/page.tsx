@@ -2,11 +2,11 @@
 
 import React, { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useHomeCards } from "@/_hooks/useHomeCards";
 import { useHomeMode } from "@/_hooks/useHomeMode";
 import { useRecent } from "@/_hooks/useRecent";
-import { usePlaceNameSearchResults } from "@/_hooks/usePlaceNameSearchResults";
-import { explainPlaceNameSearchGate, normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
+import { useResultsRecommendationDeck } from "@/_hooks/useResultsRecommendationDeck";
+import { normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
+import { assembleResultsCardLists } from "@/lib/results/resultsRecommendationDeck";
 import { resolveOrdinaryRecommendationListVisible } from "@/lib/results/courseResultVisibility";
 import {
   COURSE_REFRESH_BUTTON_COPY,
@@ -16,7 +16,7 @@ import {
   recordDisplayedCoursePlans,
   shouldShowCourseRefreshButton,
 } from "@/lib/results/courseRepeat";
-import { isDirectSearchModeQuery, logDirectSearchPipeline } from "@/lib/search/directSearch";
+import { logDirectSearchPipeline } from "@/lib/search/directSearch";
 import {
   parseScenarioIntent,
   explainCourseGenerationMatch,
@@ -590,25 +590,51 @@ function ResultsContent() {
     setModeOverride("single");
   }, [courseIdParam, isGenericFoodResultsQuery, isFamilyDiningAliasQuery, matchedNamedFoodPreset, isSoloSituationQuery, qRaw]);
 
-  const placeNameGate = useMemo(() => explainPlaceNameSearchGate(qRaw), [qRaw]);
-  /** 직접 음식·메뉴 검색(고기, 중식 등) — API 검색 우선 */
-  const directSearchMode = useMemo(() => isDirectSearchModeQuery(qRaw), [qRaw]);
-  /** 음식 세부 프리셋도 direct search면 search-by-name API를 켠다 */
-  const placeSearchEnabled =
-    (directSearchMode || (!matchedNamedFoodPreset && !isSoloSituationQuery)) &&
-    (directSearchMode || placeNameGate.enabled);
-  const { items: placeHits, loading: placeSearchLoading, meta: placeSearchMeta } = usePlaceNameSearchResults(
-    qRaw,
+  const {
+    placeNameGate,
+    directSearchMode,
     placeSearchEnabled,
-    userLoc?.lat,
-    userLoc?.lng
-  );
-
-  const deferRecForPlaceLookup = matchedNamedFoodPreset ? false : placeSearchEnabled && placeSearchLoading;
-  const placeLookupDoneEarly = !placeSearchEnabled || !placeSearchLoading;
-  /** 매장명 API 성공(1건 이상)이면 추천/코스 후보 페치를 하지 않음 → 리스트가 뒤에서 덮어쓰이지 않음 */
-  const placeSearchDominant = placeSearchEnabled && placeLookupDoneEarly && placeHits.length > 0;
-  const resultsFlowMode = placeSearchDominant ? "place_search" : "recommendation";
+    placeHits,
+    placeSearchLoading,
+    placeSearchMeta,
+    deferRecForPlaceLookup,
+    resultsFlowMode,
+    cards,
+    deckRotationKey,
+    recommendEngine,
+    candidatePool,
+    courseCandidatePool,
+    isLoading,
+    deckIncomplete,
+    bootstrapBusy,
+    pageBusy,
+    placeLookupBusy,
+    placeLookupDone,
+    showNameSearch,
+    placeSearchDominant,
+  } = useResultsRecommendationDeck({
+    qRaw,
+    hasNamedFoodPreset: Boolean(matchedNamedFoodPreset),
+    isSoloSituationQuery,
+    userLat: userLoc?.lat,
+    userLng: userLoc?.lng,
+    shuffleKey,
+    intentForHomeCards,
+    rankingBootstrapReady,
+    recentExcludeIds,
+    rejectedMainPickIds,
+    repeatAvoidPlaceIds: sessionRepeatAvoidIds,
+    profileOverride,
+    relaxPersonalRules,
+    searchQuery: searchQueryForHomeCards,
+    scenarioObject: scenarioObjectForHomeCards,
+    courseIdParam,
+    tonkatsuRecommendDisabled,
+    explicitIntent: resolvedExplicitIntentForHome,
+    explicitCategory: resolvedExplicitCategoryForHome,
+    explicitMode: resolvedModeForHome,
+    namedFoodPreset: matchedNamedFoodPreset,
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -646,37 +672,6 @@ function ResultsContent() {
     resolvedExplicitCategoryForHome,
   ]);
 
-  const { cards, deckRotationKey, recommendEngine, candidatePool, courseCandidatePool, isLoading, deckIncomplete } =
-    useHomeCards(
-    "all",
-    shuffleKey,
-    intentForHomeCards,
-    {
-      userLat: userLoc?.lat ?? null,
-      userLng: userLoc?.lng ?? null,
-      excludeStoreIds: recentExcludeIds,
-      rejectedMainPickIds,
-      repeatAvoidPlaceIds: sessionRepeatAvoidIds,
-      profileOverride,
-      relaxPersonalRules,
-      searchQuery: searchQueryForHomeCards,
-      scenarioObject: scenarioObjectForHomeCards,
-      /** 매장명 검색이 끝날 때까지 추천 페치·랭킹 지연 — 첫 프레임 레이스 방지 */
-      deferRanking: !rankingBootstrapReady || deferRecForPlaceLookup,
-      /** 세션에 고정된 코스로 돌아온 경우 재랭킹·재페치 없음 · 돈까스 프리셋 오베 전 비활성화 시 추천 페치 생략 */
-      skipFetch: Boolean(courseIdParam) || tonkatsuRecommendDisabled,
-      /**
-       * 매장명 매칭 후에도 추천 풀은 가져온다. 메인 리스트는 `!showNameSearch`일 때만 그려서
-       * 검색 카드가 덮어쓰이지 않고, `secondaryRecommendCards`로 "이런 곳도 있어"만 채운다.
-       */
-      explicitIntent: resolvedExplicitIntentForHome,
-      explicitCategory: resolvedExplicitCategoryForHome,
-      explicitMode: resolvedModeForHome,
-      namedFoodPreset: matchedNamedFoodPreset ?? undefined,
-      recommendedDeckCap: matchedNamedFoodPreset ? 5 : undefined,
-    }
-  );
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isGenericFoodResultsQuery) return;
@@ -698,12 +693,6 @@ function ResultsContent() {
     isLoading,
     cards,
   ]);
-
-  const bootstrapBusy = !rankingBootstrapReady;
-  const pageBusy = !rankingBootstrapReady || isLoading;
-  const placeLookupBusy = placeSearchEnabled && placeSearchLoading;
-  const placeLookupDone = !placeSearchEnabled || !placeSearchLoading;
-  const showNameSearch = placeSearchEnabled && placeLookupDone && placeHits.length > 0;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -728,13 +717,6 @@ function ResultsContent() {
     placeSearchEnabled,
     placeHits.length,
   ]);
-
-  const placeHitIds = useMemo(() => new Set(placeHits.map((c) => c.id)), [placeHits]);
-  /** 뷰티 URL: 매장명 검색 히트 제외·primary/secondary 분리 없이 홈 카드 전체를 후보로 쓴다 */
-  const secondaryRecommendCards = useMemo(
-    () => (beautyUrlFinalGuard ? cards : cards.filter((c) => !placeHitIds.has(c.id))),
-    [beautyUrlFinalGuard, cards, placeHitIds]
-  );
 
   const [recommendationPatternBoostMap, setRecommendationPatternBoostMap] = useState(
     () => new Map<string, number>()
@@ -808,43 +790,29 @@ function ResultsContent() {
    * 뷰티 URL: 코스 복원 실패/세션 고정 코스 등으로 `cards`를 덮어쓰지 않고 항상 `useHomeCards` 결과만 사용.
    * 그 외: 기존 코스·복원 분기 유지.
    */
-  const directSearchPrimaryCards = useMemo(() => {
-    if (!directSearchMode || placeHits.length === 0) return null;
-    return placeHits.slice(0, 12);
-  }, [directSearchMode, placeHits]);
-
-  const primaryRecommendationCards: HomeCard[] = beautyUrlFinalGuard
-    ? cards
-    : directSearchPrimaryCards ??
-      (courseRestoreFailed
-        ? []
-        : isCourseFixedResults && courseFixedCards
-          ? courseFixedCards
-          : cards);
-
-  const primaryListCards = useMemo(() => {
-    if (beautyUrlFinalGuard) {
-      const whitelisted = primaryRecommendationCards.filter((c) => passesBeautyIndustryWhitelist(c));
-      return whitelisted.length > 0 ? whitelisted : primaryRecommendationCards;
-    }
-    if (cultureUrlFinalGuard) {
-      const whitelisted = primaryRecommendationCards.filter((c) => passesCultureIndustryWhitelist(c));
-      return whitelisted.length > 0 ? whitelisted : primaryRecommendationCards;
-    }
-    return primaryRecommendationCards;
-  }, [beautyUrlFinalGuard, cultureUrlFinalGuard, primaryRecommendationCards]);
-
-  const secondaryListCards = useMemo(() => {
-    if (beautyUrlFinalGuard) {
-      const whitelisted = secondaryRecommendCards.filter((c) => passesBeautyIndustryWhitelist(c));
-      return whitelisted.length > 0 ? whitelisted : secondaryRecommendCards;
-    }
-    if (cultureUrlFinalGuard) {
-      const whitelisted = secondaryRecommendCards.filter((c) => passesCultureIndustryWhitelist(c));
-      return whitelisted.length > 0 ? whitelisted : secondaryRecommendCards;
-    }
-    return secondaryRecommendCards;
-  }, [beautyUrlFinalGuard, cultureUrlFinalGuard, secondaryRecommendCards]);
+  const { primaryRecommendationCards, primaryListCards, secondaryListCards } = useMemo(
+    () =>
+      assembleResultsCardLists({
+        cards,
+        placeHits,
+        directSearchMode,
+        beautyUrlFinalGuard,
+        cultureUrlFinalGuard,
+        courseRestoreFailed,
+        isCourseFixedResults,
+        courseFixedCards,
+      }),
+    [
+      cards,
+      placeHits,
+      directSearchMode,
+      beautyUrlFinalGuard,
+      cultureUrlFinalGuard,
+      courseRestoreFailed,
+      isCourseFixedResults,
+      courseFixedCards,
+    ]
+  );
 
   const beautyV2HardMode = useMemo(
     () =>
