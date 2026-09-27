@@ -115,43 +115,16 @@ import { isBeautyUrlFromExplicitNav, isBeautyV2HardMode } from "@/lib/recommend-
 import { shouldApplyCultureStrictWhitelist } from "@/lib/recommend-v2/normalizeRequest";
 import { useHamaMe } from "@/lib/auth/useHamaMe";
 import { kakaoLoginUrl } from "@/lib/auth/kakaoLogin";
+import {
+  intentCategoryToCategoryClicked,
+  isFamilyDiningAliasQuery as matchFamilyDiningAliasQuery,
+  isGenericFoodResultsQuery as matchGenericFoodResultsQuery,
+  isSituationResultsQuery as matchSituationResultsQuery,
+  resolveSearchQueryForHomeCards,
+} from "@/lib/results/resultsQueryRouting";
 
 /** 결과 페이지만: 고정 더미로 SearchResultSection/분기 검증 — `.env.local` 에 `NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION=1` */
 const DEBUG_FORCE_SEARCH_SECTION = process.env.NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SECTION === "1";
-const FAMILY_DINING_ALIAS_QUERIES = new Set([
-  "가족 외식",
-  "가족외식",
-  "가족 식사",
-  "가족이랑 외식",
-  "가족이랑 밥",
-  "가족이랑 식사",
-]);
-
-const QUERY_ALIAS_EXPANSION: Record<string, string> = {
-  문화생활: "박물관 전시 미술관 도서관 체험 문화",
-  데이트: "카페 분위기 좋은 레스토랑 산책 디저트",
-  "아이랑 갈만한 곳": "키즈카페 공원 도서관 체험 가족",
-  "아이랑 밥": "가족 아이랑 식당 한식 분식",
-  "비오는날 실내": "카페 도서관 박물관 실내 키즈카페",
-  "조용한 카페": "카페 조용한 감성",
-};
-const RESULTS_SITUATION_PRESET_QUERIES = new Set([
-  "문화생활",
-  "데이트",
-  "아이랑 갈만한 곳",
-  "비오는날 실내",
-]);
-
-function intentCategoryToCategoryClicked(intentCategory: string | null | undefined): string | null {
-  if (!intentCategory) return null;
-  if (intentCategory === "FOOD") return "푸드";
-  if (intentCategory === "CAFE") return "카페";
-  if (intentCategory === "BEAUTY") return "미용실";
-  if (intentCategory === "FITNESS") return "운동";
-  if (intentCategory === "LIFE") return "생활";
-  if (intentCategory === "ACTIVITY") return "액티비티";
-  return intentCategory;
-}
 
 function ResultsContent({
   embedded = false,
@@ -483,25 +456,16 @@ function ResultsContent({
   const tonkatsuRecommendDisabled = matchesTonkatsuBetaDisabledQuery(qRaw);
 
   /** URL q가 단독 "박물관"일 때는 누적 대화(convCtx)가 searchQuery를 덮어쓰지 않음 — 홈 문화 타일과 히어로 직접 입력 경로 일치 */
-  const searchQueryForHomeCards = useMemo(() => {
-    const qTrim = qRaw.trim();
-    /** 혼밥/혼자/1인 — 누적 대화 텍스트가 `searchQuery`를 덮으면 useHomeCards solo guard가 전부 스킵됨 */
-    if (isSoloSituationQuery) return qTrim || null;
-    if (matchedNamedFoodPreset) return qTrim || null;
-    if (qTrim === "박물관") return qTrim;
-    if (qTrim === "도서관") return qTrim;
-    // /results 경로에서는 상황어 원문을 그대로 넘겨야 useHomeCards preset이 정확히 동작한다.
-    if (RESULTS_SITUATION_PRESET_QUERIES.has(qTrim)) return qTrim;
-    if (QUERY_ALIAS_EXPANSION[qTrim]) return QUERY_ALIAS_EXPANSION[qTrim];
-    if ((explicitCategory ?? "").trim().toLowerCase() === "culture") return qRaw || null;
-    const qNorm = normalizeBrandQuery(qRaw).trim();
-    if (FAMILY_DINING_ALIAS_QUERIES.has(qTrim) || FAMILY_DINING_ALIAS_QUERIES.has(qNorm)) return "식당";
-    /** 푸드는 곧 URL이 식당으로 치환되며, 그 전 한 프레임용으로도 식당 토큰과 동일 랭킹 입력을 씀 */
-    if (qNorm === "푸드") return "식당";
-    if (qNorm === "식당" || qNorm === "맛집") return qNorm;
-    /** Semantic ranking/discovery uses the current turn only. cumulativeText stays for UI/logs. */
-    return qRaw || null;
-  }, [qRaw, explicitCategory, matchedNamedFoodPreset, isSoloSituationQuery]);
+  const searchQueryForHomeCards = useMemo(
+    () =>
+      resolveSearchQueryForHomeCards({
+        qRaw,
+        explicitCategory,
+        isSoloSituationQuery,
+        hasNamedFoodPreset: Boolean(matchedNamedFoodPreset),
+      }),
+    [qRaw, explicitCategory, matchedNamedFoodPreset, isSoloSituationQuery]
+  );
 
   /** 프리셋일 때 코스·데이트 시나리오가 랭킹/페치를 가로채지 않도록 단일 식당 맥락으로 고정 */
   const scenarioObjectForHomeCards = useMemo((): ScenarioObject | undefined => {
@@ -534,11 +498,11 @@ function ResultsContent({
   }, [qRaw, matchedNamedFoodPreset]);
 
   const isFamilyDiningAliasQuery = useMemo(
-    () => FAMILY_DINING_ALIAS_QUERIES.has(qRaw.trim()) || FAMILY_DINING_ALIAS_QUERIES.has(qNormalizedForIntent),
+    () => matchFamilyDiningAliasQuery(qRaw, qNormalizedForIntent),
     [qRaw, qNormalizedForIntent]
   );
   const isGenericFoodResultsQuery = useMemo(
-    () => qNormalizedForIntent === "푸드" || qNormalizedForIntent === "식당" || qNormalizedForIntent === "맛집",
+    () => matchGenericFoodResultsQuery(qNormalizedForIntent),
     [qNormalizedForIntent]
   );
   const resolvedExplicitIntentForHome =
@@ -1071,7 +1035,7 @@ function ResultsContent({
   const logBase = useMemo(() => analyticsFromScenario(effectiveScenario), [effectiveScenario]);
 
   const isCourseMode = effectiveMode === "course";
-  const isSituationResultsQuery = RESULTS_SITUATION_PRESET_QUERIES.has(qRaw.trim());
+  const isSituationResultsQuery = matchSituationResultsQuery(qRaw);
   const isScenarioRecommendationIntent = scenarioObject?.intentType === "scenario_recommendation";
   const showCourseDeck = Boolean(
     !pageBusy && isCourseMode && coursePlans.length > 0 && !showNameSearch && !courseIdParam

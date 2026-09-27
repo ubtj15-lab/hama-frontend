@@ -7,6 +7,7 @@ import { mergeResultsScenario } from "../mergeResultsScenario";
 import { classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
 import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { runConversationScenarioChecks } from "../conversation.scenarios";
+import { resolveSearchQueryForHomeCards } from "@/lib/results/resultsQueryRouting";
 
 function chain(lines: string[]) {
   let ctx = null as ReturnType<typeof processConversationTurn> | null;
@@ -117,8 +118,21 @@ describe("existing dependent conversation scenarios", () => {
 
 describe("Results semantic query is current turn", () => {
   it("does not use cumulativeText as the default searchQuery", () => {
-    const src = readFileSync(resolve(__dirname, "../../../results/ResultsScreen.tsx"), "utf8");
-    expect(src).not.toMatch(/convCtx\?\.cumulativeText\s*\?\?\s*qRaw/);
-    expect(src).toMatch(/return qRaw \|\| null/);
+    const screen = readFileSync(resolve(__dirname, "../../../results/ResultsScreen.tsx"), "utf8");
+    const page = readFileSync(resolve(__dirname, "../../../results/page.tsx"), "utf8");
+    const routing = readFileSync(resolve(__dirname, "../../results/resultsQueryRouting.ts"), "utf8");
+    expect(screen).not.toMatch(/convCtx\?\.cumulativeText\s*\?\?\s*qRaw/);
+    expect(page).not.toMatch(/convCtx\?\.cumulativeText\s*\?\?\s*qRaw/);
+    expect(screen).toContain("resolveSearchQueryForHomeCards");
+    expect(page).toContain("resolveSearchQueryForHomeCards");
+    expect(routing).toMatch(/return qRaw \|\| null/);
+    expect(
+      resolveSearchQueryForHomeCards({
+        qRaw: "조용한 식당",
+        explicitCategory: null,
+        isSoloSituationQuery: false,
+        hasNamedFoodPreset: false,
+      })
+    ).toBe("조용한 식당");
   });
 });
