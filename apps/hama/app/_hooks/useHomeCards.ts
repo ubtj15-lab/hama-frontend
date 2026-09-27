@@ -7,9 +7,12 @@ import {
   fetchEmergencySimpleCardsByCategories,
   homeCardMatchesScenarioBeautySalonBlock,
   fetchHomeCardsByTab,
+  fetchHomeCardsByTabResult,
   fetchHomeCardsByStoreCategories,
   fetchHomeCourseCandidatePool,
   fetchHomeRecommendCandidates,
+  fetchHomeRecommendCandidatesResult,
+  type HomeCardQueryResult,
   fetchRestaurantOnlyFoodPresetCards,
   toHomeCard,
   type StoreRow,
@@ -20,9 +23,11 @@ import type { RecommendScoreBreakdown, ScoredRecommendItem } from "@/lib/recomme
 import { finalizeRecommendations } from "@/lib/recommend/finalizeRecommendations";
 import { classifyDiscoveryQuery, hasCredibleIndoorPlayEvidence, isIndoorPlaySeekingQuery, toDiscoveryItem } from "@/lib/recommend/discoveryRole";
 import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
+import { candidatesForNamedRegion } from "@/lib/conversation/namedRegion";
+import { keepForIndoorRequest } from "@/lib/recommend/indoorCandidateEvidence";
 import { shouldApplyHomeSituationRepeatAvoidance } from "@/lib/recommend/dateRepeatAvoidance";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
-import { intentCategoryToHomeTab } from "@/lib/scenarioEngine/intentClassification";
+import { intentCategoryToHomeTab, storeCategoryMatchesIntentCategory } from "@/lib/scenarioEngine/intentClassification";
 import { RECOMMEND_DECK_SIZE, RECOMMEND_POOL_SINGLE_TAB } from "@/lib/recommend/recommendConstants";
 import { parseUserProfile, type UserProfile } from "@/lib/onboardingProfile";
 import { explicitCategoryToFetchTab } from "@/lib/homeResultsNavParams";
@@ -58,10 +63,11 @@ import {
 } from "@/lib/search/directSearch";
 import { categoriesForHomeTab } from "@/lib/storeCategoryFilters";
 import {
-  applyStoreSuppression,
-  fetchActiveStoreSuppressionRules,
+  filterPlacesOnServer,
   inferStoreSuppressionScope,
+  type PlaceSuppressionRef,
 } from "@/lib/recommend/storeSuppression";
+import { presentRecommendation, readHttpCardBody } from "@/lib/recommend/recommendFetchStatus";
 import { applyReasonTemplateEngine } from "@/lib/recommend/reasonTemplateEngine";
 import { hamaDevLog } from "@/lib/hamaDevLog";
 import {
@@ -977,10 +983,10 @@ function mergeHomeCardsUniqueById(a: HomeCard[], b: HomeCard[]): HomeCard[] {
 }
 
 /** 검색창 직접 "박물관"과 동일한 `/api/stores/search-by-name` 원천 */
-async function fetchMuseumCardsViaSearchByNameApi(q: string): Promise<HomeCard[]> {
+async function fetchMuseumCardsViaSearchByNameApi(q: string): Promise<HomeCardQueryResult> {
+  const t = String(q ?? "").trim();
+  if (t.length < 2) return { status: "ok", cards: [] };
   try {
-    const t = String(q ?? "").trim();
-    if (t.length < 2) return [];
     const url = buildSearchByNameApiUrl(t);
     const seed = getOrCreateHamaSearchSeed();
     const headers: Record<string, string> = {};
@@ -989,11 +995,15 @@ async function fetchMuseumCardsViaSearchByNameApi(q: string): Promise<HomeCard[]
       cache: "no-store",
       headers: Object.keys(headers).length ? headers : undefined,
     });
-    if (!res.ok) return [];
-    const json = (await res.json()) as { items?: StoreRow[] };
-    return filterHamaV1UserCatalog((json.items ?? []).map((row) => toHomeCard(row)));
+    const body = (await res.json().catch(() => null)) as { items?: StoreRow[]; error?: string } | null;
+    const parsed = readHttpCardBody({ ok: res.ok, body });
+    if (parsed.status === "failed") return { status: "failed" };
+    return {
+      status: "ok",
+      cards: filterHamaV1UserCatalog((parsed.cards as StoreRow[]).map((row) => toHomeCard(row))),
+    };
   } catch {
-    return [];
+    return { status: "failed" };
   }
 }
 
@@ -3314,19 +3324,19 @@ function mergeUserProfile(base: UserProfile | null, override: Partial<UserProfil
   };
 }
 
-async function fetchRecommendPoolFallback(tab: HomeTabKey, count: number): Promise<HomeCard[]> {
+async function fetchRecommendPoolFallback(tab: HomeTabKey, count: number): Promise<HomeCardQueryResult> {
   try {
     const res = await fetch(
       `/api/home-recommend?tab=${encodeURIComponent(tab)}&count=${encodeURIComponent(String(count))}`,
       { cache: "no-store" }
     );
-    if (!res.ok) return [];
-    const json = (await res.json()) as { items?: StoreRow[] };
-    const items = json.items ?? [];
-    return items.map((row) => toHomeCard(row));
+    const body = (await res.json().catch(() => null)) as { items?: StoreRow[]; error?: string } | null;
+    const parsed = readHttpCardBody({ ok: res.ok, body });
+    if (parsed.status === "failed") return { status: "failed" };
+    return { status: "ok", cards: (parsed.cards as StoreRow[]).map((row) => toHomeCard(row)) };
   } catch (e) {
     console.warn("[useHomeCards] home-recommend fallback failed", e);
-    return [];
+    return { status: "failed" };
   }
 }
 
@@ -3502,6 +3512,10 @@ type Result = {
   isLoading: boolean;
   /** RECOMMEND_DECK_SIZE 미만이면 완화 랭킹·후보 부족 등 */
   deckIncomplete: boolean;
+  /** 숨김 규칙 조회에 실패하면 추천 카드를 비운다. 규칙 0건과는 구분한다. */
+  recommendationBlocked: boolean;
+  /** 추천 데이터 조회가 예외로 끝나면 빈 추천을 정상 결과로 두지 않는다. */
+  recommendationLoadFailed: boolean;
 };
 
 export type UseHomeCardsOptions = {
@@ -3523,6 +3537,7 @@ export type UseHomeCardsOptions = {
    * Results: 매장명 검색이 이미 성공한 경우 뒤쪽 추천 로직이 화면/상태를 덮어쓰지 않게 할 때 사용.
    */
   skipFetch?: boolean;
+  retainCardsOnSkip?: boolean;
   /** 메인 추천 거절 등 — 해당 매장 id 는 재랭킹에서 제외. DATE discovery는 soft-avoid. */
   rejectedMainPickIds?: string[];
   /**
@@ -3566,6 +3581,8 @@ export function useHomeCards(
   const [coursePool, setCoursePool] = useState<HomeCard[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [deckIncomplete, setDeckIncomplete] = useState(false);
+  const [recommendationBlocked, setRecommendationBlocked] = useState(false);
+  const [recommendationLoadFailed, setRecommendationLoadFailed] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const dateRepeatSoftAvoid = homeSituationRepeatActive(
     options.searchQuery,
@@ -3636,6 +3653,9 @@ export function useHomeCards(
     hamaDevLog("[HAMA_FOOD_PRESET_HOOK_CHECK]", hookCheckPayload);
 
     if (skipFetch) {
+      setIsLoading(false);
+      setRecommendationBlocked(false);
+      if (options.retainCardsOnSkip) return;
       setRecommendEngine(null);
       console.log("[HAMA_USE_HOME_CARDS_DEBUG]", {
         willFetch: false,
@@ -3714,6 +3734,7 @@ export function useHomeCards(
 
     const run = async () => {
       setIsLoading(true);
+      setRecommendationLoadFailed(false);
       try {
         const so = options.scenarioObject;
         console.log("[useHomeCards input compare]", {
@@ -3760,17 +3781,48 @@ export function useHomeCards(
               userLng: options.userLng ?? null,
               poolCap: 300,
             });
+            const suppressionScope = inferStoreSuppressionScope({
+              query: options.searchQuery ?? null,
+              explicitCategory: options.explicitCategory ?? null,
+              explicitIntent: options.explicitIntent ?? null,
+            });
+            const suppressionId = (card: HomeCard) => {
+              const cardAny = card as { place_id?: string | null; store_id?: string | null };
+              return String(cardAny.place_id ?? cardAny.store_id ?? card.id ?? "").trim();
+            };
+            const refs = new Map<string, PlaceSuppressionRef>();
+            for (const card of [...v2.deck, ...v2.pool]) {
+              const id = suppressionId(card);
+              if (!id || refs.has(id)) continue;
+              refs.set(id, { id, name: String(card.name ?? "") });
+            }
+            const suppressionLoad = await filterPlacesOnServer(suppressionScope, [...refs.values()]);
+            if (suppressionLoad.status !== "ok") {
+              if (!cancelled) {
+                setRecommendEngine(null);
+                setPool([]);
+                setCoursePool([]);
+                setDeckRotationKey("");
+                setCards([]);
+                setDeckIncomplete(false);
+                setRecommendationBlocked(true);
+              }
+              return;
+            }
+            const kept = new Set(suppressionLoad.keptIds);
             if (!cancelled) {
               setRecommendEngine("v2");
-              setPool(v2.pool);
+              setRecommendationBlocked(false);
+              setPool(v2.pool.filter((card) => kept.has(suppressionId(card))));
               setCoursePool([]);
               setDeckRotationKey(`v2|${searchAttemptV2}|${getOrCreateHamaSearchSeed()}`);
-              setCards(v2.deck);
-              setDeckIncomplete(v2.deck.length > 0 && v2.deck.length < RECOMMEND_DECK_SIZE);
+              const deck = v2.deck.filter((card) => kept.has(suppressionId(card)));
+              setCards(deck);
+              setDeckIncomplete(deck.length > 0 && deck.length < RECOMMEND_DECK_SIZE);
               console.log("[HAMA_V2_HARD_MODE]", {
                 beautyUrl: true,
                 blockV1Recovery: true,
-                finalDeckCount: v2.deck.length,
+                finalDeckCount: deck.length,
                 usedFallback: false,
               });
             }
@@ -3782,7 +3834,9 @@ export function useHomeCards(
               setCoursePool([]);
               setDeckRotationKey(`v2|${searchAttemptV2}|error`);
               setCards([]);
-              setDeckIncomplete(true);
+              setDeckIncomplete(false);
+              setRecommendationBlocked(false);
+              setRecommendationLoadFailed(true);
               console.log("[HAMA_V2_HARD_MODE]", {
                 beautyUrl: true,
                 blockV1Recovery: true,
@@ -3878,9 +3932,21 @@ export function useHomeCards(
           intent: options.explicitIntent ?? null,
         });
 
-        const courseFetched = wantCourse ? filterHamaV1UserCatalog(await fetchHomeCourseCandidatePool()) : [];
+        let courseFetched = wantCourse ? filterHamaV1UserCatalog(await fetchHomeCourseCandidatePool()) : [];
 
         let fetchedRaw: HomeCard[] = [];
+        let primaryFailures = 0;
+        let primarySuccesses = 0;
+        const takePrimary = (result: HomeCardQueryResult): HomeCard[] => {
+          if (result.status === "failed") {
+            primaryFailures += 1;
+            return [];
+          }
+          primarySuccesses += 1;
+          return result.cards;
+        };
+        const takeAuxiliary = (result: HomeCardQueryResult): HomeCard[] =>
+          result.status === "ok" ? result.cards : [];
         const applySituationPresetEnrichment = async (base: HomeCard[]): Promise<HomeCard[]> => {
           if (!preset) return base;
           const presetFetchedByCategory = await fetchHomeCardsByStoreCategories(preset.categories, {
@@ -3929,14 +3995,14 @@ export function useHomeCards(
 
         if (strictTab) {
           fetchTabsTried.push(`strict:${strictTab}`);
-          fetchedRaw = await fetchHomeCardsByTab(strictTab, { count: RECOMMEND_POOL_SINGLE_TAB });
+          fetchedRaw = takePrimary(await fetchHomeCardsByTabResult(strictTab, { count: RECOMMEND_POOL_SINGLE_TAB }));
           countsByTab[strictTab] = fetchedRaw.length;
         } else if (exCatLower === "culture") {
           fetchTabsTried.push("museum");
-          const museumRows = await fetchHomeCardsByTab("museum", { count: RECOMMEND_POOL_SINGLE_TAB });
+          const museumRows = takePrimary(await fetchHomeCardsByTabResult("museum", { count: RECOMMEND_POOL_SINGLE_TAB }));
           countsByTab.museum = museumRows.length;
           fetchTabsTried.push("activity");
-          const activityRows = await fetchHomeCardsByTab("activity", { count: RECOMMEND_POOL_SINGLE_TAB });
+          const activityRows = takePrimary(await fetchHomeCardsByTabResult("activity", { count: RECOMMEND_POOL_SINGLE_TAB }));
           countsByTab.activity = activityRows.length;
           const activityCulture = activityRows.filter((c) => isCultureLike(c));
           countsByTab.activity_culture_slice = activityCulture.length;
@@ -3958,7 +4024,7 @@ export function useHomeCards(
           const useDirectMuseumMode = qNormCulture === "박물관" || qNormCulture.includes("박물관");
           if (useDirectMuseumMode) {
             fetchTabsTried.push("culture:search_by_name_api");
-            const apiHits = await fetchMuseumCardsViaSearchByNameApi("박물관");
+            const apiHits = takeAuxiliary(await fetchMuseumCardsViaSearchByNameApi("박물관"));
             countsByTab.culture_search_by_name_api = apiHits.length;
             fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, apiHits);
             recoveredFromTab = `${recoveredFromTab ?? "culture"}+search_by_name_api`;
@@ -3967,11 +4033,11 @@ export function useHomeCards(
           }
         } else if (explicitTab) {
           fetchTabsTried.push(`explicit:${explicitTab}`);
-          fetchedRaw = await fetchHomeCardsByTab(explicitTab, { count: RECOMMEND_POOL_SINGLE_TAB });
+          fetchedRaw = takePrimary(await fetchHomeCardsByTabResult(explicitTab, { count: RECOMMEND_POOL_SINGLE_TAB }));
           countsByTab[explicitTab] = fetchedRaw.length;
         } else {
           fetchTabsTried.push("homeRecommend");
-          fetchedRaw = await fetchHomeRecommendCandidates(tab);
+          fetchedRaw = takePrimary(await fetchHomeRecommendCandidatesResult(tab));
           countsByTab[`recommendMix:${tab}`] = fetchedRaw.length;
         }
 
@@ -3989,7 +4055,7 @@ export function useHomeCards(
           exCatLower !== "life"
         ) {
           fetchTabsTried.push("museum_single_token:search_by_name_api");
-          const apiHits = await fetchMuseumCardsViaSearchByNameApi("박물관");
+          const apiHits = takeAuxiliary(await fetchMuseumCardsViaSearchByNameApi("박물관"));
           countsByTab.museum_single_token_api = apiHits.length;
           fetchedRaw = mergeHomeCardsUniqueById(fetchedRaw, apiHits);
         }
@@ -4019,14 +4085,16 @@ export function useHomeCards(
         if (!fetchedRaw.length && (strictTab || explicitTab) && exCatLower !== "culture") {
           const apiTab: HomeTabKey = strictTab ?? explicitTab ?? tab;
           fetchTabsTried.push(`fallback:${apiTab}`);
-          fetchedRaw = await fetchRecommendPoolFallback(apiTab, RECOMMEND_POOL_SINGLE_TAB);
-          countsByTab[`fallbackApi:${apiTab}`] = fetchedRaw.length;
+          const tabFallback = await fetchRecommendPoolFallback(apiTab, RECOMMEND_POOL_SINGLE_TAB);
+          if (tabFallback.status === "ok") fetchedRaw = tabFallback.cards;
+          countsByTab[`fallbackApi:${apiTab}`] = tabFallback.status === "ok" ? tabFallback.cards.length : 0;
         }
         if (!fetchedRaw.length && (strictTab || explicitTab) && !strictGateRun && exCatLower !== "culture") {
           if (exCatLower !== "beauty" && !explicitIntentLower.startsWith("beauty_")) {
             fetchTabsTried.push("fallback:all");
-            fetchedRaw = await fetchRecommendPoolFallback("all", 48);
-            countsByTab["fallbackApi:all"] = fetchedRaw.length;
+            const allFallback = await fetchRecommendPoolFallback("all", 48);
+            if (allFallback.status === "ok") fetchedRaw = allFallback.cards;
+            countsByTab["fallbackApi:all"] = allFallback.status === "ok" ? allFallback.cards.length : 0;
           }
         }
 
@@ -4332,7 +4400,9 @@ export function useHomeCards(
         );
         const indoorPlayQuery = isIndoorPlaySeekingQuery(String(options.searchQuery ?? ""), rankScenario);
         fetched = filterHamaV1UserCatalog(fetched);
-        if (indoorPlayQuery) {
+        const scenarioNeedsIndoorActivityCatalog =
+          rankScenario?.intentCategory === "ACTIVITY" && rankScenario.indoorPreferred === true;
+        if (indoorPlayQuery || scenarioNeedsIndoorActivityCatalog) {
           fetchTabsTried.push("indoor_play:activity_catalog");
           const indoorPlayActivities = await fetchHomeCardsByTab("activity", {
             count: Math.max(RECOMMEND_POOL_SINGLE_TAB, 300),
@@ -4340,6 +4410,19 @@ export function useHomeCards(
           fetched = filterHamaV1UserCatalog(mergeHomeCardsUniqueById(fetched, indoorPlayActivities));
           countsByTab.indoor_play_activity = indoorPlayActivities.length;
         }
+
+        if (rankScenario?.region) {
+          fetched = candidatesForNamedRegion(fetched, rankScenario.region);
+        }
+        if (rankScenario?.intentCategory === "ACTIVITY") {
+          fetched = fetched.filter((card) => storeCategoryMatchesIntentCategory(card, "ACTIVITY"));
+        }
+        if (rankScenario?.indoorPreferred && rankScenario.intentCategory === "ACTIVITY") {
+          fetched = keepForIndoorRequest(fetched);
+        }
+        const strictCandidatePool = Boolean(
+          rankScenario?.region || rankScenario?.indoorPreferred || rankScenario?.intentCategory === "ACTIVITY"
+        );
 
         const ctx = {
           intent,
@@ -4425,7 +4508,7 @@ export function useHomeCards(
         }
         const rankedFallback = await buildExpandedRankedPool(fetched, {
           ...ctx,
-          excludeStoreIds: [],
+          excludeStoreIds: strictCandidatePool ? (ctx.excludeStoreIds ?? []) : [],
         }, 50);
         let rankedFallbackBoosted = applyNamedFoodPresetScoreBoost(rankedFallback, namedFoodPresetOpt);
         if (namedFoodPresetOpt) {
@@ -4473,7 +4556,7 @@ export function useHomeCards(
         let picked = safetyDiversityOutcome.deck;
         exposureLogState.recentExposureReplacements = safetyDiversityOutcome.recentExposureReplacements;
 
-        if (preset && picked.length < 3 && !options.namedFoodPreset && !openBetaAccuracyFirst) {
+        if (preset && picked.length < 3 && !options.namedFoodPreset && !openBetaAccuracyFirst && !strictCandidatePool) {
           const enrichedFetched = await applySituationPresetEnrichment(fetched);
           if (enrichedFetched.length > fetched.length) {
             fetched = enrichedFetched;
@@ -4510,6 +4593,7 @@ export function useHomeCards(
           namedFoodPresetOpt &&
           picked.length < 3 &&
           !cancelled &&
+          !strictCandidatePool &&
           !isConservativeAccuracyFirstFoodPreset(namedFoodPresetOpt)
         ) {
           const extraFood = await fetchNamedFoodPresetFallbackRestaurantCards({
@@ -4839,7 +4923,7 @@ export function useHomeCards(
 
         if (exCatLower === "culture" && cultureMuseumQuery && picked.length === 0) {
           const hintPack = await fetchCultureStoresByNameHintsChained({ queryLabel: "박물관" });
-          const apiExtra = await fetchMuseumCardsViaSearchByNameApi("박물관");
+          const apiExtra = takeAuxiliary(await fetchMuseumCardsViaSearchByNameApi("박물관"));
           const mergedHints = mergeHomeCardsUniqueById(hintPack.cards, apiExtra);
           const anchorCards = mergedHints.filter((c) => hasCultureAnchor(c) && !cultureRescueSoftBlock(c));
           cultureMuseumDiag = {
@@ -4876,25 +4960,46 @@ export function useHomeCards(
           explicitCategory: options.explicitCategory ?? null,
           explicitIntent: options.explicitIntent ?? null,
         });
-        const suppressionRules = await fetchActiveStoreSuppressionRules(suppressionScope);
-        const suppressionBeforeTop10 = picked.slice(0, 10).map((x) => x.card.name);
+        const suppressionId = (card: HomeCard) => {
+          const cardAny = card as { place_id?: string | null; store_id?: string | null };
+          return String(cardAny.place_id ?? cardAny.store_id ?? card.id ?? "").trim();
+        };
+        const suppressionRefs = new Map<string, PlaceSuppressionRef>();
+        for (const card of [
+          ...picked.map((item) => item.card),
+          ...fetched,
+          ...courseFetched,
+          ...directSearchCandidates,
+        ]) {
+          const id = suppressionId(card);
+          if (!id || suppressionRefs.has(id)) continue;
+          suppressionRefs.set(id, { id, name: String(card.name ?? "") });
+        }
+        const suppressionLoad = await filterPlacesOnServer(suppressionScope, [...suppressionRefs.values()]);
+        if (suppressionLoad.status !== "ok") {
+          if (!cancelled) {
+            setRecommendEngine(null);
+            setCards([]);
+            setDeckRotationKey("");
+            setPool([]);
+            setCoursePool([]);
+            setDeckIncomplete(false);
+            setRecommendationBlocked(true);
+          }
+          return;
+        }
+        const keptSuppressionIds = new Set(suppressionLoad.keptIds);
         const beforeSuppressionCount = picked.length;
-        const suppressionApplied = applyStoreSuppression(picked, suppressionRules, {
-          scope: suppressionScope,
-          getStoreId: (item) => {
-            const cardAny = item.card as { place_id?: string | null; store_id?: string | null };
-            return String(cardAny.place_id ?? cardAny.store_id ?? item.card.id ?? "");
-          },
-          getStoreName: (item) => String(item.card.name ?? ""),
-        });
-        picked = suppressionApplied.next;
-        const suppressionAfterTop10 = picked.slice(0, 10).map((x) => x.card.name);
+        const suppressionBeforeTop10 = picked.slice(0, 10).map((item) => item.card.name);
+        picked = picked.filter((item) => keptSuppressionIds.has(suppressionId(item.card)));
+        fetched = fetched.filter((card) => keptSuppressionIds.has(suppressionId(card)));
+        courseFetched = courseFetched.filter((card) => keptSuppressionIds.has(suppressionId(card)));
+        directSearchCandidates = directSearchCandidates.filter((card) => keptSuppressionIds.has(suppressionId(card)));
+        const suppressionAfterTop10 = picked.slice(0, 10).map((item) => item.card.name);
         console.log("[store suppression applied]", {
           scope: suppressionScope,
-          ruleCount: suppressionRules.length,
-          suppressedNames: suppressionApplied.suppressedNames,
-          beforeTop10: suppressionBeforeTop10,
-          afterTop10: suppressionAfterTop10,
+          beforeCount: suppressionBeforeTop10.length,
+          afterCount: suppressionAfterTop10.length,
         });
         if (isRestaurantDiagTargetQuery(options.searchQuery ?? null)) {
           console.log("[restaurant final pool diagnosis]", {
@@ -5468,13 +5573,32 @@ export function useHomeCards(
             count: uiCards.length,
             names: uiCards.slice(0, 12).map((c) => c.name),
           });
-          setCards(uiCards);
+          const presentation = presentRecommendation({
+            primaryFailures,
+            primarySuccesses,
+            cards: uiCards,
+            suppression: "ok",
+          });
+          if (presentation.kind === "fetch_failed") {
+            setRecommendEngine(null);
+            setCards([]);
+            setPool([]);
+            setCoursePool([]);
+            setDeckRotationKey("");
+            setDeckIncomplete(false);
+            setRecommendationBlocked(false);
+            setRecommendationLoadFailed(true);
+          } else {
+          setRecommendationBlocked(false);
+          setRecommendationLoadFailed(false);
+          setCards(presentation.kind === "cards" ? presentation.cards : []);
           setDeckIncomplete(
             !wantCourse &&
               (options.namedFoodPreset
                 ? pickedWithReasons.length < 3
                 : pickedWithReasons.length > 0 && pickedWithReasons.length < RECOMMEND_DECK_SIZE)
           );
+          }
         }
       } catch (e) {
         console.error("[useHomeCards]", e);
@@ -5482,8 +5606,11 @@ export function useHomeCards(
           setRecommendEngine(null);
           setCards([]);
           setDeckRotationKey("");
+          setPool([]);
           setCoursePool([]);
           setDeckIncomplete(false);
+          setRecommendationBlocked(false);
+          setRecommendationLoadFailed(true);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -5516,5 +5643,5 @@ export function useHomeCards(
     scenarioIntentCategoryDep,
   ]);
 
-  return { cards, deckRotationKey, recommendEngine, candidatePool: pool, courseCandidatePool: coursePool, isLoading, deckIncomplete };
+  return { cards, deckRotationKey, recommendEngine, candidatePool: pool, courseCandidatePool: coursePool, isLoading, deckIncomplete, recommendationBlocked, recommendationLoadFailed };
 }

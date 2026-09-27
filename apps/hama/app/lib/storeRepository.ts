@@ -287,10 +287,20 @@ function fetchTabAuditSamples(cards: HomeCard[]) {
   }));
 }
 
+export type HomeCardQueryResult = { status: "ok"; cards: HomeCard[] } | { status: "failed" };
+
 export async function fetchHomeCardsByTab(
   tab: HomeTabKey,
   options: FetchHomeOptions = {}
 ): Promise<HomeCard[]> {
+  const result = await fetchHomeCardsByTabResult(tab, options);
+  return result.status === "ok" ? result.cards : [];
+}
+
+export async function fetchHomeCardsByTabResult(
+  tab: HomeTabKey,
+  options: FetchHomeOptions = {}
+): Promise<HomeCardQueryResult> {
   const count = options.count ?? (tab === "all" ? 12 : 6);
   const fetchLimit = count + HAMA_V1_USER_CATALOG_FETCH_PAD;
   let categoriesRaw = categoriesForHomeTab(tab);
@@ -325,6 +335,7 @@ export async function fetchHomeCardsByTab(
     try {
       const fallbackCategories = categories && categories.length > 0 ? categories : null;
       const fallbackRows: StoreRow[] = [];
+      let fallbackQuerySucceeded = false;
       if (fallbackCategories) {
         for (const category of fallbackCategories) {
           const { data: oneData, error: oneError } = await supabase
@@ -344,8 +355,10 @@ export async function fetchHomeCardsByTab(
             });
             continue;
           }
+          fallbackQuerySucceeded = true;
           fallbackRows.push(...((oneData ?? []) as StoreRow[]));
         }
+        if (!fallbackQuerySucceeded) return { status: "failed" };
       } else {
         const { data: allData, error: allError } = await supabase
           .from("stores")
@@ -360,7 +373,7 @@ export async function fetchHomeCardsByTab(
             details: (allError as any).details ?? null,
             hint: (allError as any).hint ?? null,
           });
-          return [];
+          return { status: "failed" };
         }
         fallbackRows.push(...((allData ?? []) as StoreRow[]));
       }
@@ -379,10 +392,10 @@ export async function fetchHomeCardsByTab(
         count: cards.length,
         samples: fetchTabAuditSamples(cards),
       });
-      return cards;
+      return { status: "ok", cards };
     } catch (fallbackError) {
       console.error("[fetchHomeCardsByTab fallback fatal]", { tab, fallbackError });
-      return [];
+      return { status: "failed" };
     }
   }
 
@@ -394,7 +407,7 @@ export async function fetchHomeCardsByTab(
     count: cards.length,
     samples: fetchTabAuditSamples(cards),
   });
-  return cards;
+  return { status: "ok", cards };
 }
 
 /** 상황형 fallback용: stores.category 다중 후보를 직접 조회 */
@@ -633,17 +646,26 @@ export async function fetchCultureStoresByNameHintsChained(options: {
 
 /** 홈 점수 추천용: 탭별로 더 많이 가져와 클라이언트에서 랭킹 */
 export async function fetchHomeRecommendCandidates(tab: HomeTabKey): Promise<HomeCard[]> {
+  const result = await fetchHomeRecommendCandidatesResult(tab);
+  return result.status === "ok" ? result.cards : [];
+}
+
+export async function fetchHomeRecommendCandidatesResult(tab: HomeTabKey): Promise<HomeCardQueryResult> {
   if (tab === "all") {
     const per = RECOMMEND_POOL_PER_CATEGORY_MIXED;
-    const [restaurants, cafes, salons, activities] = await Promise.all([
-      fetchHomeCardsByTab("restaurant", { count: per }),
-      fetchHomeCardsByTab("cafe", { count: per }),
-      fetchHomeCardsByTab("salon", { count: per }),
-      fetchHomeCardsByTab("activity", { count: per }),
+    const parts = await Promise.all([
+      fetchHomeCardsByTabResult("restaurant", { count: per }),
+      fetchHomeCardsByTabResult("cafe", { count: per }),
+      fetchHomeCardsByTabResult("salon", { count: per }),
+      fetchHomeCardsByTabResult("activity", { count: per }),
     ]);
+    if (parts.every((part) => part.status === "failed")) return { status: "failed" };
     const byId = new Map<string, HomeCard>();
-    for (const c of [...restaurants, ...cafes, ...salons, ...activities]) {
-      if (!byId.has(c.id)) byId.set(c.id, c);
+    for (const part of parts) {
+      if (part.status !== "ok") continue;
+      for (const c of part.cards) {
+        if (!byId.has(c.id)) byId.set(c.id, c);
+      }
     }
     const merged = Array.from(byId.values());
     const cat = (c: HomeCard | null | undefined) => String(c?.category ?? "").toLowerCase();
@@ -664,9 +686,9 @@ export async function fetchHomeRecommendCandidates(tab: HomeTabKey): Promise<Hom
       })),
       museumSamples: merged.filter(museumCat).slice(0, 10).map((c) => ({ name: c.name, category: c.category })),
     });
-    return merged;
+    return { status: "ok", cards: merged };
   }
-  return fetchHomeCardsByTab(tab, { count: RECOMMEND_POOL_SINGLE_TAB });
+  return fetchHomeCardsByTabResult(tab, { count: RECOMMEND_POOL_SINGLE_TAB });
 }
 
 /**

@@ -169,6 +169,58 @@ export function runIntentClassificationChecks(): string[] {
     { q: "중국집 추천", expect: { recommendationMode: "single", intentType: "search_strict" } },
     { q: "혼밥 추천", expect: { recommendationMode: "single" } },
     { q: "아이랑 나들이", expect: { recommendationMode: "course", intentType: "course_generation" } },
+    {
+      q: "오늘 고깃집 가자",
+      expect: { intentType: "search_strict", intentCategory: "FOOD", menuIntent: ["고기"] },
+    },
+    {
+      q: "비 오니까 칼국수",
+      expect: { intentType: "search_strict", intentCategory: "FOOD", menuIntent: ["칼국수"] },
+    },
+    {
+      q: "해장할 곳",
+      expect: { intentType: "search_strict", intentCategory: "FOOD" },
+    },
+    {
+      q: "숙취에 좋은 음식",
+      expect: { intentType: "search_strict", intentCategory: "FOOD" },
+    },
+    {
+      q: "달달한 거 먹고 싶어",
+      expect: { intentType: "search_strict", intentCategory: "CAFE" },
+    },
+    {
+      q: "브런치 카페 추천",
+      expect: { intentType: "search_strict", intentCategory: "CAFE" },
+    },
+    {
+      q: "키즈카페",
+      expect: { intentType: "search_strict", intentCategory: "ACTIVITY" },
+    },
+    {
+      q: "아이 데려가는데 주차 되는 곳",
+      expect: { intentType: "scenario_recommendation", parkingPreferred: true },
+    },
+    {
+      q: "아이랑 전시 볼 곳",
+      expect: { intentType: "search_strict", intentCategory: "ACTIVITY", scenario: "family_kids" },
+    },
+    {
+      q: "팀 회식 어디서 하지",
+      expect: { intentType: "search_strict", intentCategory: "FOOD", scenario: "group" },
+    },
+    {
+      q: "심심한데 뭐하지",
+      expect: { intentType: "scenario_recommendation" },
+    },
+    {
+      q: "달달한 거 먹으며 데이트",
+      expect: { intentType: "search_strict", intentCategory: "CAFE", scenario: "date" },
+    },
+    {
+      q: "회사 근처 돈가스",
+      expect: { intentType: "search_strict", intentCategory: "FOOD", menuIntent: ["돈까스"] },
+    },
   ];
 
   for (const { q, expect: exp } of cases) {

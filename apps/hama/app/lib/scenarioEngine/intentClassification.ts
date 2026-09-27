@@ -8,6 +8,16 @@ import {
 import { augmentScenarioWithComposite } from "./compositeIntent";
 import { inferDateTimeBandFromQuery } from "./dateCourseContext";
 import { inferChildAgeGroupFromQuery } from "./familyCourseContext";
+import {
+  understandQuery,
+  queryUnderstandingToIntentCategories,
+} from "./queryUnderstanding";
+import { applyNegationToScenarioObject, parseQueryNegation } from "./negationUnderstanding";
+import {
+  getCatalogMenuLexicon,
+  matchCatalogMenusInQuery,
+  resolveCatalogMenus,
+} from "@/lib/recommend/catalogMenuLexicon";
 
 export { detectFoodSubCategory, detectMenuIntent } from "./foodIntent";
 import type { IntentCategory, ScenarioObject, ScenarioType, UserIntentType } from "./types";
@@ -16,8 +26,14 @@ import type { HomeTabKey } from "@/lib/storeTypes";
 import type { HomeCard } from "@/lib/storeTypes";
 import { normIntentQuery } from "./intentQueryNormalize";
 import { inferRecommendationMode } from "./recommendationMode";
-import { isNeutralGenericDiningOutQuery } from "./genericDiningOut";
+import {
+  diningOutBareHintHits,
+  hasStrongerDiningOutOverrideContext,
+  isNeutralGenericDiningOutQuery,
+} from "./genericDiningOut";
 import { isExplicitDateMealTimeOnlyFoodLeak } from "./dateMealTimePrecedence";
+import { classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
+import { detectConversationalDiscovery } from "@/lib/recommend/conversationalDiscovery";
 
 export { normIntentQuery } from "./intentQueryNormalize";
 export { explainCourseGenerationMatch, isCourseGenerationQuery } from "./courseTriggerPatterns";
@@ -50,6 +66,8 @@ const FOOD_HINTS = [
   "뭐먹",
   "먹지",
   "밥집",
+  "외식",
+  "회식",
 ];
 
 const CAFE_HINTS = ["카페", "커피", "디저트", "빵집", "베이커리"];
@@ -86,6 +104,11 @@ const ACTIVITY_HINTS = [
   "체험",
   "액티비티",
   "놀고",
+  "전시",
+  "도서관",
+  "박물관",
+  "미술관",
+  "관람",
 ];
 
 function countHintHits(q: string, hints: string[]): number {
@@ -98,6 +121,7 @@ function countHintHits(q: string, hints: string[]): number {
 
 /**
  * 단일 목적 카테고리(없으면 null → 멀티 카테고리 시나리오 추천).
+ * 강한 구문 신호(understandQuery)가 있으면 hint-count보다 우선한다.
  */
 export function detectStrictCategory(rawQuery: string): IntentCategory | null {
   const q = normIntentQuery(rawQuery);
@@ -106,12 +130,26 @@ export function detectStrictCategory(rawQuery: string): IntentCategory | null {
   if (isNeutralGenericDiningOutQuery(rawQuery)) return "FOOD";
   if (isExplicitDateMealTimeOnlyFoodLeak(q)) return null;
 
+  const understood = understandQuery(rawQuery);
+  const neg = understood.negation ?? parseQueryNegation(rawQuery);
+  const qHints = neg.isNegationQuery ? normIntentQuery(neg.positiveRemainder || q) : q;
+  const foodHintsBesidesDiningOut =
+    /밥|먹|식사|식당|레스토랑|점심|저녁|아침|브런치|점메추|저메추|맛집|뭐\s*먹|뭐먹|먹지|밥집/.test(qHints);
+
+  if (understood.strongVertical && understood.route && understood.route !== "MIXED") {
+    const diningOutOnlyFood =
+      understood.route === "FOOD" &&
+      hasStrongerDiningOutOverrideContext(rawQuery) &&
+      !foodHintsBesidesDiningOut;
+    if (!diningOutOnlyFood) return understood.route;
+  }
+
   const scores: Record<IntentCategory, number> = {
-    FOOD: countHintHits(q, FOOD_HINTS),
-    CAFE: countHintHits(q, CAFE_HINTS),
-    ACTIVITY: countHintHits(q, ACTIVITY_HINTS),
-    BEAUTY: countHintHits(q, BEAUTY_HINTS),
-    FITNESS: countHintHits(q, [
+    FOOD: countHintHits(qHints, FOOD_HINTS),
+    CAFE: countHintHits(qHints, CAFE_HINTS),
+    ACTIVITY: countHintHits(qHints, ACTIVITY_HINTS),
+    BEAUTY: countHintHits(qHints, BEAUTY_HINTS),
+    FITNESS: countHintHits(qHints, [
       "헬스",
       "gym",
       "필라테스",
@@ -131,7 +169,7 @@ export function detectStrictCategory(rawQuery: string): IntentCategory | null {
       "체육관",
       "체육센터",
     ]),
-    LIFE: countHintHits(q, [
+    LIFE: countHintHits(qHints, [
       "병원",
       "약국",
       "세탁",
@@ -142,13 +180,21 @@ export function detectStrictCategory(rawQuery: string): IntentCategory | null {
       "생활",
       "의원",
       "치과",
-      "주차",
       "종합병원",
       "드럭스토어",
     ]),
   };
-  if (hasAnyFoodSubKeyword(q)) scores.FOOD += 3;
-  if (BEAUTY_HAIR_CONTEXT.test(q)) scores.BEAUTY += 2;
+  if (hasAnyFoodSubKeyword(qHints) && !/카페|커피|디저트|베이커리|빵집/.test(qHints)) scores.FOOD += 3;
+  if (BEAUTY_HAIR_CONTEXT.test(qHints)) scores.BEAUTY += 2;
+  if (/키즈\s*카페|키즈카페|놀이카페/.test(qHints) && !neg.excludedVenues.includes("kids_cafe")) {
+    scores.ACTIVITY += 5;
+    scores.CAFE = Math.max(0, scores.CAFE - 3);
+  }
+  if (neg.excludedCategories.includes("cafe")) scores.CAFE = 0;
+  if (neg.excludedCategories.includes("restaurant") || neg.suppressedIntents.includes("MEAL")) scores.FOOD = 0;
+  if (hasStrongerDiningOutOverrideContext(rawQuery)) {
+    scores.FOOD = Math.max(0, scores.FOOD - diningOutBareHintHits(qHints));
+  }
 
   const max = Math.max(scores.FOOD, scores.CAFE, scores.ACTIVITY, scores.BEAUTY, scores.FITNESS, scores.LIFE);
   if (max === 0) return null;
@@ -159,8 +205,11 @@ export function detectStrictCategory(rawQuery: string): IntentCategory | null {
 
   if (ties.length === 1) return ties[0]!;
 
-  if (ties.includes("CAFE") && /카페|커피|디저트|빵집|베이커리/.test(q)) return "CAFE";
-  if (ties.includes("FOOD") && /점심|저녁|아침|브런치|맛집|식사|식당|레스토랑|밥|먹|점메추|저메추|뭐\s*먹|뭐먹/.test(q))
+  if (ties.includes("CAFE") && /카페|커피|디저트|빵집|베이커리/.test(qHints) && !/키즈\s*카페|키즈카페/.test(qHints)) {
+    return "CAFE";
+  }
+  if (ties.includes("ACTIVITY") && /전시|도서관|박물관|미술관|관람|키즈카페/.test(qHints)) return "ACTIVITY";
+  if (ties.includes("FOOD") && /점심|저녁|아침|맛집|식사|식당|레스토랑|밥|먹|점메추|저메추|뭐\s*먹|뭐먹|회식|외식/.test(qHints))
     return "FOOD";
   if (ties.includes("BEAUTY")) return "BEAUTY";
   if (ties.includes("FITNESS")) return "FITNESS";
@@ -250,10 +299,16 @@ export function detectMoodAndConstraints(rawQuery: string): Partial<ScenarioObje
   if (/(고급|프리미엄|코스요리)/.test(q)) out.budgetLevel = "high";
   if (/(분위기 있는|감성)/.test(q) && !out.budgetLevel) out.budgetLevel = "medium";
 
-  if (/(아이|애 |키즈|유아|초등|영유아)/.test(q)) out.withKids = true;
+  if (/(아이|애들|애 |키즈|유아|초등|영유아)/.test(q)) out.withKids = true;
   if (/(부모님|어른)/.test(q)) out.withParents = true;
 
-  if (/(식사|밥|먹고|맛집)/.test(q)) out.mealRequired = true;
+  if (/(주차\s*되|주차되|주차\s*편한|주차\s*가능|주차)/.test(q) && !/(주차장만|주차타워)/.test(q)) {
+    out.parkingPreferred = true;
+  }
+
+  if (/(식사|밥|먹고|맛집|외식|회식)/.test(q) && !parseQueryNegation(rawQuery).suppressedIntents.includes("MEAL")) {
+    out.mealRequired = true;
+  }
   return out;
 }
 
@@ -377,6 +432,7 @@ export function resolveAmbiguousScenario(obj: ScenarioObject): ScenarioObject {
 export function parseScenarioIntent(rawQuery: string): ScenarioObject {
   const raw = String(rawQuery ?? "").trim();
   const q = normIntentQuery(raw);
+  const understood = understandQuery(raw || q);
   const intentType = classifyIntent(q);
   const { scenario, confidence } = detectScenario(q);
   const modifierPartial = detectMoodAndConstraints(q);
@@ -391,10 +447,29 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
 
   let foodSub = detectFoodSubCategory(q);
   let beautySub = detectBeautySubCategory(q);
-  const menuIntent = detectMenuIntent(raw);
+  const menuIntent = [...new Set([...(understood.menuIntents ?? []), ...detectMenuIntent(raw)])];
 
   if (menuIntent.length && !foodSub) {
     foodSub = inferFoodSubFromMenus(menuIntent) ?? foodSub;
+  }
+
+  const diningOutOnlyUnderStrongerContext =
+    hasStrongerDiningOutOverrideContext(raw || q) &&
+    !isNeutralGenericDiningOutQuery(raw || q) &&
+    !/밥|먹|식사|식당|레스토랑|점심|저녁|아침|브런치|점메추|저메추|맛집|뭐\s*먹|뭐먹|먹지|밥집/.test(q);
+  const dateMealTimeOnlyLeak = isExplicitDateMealTimeOnlyFoodLeak(q);
+
+  // 브런치/디저트는 CAFE 우선 — foodSub WESTERN이 FOOD로 덮지 않게
+  if (
+    intentType !== "course_generation" &&
+    !dateMealTimeOnlyLeak &&
+    understood.strongVertical &&
+    understood.route &&
+    understood.route !== "MIXED" &&
+    !(understood.route === "FOOD" && diningOutOnlyUnderStrongerContext)
+  ) {
+    intentCategory = understood.route;
+    intentStrict = true;
   }
 
   if (foodSub && intentType === "search_strict" && !intentCategory) {
@@ -412,15 +487,27 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
     intentStrict = true;
   }
 
+  const intentCategories = queryUnderstandingToIntentCategories(understood);
+
   let obj: ScenarioObject = {
-    intentType,
+    intentType: intentType === "course_generation"
+      ? intentType
+      : !dateMealTimeOnlyLeak &&
+          understood.strongVertical &&
+          !(understood.route === "FOOD" && diningOutOnlyUnderStrongerContext)
+        ? "search_strict"
+        : intentType,
     recommendationMode: inferRecommendationMode(raw || q),
     intentCategory,
+    intentCategories: intentCategories.length ? intentCategories : undefined,
     intentStrict,
     scenario,
     confidence,
     rawQuery: raw || q,
+    queryUnderstanding: understood,
   };
+
+  if (understood.parkingPreferred) obj.parkingPreferred = true;
 
   if (foodSub && (obj.intentCategory === "FOOD" || intentType === "course_generation")) {
     obj.foodSubCategory = foodSub;
@@ -428,7 +515,10 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
 
   if (
     menuIntent.length &&
-    (obj.intentCategory === "FOOD" || intentType === "course_generation")
+    (obj.intentCategory === "FOOD" ||
+      obj.intentCategory === "CAFE" ||
+      obj.intentCategory === "ACTIVITY" ||
+      intentType === "course_generation")
   ) {
     obj.menuIntent = menuIntent;
   }
@@ -445,11 +535,16 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
   if (scenario === "parents") {
     obj.withParents = true;
   }
+  if ((understood.companionIntents ?? []).includes("child")) {
+    obj.withKids = true;
+  }
+  if ((understood.companionIntents ?? []).includes("group") && obj.scenario === "generic") {
+    obj.scenario = "group";
+  }
 
   obj = resolveAmbiguousScenario(obj);
 
   if (obj.scenario === "family_kids" || obj.scenario === "parent_child_outing") {
-    /** 식사·액티비티 중심(meal_or_activity): 명시적 카페 탐색이 없으면 drink_only 카페는 랭킹에서 제외 */
     obj.mealRequired = true;
   }
 
@@ -463,7 +558,70 @@ export function parseScenarioIntent(rawQuery: string): ScenarioObject {
     if (band) obj.dateTimeBand = band;
   }
 
-  return augmentScenarioWithComposite(obj);
+  obj = applyNegationToScenarioObject(augmentScenarioWithComposite(obj));
+  return applyCatalogMenuLexiconToScenario(obj);
+}
+
+function applyCatalogMenuLexiconToScenario(obj: ScenarioObject): ScenarioObject {
+  const lexicon = getCatalogMenuLexicon();
+  const remainder =
+    obj.queryUnderstanding?.negation?.isNegationQuery && obj.queryUnderstanding.negation.positiveRemainder
+      ? obj.queryUnderstanding.negation.positiveRemainder
+      : obj.rawQuery;
+  const excludedMenus = [
+    ...(obj.queryUnderstanding?.negation?.excludedMenus ?? []),
+    ...(obj.conversationExcludeMenuTerms ?? []),
+  ];
+  const matches = matchCatalogMenusInQuery(remainder, lexicon);
+  const resolution = resolveCatalogMenus({
+    staticMenuIntent: obj.menuIntent ?? [],
+    catalogMatches: matches,
+    excludedMenus,
+  });
+  const staticMenus = obj.menuIntent ?? [];
+  const discovery = classifyDiscoveryQuery(obj.rawQuery, obj);
+  const next = { ...obj, catalogMenu: resolution };
+  if (discovery.isDiscovery && !staticMenus.length && !resolution.catalogMenuPrimary) {
+    const skipped = {
+      ...obj,
+      catalogMenu: {
+        ...resolution,
+        catalogMenuPrimary: null,
+        catalogMenuSecondary: [],
+        resolvedMenuIntent: staticMenus,
+        collision: resolution.collision === "multiple_dynamic" ? "dynamic_vs_context" : resolution.collision,
+      },
+    };
+    skipped.conversationalDiscovery = detectConversationalDiscovery(obj.rawQuery, skipped);
+    return skipped;
+  }
+  if (resolution.resolvedMenuIntent.length) {
+    next.menuIntent = resolution.resolvedMenuIntent;
+  }
+  const primaryKind = resolution.catalogMenuMatches[0]?.kind;
+  if (
+    resolution.catalogMenuPrimary &&
+    !staticMenus.length &&
+    primaryKind === "FOOD_MENU" &&
+    next.intentCategory !== "CAFE" &&
+    next.intentCategory !== "BEAUTY" &&
+    next.intentCategory !== "ACTIVITY" &&
+    next.intentType !== "course_generation"
+  ) {
+    next.intentCategory = "FOOD";
+    next.intentType = "search_strict";
+    next.intentStrict = true;
+    if (next.queryUnderstanding) {
+      next.queryUnderstanding = {
+        ...next.queryUnderstanding,
+        route: "FOOD",
+        primaryCategory: "restaurant",
+        strongVertical: true,
+      };
+    }
+  }
+  next.conversationalDiscovery = detectConversationalDiscovery(obj.rawQuery, next);
+  return next;
 }
 
 /** 복합 조건 파싱까지 포함한 동일 엔트리(의미상 parseScenarioIntent 와 동일) */

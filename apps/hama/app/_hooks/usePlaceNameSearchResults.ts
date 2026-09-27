@@ -5,6 +5,7 @@ import type { HomeCard } from "@/lib/storeTypes";
 import { toHomeCard, type StoreRow as RepoStoreRow } from "@/lib/storeRepository";
 import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import { attachDistanceToCard } from "@/lib/results/attachDistanceToCard";
+import { buildSearchByNameApiUrl } from "@/lib/search/directSearch";
 import {
   getOrCreateHamaSearchSeed,
   getRecentExposedIdsHeaderValue,
@@ -56,17 +57,20 @@ export function usePlaceNameSearchResults(
     (async () => {
       const searchQuery = String(q ?? "").trim();
       try {
-        const params = new URLSearchParams({ q: searchQuery });
-        if (userLat != null && userLng != null && Number.isFinite(userLat) && Number.isFinite(userLng)) {
-          params.set("lat", String(userLat));
-          params.set("lng", String(userLng));
-        }
-        if (process.env.NODE_ENV === "development") {
-          params.set("debug", "1");
-        }
+        const apiUrl = buildSearchByNameApiUrl(searchQuery, {
+          lat:
+            userLat != null && userLng != null && Number.isFinite(userLat) && Number.isFinite(userLng)
+              ? String(userLat)
+              : undefined,
+          lng:
+            userLat != null && userLng != null && Number.isFinite(userLat) && Number.isFinite(userLng)
+              ? String(userLng)
+              : undefined,
+          debug: process.env.NODE_ENV === "development" ? "1" : undefined,
+        });
         if (process.env.NODE_ENV === "development") {
           // eslint-disable-next-line no-console
-          console.log("[place-search] query:", searchQuery, "epoch:", epoch);
+          console.log("[place-search] query:", searchQuery, "epoch:", epoch, "url:", apiUrl);
         }
         const seed = getOrCreateHamaSearchSeed();
         const headers: Record<string, string> = {};
@@ -76,7 +80,7 @@ export function usePlaceNameSearchResults(
         const recentExposedNames = getRecentExposedNamesHeaderValue();
         if (recentExposedNames) headers["x-hama-recent-exposed-names"] = recentExposedNames;
 
-        const res = await fetch(`/api/stores/search-by-name?${params.toString()}`, {
+        const res = await fetch(apiUrl, {
           cache: "no-store",
           headers: Object.keys(headers).length ? headers : undefined,
         });
@@ -109,7 +113,8 @@ export function usePlaceNameSearchResults(
           console.warn("[usePlaceNameSearchResults]", res.status, json.error ?? json);
         }
         const cards = rows.map((r) => toHomeCard(r)).map((c) => attachDistanceToCard(c, userLat, userLng));
-        setItems(filterHamaV1UserCatalog(cards));
+        const searchFailed = !res.ok || json.error === "suppression_unavailable";
+        setItems(searchFailed ? [] : filterHamaV1UserCatalog(cards));
       } catch (err) {
         if (process.env.NODE_ENV === "development") {
           // eslint-disable-next-line no-console

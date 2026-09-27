@@ -165,7 +165,7 @@ describe("DATE repeat avoidance", () => {
     const next = refreshed.deck.map((d) => d.card.id);
     expect(next.some((id) => avoided.includes(id))).toBe(false);
 
-    const pageSrc = readFileSync(resolve(__dirname, "../../../results/page.tsx"), "utf8");
+    const pageSrc = readFileSync(resolve(__dirname, "../../../results/ResultsScreen.tsx"), "utf8");
     expect(pageSrc).toContain("mergeExcludeForDisplayedDeck");
     expect(pageSrc).toContain("primaryListCards.slice(0, RECOMMEND_DECK_SIZE)");
     expect(pageSrc).not.toMatch(/setRejectedMainPickIds\(\(prev\) => \[\.\.\.new Set\(\[\.\.\.prev, id\]\)\]\)/);
@@ -233,7 +233,7 @@ describe("DATE repeat avoidance", () => {
     for (const id of top3) {
       expect(remount.deck.map((d) => d.card.id)).not.toContain(id);
     }
-    const pageSrc = readFileSync(resolve(__dirname, "../../../results/page.tsx"), "utf8");
+    const pageSrc = readFileSync(resolve(__dirname, "../../../results/ResultsScreen.tsx"), "utf8");
     expect(pageSrc).toContain("readContextRecentExposedIds");
     expect(pageSrc).toContain("repeatAvoidPlaceIds: sessionRepeatAvoidIds");
     expect(pageSrc).toMatch(/useEffect\(\(\) => \{\s*const parsed = parseScenarioIntent\(qRaw\);/);
@@ -442,7 +442,7 @@ describe("Home situation repeat V1", () => {
   });
 
   it("다른 추천 보기 Home-situation wiring still merges the full displayed TOP3", () => {
-    const pageSrc = readFileSync(resolve(__dirname, "../../../results/page.tsx"), "utf8");
+    const pageSrc = readFileSync(resolve(__dirname, "../../../results/ResultsScreen.tsx"), "utf8");
     expect(pageSrc).toContain("shouldApplyHomeSituationRepeatAvoidance");
     expect(pageSrc).toContain("mergeExcludeForDisplayedDeck");
     expect(pageSrc).toMatch(/homeRepeat \? deck\.map\(\(c\) => c\.id\)/);

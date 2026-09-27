@@ -185,6 +185,7 @@ export function RecommendationCard({
     <Touchable>
       <article
         ref={cardEl}
+        data-hama-place-id={card.id}
         role="button"
         tabIndex={0}
         onClick={() => {

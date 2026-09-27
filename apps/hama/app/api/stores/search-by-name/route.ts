@@ -6,21 +6,23 @@ import {
   fetchPlacesByNamePatterns,
   fetchPlacesByNamePrefix,
   fetchStoresByCompactHalves,
+  fetchStoresByKeywordOverlaps,
   fetchStoresByNamePatterns,
   fetchStoresByNamePrefix,
   mergeStoreRows,
   PLACES_TABLE,
   STORES_TABLE,
 } from "@/lib/places/placeNameSearch";
+import { expandSearchQuery } from "@/lib/searchSynonyms";
 import { orderRowsServiceRegionFirst } from "@/lib/serviceRegion";
 import type { StoreRow } from "@/lib/storeTypes";
 import { isAlcoholNightlifeHaystack } from "@/lib/recommend/childFriendlyScore";
 import { isExcludedFromHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
 import {
   applyStoreSuppression,
-  fetchActiveStoreSuppressionRules,
   inferStoreSuppressionScope,
 } from "@/lib/recommend/storeSuppression";
+import { loadActiveStoreSuppressionRules } from "@/lib/server/storeSuppressionAdmin";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -143,7 +145,13 @@ function isFastFoodChainRow(row: StoreRow): boolean {
 
 function alcoholVenueRowBlob(row: StoreRow): string {
   return normSearchText(
-    [String(row.name ?? ""), ...(row.tags ?? []), ...(row.mood ?? []), ...(row.menu_keywords ?? [])].join(" ")
+    [
+      String(row.name ?? ""),
+      ...(row.tags ?? []),
+      ...(row.mood ?? []),
+      ...(row.menu_keywords ?? []),
+      ...(row.search_keywords ?? []),
+    ].join(" ")
   );
 }
 
@@ -228,6 +236,7 @@ function foodDiningFallbackRowBlob(row: StoreRow): string {
     ...(row.tags ?? []),
     ...(row.mood ?? []),
     ...(row.menu_keywords ?? []),
+    ...(row.search_keywords ?? []),
   ];
   return normSearchText(parts.join(" "));
 }
@@ -743,7 +752,9 @@ function filterQualityForStrictLibraryQuery(
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
-    const searchQuery = String(url.searchParams.get("q") ?? "").trim();
+    const searchQuery = String(
+      url.searchParams.get("query") ?? url.searchParams.get("q") ?? ""
+    ).trim();
     const safe = sanitizeToken(normalizeBrandQuery(searchQuery));
     const aliasKeywords = getAliasKeywords(searchQuery);
     const explicitCategory = String(url.searchParams.get("category") ?? "").trim();
@@ -777,10 +788,40 @@ export async function GET(req: Request) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const patterns = buildNamePatterns(safe);
-    const sr = await fetchStoresByNamePatterns(supabase, patterns);
-    const pr = await fetchPlacesByNamePatterns(supabase, patterns);
-    const patternRows = mergeStoreRows(sr.rows, pr.rows);
-    const hadError = patternRows.length === 0 && sr.hadError && pr.hadError;
+    const expandedKeywords = [
+      ...new Set(
+        expandSearchQuery(searchQuery)
+          .map((t) => sanitizeToken(normalizeBrandQuery(t)))
+          .filter((t) => t.length >= 2)
+      ),
+    ];
+
+    const [sr, pr, sk] = await Promise.all([
+      fetchStoresByNamePatterns(supabase, patterns),
+      fetchPlacesByNamePatterns(supabase, patterns),
+      fetchStoresByKeywordOverlaps(supabase, expandedKeywords),
+    ]);
+    const nameHits = mergeStoreRows(sr.rows, pr.rows);
+    const patternRows = mergeStoreRows(nameHits, sk.rows);
+    const hadError = patternRows.length === 0 && sr.hadError && pr.hadError && sk.hadError;
+
+    const keywordMergeDebug = {
+      originalQuery: searchQuery,
+      expandedKeywords,
+      nameHits: nameHits.length,
+      menuKeywordHits: sk.menuKeywordHits.length,
+      searchKeywordHits: sk.searchKeywordHits.length,
+      keywordMerged: sk.rows.length,
+      merged: patternRows.length,
+      supabaseErrors: sk.supabaseErrors,
+      menuQueryMethod: sk.menuQueryMethod,
+      searchQueryMethod: sk.searchQueryMethod,
+      ovLiteral: sk.ovLiteral,
+    };
+    if (process.env.NODE_ENV === "development") {
+      // eslint-disable-next-line no-console
+      console.log("[search-by-name keyword merge]", keywordMergeDebug);
+    }
 
     if (process.env.NODE_ENV === "development") {
       // eslint-disable-next-line no-console
@@ -792,12 +833,20 @@ export async function GET(req: Request) {
     if (hadError && patternRows.length === 0) {
       const body: Record<string, unknown> = { items: [], error: "query_failed" };
       if (wantDebug) {
+        body.originalQuery = keywordMergeDebug.originalQuery;
+        body.expandedKeywords = keywordMergeDebug.expandedKeywords;
+        body.nameHits = keywordMergeDebug.nameHits;
+        body.menuKeywordHits = keywordMergeDebug.menuKeywordHits;
+        body.searchKeywordHits = keywordMergeDebug.searchKeywordHits;
+        body.merged = keywordMergeDebug.merged;
+        body.supabaseErrors = keywordMergeDebug.supabaseErrors;
         body.debug = {
           queryRaw: searchQuery,
           queryNormalized: safe,
           tables: [STORES_TABLE, PLACES_TABLE],
           conclusion: "api_error",
           patternCount: patternRows.length,
+          ...keywordMergeDebug,
         };
       }
       return NextResponse.json(body, { status: 500 });
@@ -1116,7 +1165,14 @@ export async function GET(req: Request) {
       explicitCategory,
       explicitIntent,
     });
-    const suppressionRules = await fetchActiveStoreSuppressionRules(suppressionScope);
+    const suppressionLoad = await loadActiveStoreSuppressionRules(suppressionScope);
+    if (suppressionLoad.status !== "ok") {
+      return NextResponse.json(
+        { items: [], error: "suppression_unavailable" },
+        { status: 503, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+    const suppressionRules = suppressionLoad.rules;
     const suppressionBeforeTop10 = items.slice(0, 10).map((r) => r.name);
     const suppressionApplied = applyStoreSuppression(items, suppressionRules, {
       scope: suppressionScope,
@@ -1130,15 +1186,23 @@ export async function GET(req: Request) {
     const suppressionAfterTop10 = items.slice(0, 10).map((r) => r.name);
     console.log("[store suppression applied]", {
       scope: suppressionScope,
-      ruleCount: suppressionRules.length,
-      suppressedNames: suppressionApplied.suppressedNames,
-      beforeTop10: suppressionBeforeTop10,
-      afterTop10: suppressionAfterTop10,
+      beforeCount: suppressionBeforeTop10.length,
+      afterCount: suppressionAfterTop10.length,
     });
 
     const body: Record<string, unknown> = { items };
     if (wantDebug) {
       const nCompact = normCompactName(safe);
+      body.originalQuery = keywordMergeDebug.originalQuery;
+      body.expandedKeywords = keywordMergeDebug.expandedKeywords;
+      body.nameHits = keywordMergeDebug.nameHits;
+      body.menuKeywordHits = keywordMergeDebug.menuKeywordHits;
+      body.searchKeywordHits = keywordMergeDebug.searchKeywordHits;
+      body.merged = keywordMergeDebug.merged;
+      body.supabaseErrors = keywordMergeDebug.supabaseErrors;
+      body.menuQueryMethod = keywordMergeDebug.menuQueryMethod;
+      body.searchQueryMethod = keywordMergeDebug.searchQueryMethod;
+      body.ovLiteral = keywordMergeDebug.ovLiteral;
       body.debug = {
         queryRaw: searchQuery,
         queryNormalized: safe,
@@ -1155,6 +1219,7 @@ export async function GET(req: Request) {
             : hadError
               ? "partial_error_but_no_rows"
               : "db_likely_no_row_for_query",
+        ...keywordMergeDebug,
       };
     }
 

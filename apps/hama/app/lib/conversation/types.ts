@@ -4,6 +4,8 @@ export type ConversationTurn = {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  /** Set when the home submits a distinct utterance, including a repeated sentence. */
+  turnId?: string;
 };
 
 export type RefinementType =
@@ -22,6 +24,8 @@ export type ConversationContext = {
   lastRecommendations?: {
     placeIds?: string[];
     courseIds?: string[];
+    query?: string;
+    cards?: import("@/lib/storeTypes").HomeCard[];
   };
   rejectedPlaceIds?: string[];
   /** IntentCategory 또는 FoodSubCategory 문자열 */
@@ -30,6 +34,17 @@ export type ConversationContext = {
   /** UI·로그: 누적 사용자 문장(키워드 보조) */
   cumulativeText?: string;
   clarificationNeeded?: boolean;
+  /** Question shown instead of a guessed region. */
+  regionClarification?: string;
+  /** Added purposes that must not replace the primary recommendation list. */
+  linkedPurposes?: import("./linkedPurpose").LinkedPurpose[];
+  /** Play cards shown before a meal-only follow-up. */
+  shownPlayCards?: import("@/lib/storeTypes").HomeCard[];
+  shownPlayKey?: string;
+  /** Play cards kept when the newest turn only adds a meal. */
+  frozenPlayCards?: import("@/lib/storeTypes").HomeCard[];
+  /** Home chat snapshots. Opening an older entry does not rank again. */
+  dialogueHistory?: import("./dialogueHistory").DialogueEntry[];
 };
 
 export type ParseTurnResult = {

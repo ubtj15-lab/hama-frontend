@@ -67,6 +67,7 @@ export function mapPlaceRowToStoreRow(row: Record<string, unknown>): StoreRow {
     phone: null,
     image_url: null,
     kakao_place_url: null,
+    naver_place_url: null,
     naver_place_id: null,
     mood: null,
     tags: null,
@@ -113,11 +114,13 @@ function mapStoresStarRowToStoreRow(raw: Record<string, unknown>): StoreRow {
     phone: raw.phone != null ? String(raw.phone) : null,
     image_url: raw.image_url != null ? String(raw.image_url) : null,
     kakao_place_url: raw.kakao_place_url != null ? String(raw.kakao_place_url) : null,
+    naver_place_url: raw.naver_place_url != null ? String(raw.naver_place_url) : null,
     naver_place_id: raw.naver_place_id != null ? String(raw.naver_place_id) : null,
     mood: Array.isArray(mood) ? (mood as string[]) : null,
     tags: Array.isArray(tags) ? (tags as string[]) : null,
     description: raw.description != null ? String(raw.description) : null,
     menu_keywords: Array.isArray(raw.menu_keywords) ? (raw.menu_keywords as string[]) : null,
+    search_keywords: Array.isArray(raw.search_keywords) ? (raw.search_keywords as string[]) : null,
     food_sub_category: raw.food_sub_category != null ? String(raw.food_sub_category) : null,
     with_kids: typeof raw.with_kids === "boolean" ? raw.with_kids : null,
     hama_pay_enabled: typeof raw.hama_pay_enabled === "boolean" ? raw.hama_pay_enabled : null,
@@ -126,6 +129,138 @@ function mapStoresStarRowToStoreRow(raw: Record<string, unknown>): StoreRow {
     price_level: raw.price_level != null ? String(raw.price_level) : null,
     updated_at: raw.updated_at != null ? String(raw.updated_at) : null,
   };
+}
+
+export type StoreKeywordOverlapSearchResult = {
+  rows: StoreRow[];
+  menuKeywordHits: StoreRow[];
+  searchKeywordHits: StoreRow[];
+  hadError: boolean;
+  supabaseErrors: {
+    menu: string | null;
+    search: string | null;
+  };
+  menuQueryMethod: "overlaps" | "filter_ov" | "none";
+  searchQueryMethod: "overlaps" | "filter_ov" | "none";
+  ovLiteral: string;
+};
+
+function dedupeStoreRowsById(rows: StoreRow[]): StoreRow[] {
+  const byId = new Map<string, StoreRow>();
+  for (const row of rows) {
+    if (row.id && !byId.has(row.id)) byId.set(row.id, row);
+  }
+  return [...byId.values()];
+}
+
+/** PostgREST text[] `ov` 필터용 — 모든 항목을 따옴표로 감싼 `{ "a","b" }` 리터럴 */
+export function toPostgrestOvLiteral(terms: string[]): string {
+  const cleaned = terms.map((t) => String(t).trim()).filter(Boolean);
+  return `{${cleaned.map((t) => `"${t.replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
+function mapRawRows(data: unknown[] | null | undefined): StoreRow[] {
+  const out: StoreRow[] = [];
+  for (const raw of data ?? []) {
+    const row = mapStoresStarRowToStoreRow(raw as unknown as Record<string, unknown>);
+    if (row.id) out.push(row);
+  }
+  return out;
+}
+
+/** `_text` 배열 — PostgREST `.filter(column, "ov", ovLiteral)` (SQL `&&` 와 동일) */
+async function fetchStoresByArrayColumnOverlap(
+  supabase: SupabaseClient,
+  column: "menu_keywords" | "search_keywords",
+  ovLiteral: string
+): Promise<{
+  rows: StoreRow[];
+  method: "overlaps" | "filter_ov" | "none";
+  error: string | null;
+}> {
+  if (!ovLiteral || ovLiteral === "{}") {
+    return { rows: [], method: "none", error: null };
+  }
+
+  const { data: ovData, error: ovError } = await baseStoresQuery(supabase)
+    .filter(column, "ov", ovLiteral)
+    .limit(200);
+
+  if (ovError) {
+    const ovErrMsg = String(ovError.message ?? ovError);
+    console.error(`[placeNameSearch] ${column} filter ov`, { ovLiteral, ovError });
+    return {
+      rows: [],
+      method: "filter_ov",
+      error: ovErrMsg,
+    };
+  }
+
+  return {
+    rows: mapRawRows(ovData),
+    method: "filter_ov",
+    error: null,
+  };
+}
+
+/**
+ * menu_keywords / search_keywords — 각각 조회 후 id 기준 병합.
+ */
+export async function fetchStoresByKeywordOverlaps(
+  supabase: SupabaseClient,
+  expandedKeywords: string[]
+): Promise<StoreKeywordOverlapSearchResult> {
+  const sanitized = [
+    ...new Set(expandedKeywords.map((t) => sanitizeToken(t)).filter((t) => t.length >= 2)),
+  ].slice(0, 32);
+  const ovLiteral = toPostgrestOvLiteral(sanitized);
+
+  if (sanitized.length === 0) {
+    return {
+      rows: [],
+      menuKeywordHits: [],
+      searchKeywordHits: [],
+      hadError: false,
+      supabaseErrors: { menu: null, search: null },
+      menuQueryMethod: "none",
+      searchQueryMethod: "none",
+      ovLiteral: "{}",
+    };
+  }
+
+  const mergedById = new Map<string, StoreRow>();
+  const menuResult = await fetchStoresByArrayColumnOverlap(supabase, "menu_keywords", ovLiteral);
+  const searchResult = await fetchStoresByArrayColumnOverlap(supabase, "search_keywords", ovLiteral);
+
+  for (const row of menuResult.rows) {
+    if (!mergedById.has(row.id)) mergedById.set(row.id, row);
+  }
+  for (const row of searchResult.rows) {
+    if (!mergedById.has(row.id)) mergedById.set(row.id, row);
+  }
+
+  return {
+    rows: [...mergedById.values()],
+    menuKeywordHits: dedupeStoreRowsById(menuResult.rows),
+    searchKeywordHits: dedupeStoreRowsById(searchResult.rows),
+    hadError: Boolean(menuResult.error || searchResult.error),
+    supabaseErrors: {
+      menu: menuResult.error,
+      search: searchResult.error,
+    },
+    menuQueryMethod: menuResult.method,
+    searchQueryMethod: searchResult.method,
+    ovLiteral,
+  };
+}
+
+/** @deprecated fetchStoresByKeywordOverlaps 사용 */
+export async function fetchStoresByKeywordPatterns(
+  supabase: SupabaseClient,
+  expandedKeywords: string[]
+): Promise<{ rows: StoreRow[]; hadError: boolean }> {
+  const r = await fetchStoresByKeywordOverlaps(supabase, expandedKeywords);
+  return { rows: r.rows, hadError: r.hadError };
 }
 
 export async function fetchStoresByNamePatterns(

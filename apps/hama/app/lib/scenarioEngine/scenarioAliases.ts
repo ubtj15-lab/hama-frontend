@@ -42,7 +42,7 @@ export const SCENARIO_ALIAS_GROUPS: { scenario: ScenarioType; phrases: string[] 
   },
   {
     scenario: "group",
-    phrases: ["회식", "단체", "여럿이", "여러 명", "여러명", "팀 모임", "단체로"],
+    phrases: ["회식", "팀 회식", "단체", "여럿이", "여러 명", "여러명", "팀 모임", "단체로"],
   },
   {
     scenario: "friends",

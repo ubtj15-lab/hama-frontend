@@ -103,5 +103,7 @@ export function summarizeActiveConstraints(intent: ScenarioObject): ConstraintCh
 
   if (intent.withParents) add("wp", "부모님 동반", "scenario");
 
+  if (intent.region) add(`region-${intent.region}`, intent.region, "distance");
+
   return chips.slice(0, 10);
 }

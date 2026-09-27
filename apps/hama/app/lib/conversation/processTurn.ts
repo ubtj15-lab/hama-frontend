@@ -5,6 +5,8 @@ import { parseTurnIntent } from "./parseTurn";
 import { mergeIntent } from "./mergeIntent";
 import { applyConversationMemory } from "./memory";
 import { saveConversationContext } from "./storage";
+import { nextLinkedPurposes, detectLinkedFoodPurpose, validShownPlayCards } from "./linkedPurpose";
+import { regionClarificationFor, withNamedRegion } from "./namedRegion";
 
 function makeSessionId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -23,30 +25,42 @@ function uniq<T>(arr: T[]): T[] {
 export function processConversationTurn(
   text: string,
   previous: ConversationContext | null,
-  options?: { persist?: boolean }
+  options?: { persist?: boolean; turnId?: string }
 ): ConversationContext {
   const raw = String(text ?? "").trim();
   const persist = options?.persist !== false;
+  const turnId = options?.turnId;
 
   const sessionId = previous?.sessionId ?? makeSessionId();
   if (previous?.turns.length) {
     const lastUser = [...previous.turns].reverse().find((t) => t.role === "user");
-    if (lastUser?.text === raw) {
+    if (turnId) {
+      if (lastUser?.turnId === turnId) return previous;
+    } else if (lastUser?.text === raw) {
       return previous;
     }
   }
 
-  const userTurn = { role: "user" as const, text: raw, timestamp: Date.now() };
+  const userTurn = {
+    role: "user" as const,
+    text: raw,
+    timestamp: Date.now(),
+    ...(turnId ? { turnId } : {}),
+  };
   const turns = [...(previous?.turns ?? []), userTurn];
   const cumulativeText = [previous?.cumulativeText, raw].filter(Boolean).join(" · ");
 
   if (!previous) {
-    const currentIntent = applyConversationMemory(parseScenarioIntent(raw), {});
+    const currentIntent = withNamedRegion(applyConversationMemory(parseScenarioIntent(raw), {}), raw);
+    const regionQuestion = regionClarificationFor(raw);
     const ctx: ConversationContext = {
       sessionId,
       turns,
       currentIntent,
       cumulativeText: raw,
+      linkedPurposes: nextLinkedPurposes(undefined, raw, "new_request"),
+      clarificationNeeded: regionQuestion ? true : undefined,
+      regionClarification: regionQuestion ?? undefined,
     };
     if (persist) saveConversationContext(ctx);
     return ctx;
@@ -104,12 +118,40 @@ export function processConversationTurn(
     clarificationNeeded: refinement === "clarify" ? true : undefined,
   };
 
-  nextIntent = applyConversationMemory(nextIntent, {
-    rejectedPlaceIds: ctx.rejectedPlaceIds,
-    rejectedCategories: ctx.rejectedCategories,
-    rejectedTags: ctx.rejectedTags,
-  });
-  const out: ConversationContext = { ...ctx, currentIntent: nextIntent };
+  nextIntent = withNamedRegion(
+    applyConversationMemory(nextIntent, {
+      rejectedPlaceIds: ctx.rejectedPlaceIds,
+      rejectedCategories: ctx.rejectedCategories,
+      rejectedTags: ctx.rejectedTags,
+    }),
+    raw,
+    previous.currentIntent.region
+  );
+  const regionQuestion = regionClarificationFor(raw);
+  const mealOnly = detectLinkedFoodPurpose(raw);
+  const playIntent = mealOnly
+    ? {
+        ...nextIntent,
+        distanceTolerance: previous.currentIntent.distanceTolerance,
+        mealRequired: previous.currentIntent.mealRequired,
+      }
+    : nextIntent;
+  const keptPlay = validShownPlayCards(previous.lastRecommendations?.cards)
+    ? previous.lastRecommendations!.cards
+    : validShownPlayCards(previous.frozenPlayCards)
+      ? previous.frozenPlayCards
+      : undefined;
+  const out: ConversationContext = {
+    ...ctx,
+    currentIntent: playIntent,
+    linkedPurposes: nextLinkedPurposes(previous.linkedPurposes, raw, refinement),
+    clarificationNeeded: regionQuestion ? true : ctx.clarificationNeeded,
+    regionClarification: regionQuestion ?? undefined,
+    shownPlayCards: previous.shownPlayCards,
+    shownPlayKey: previous.shownPlayKey,
+    frozenPlayCards: mealOnly ? keptPlay : undefined,
+    dialogueHistory: previous.dialogueHistory,
+  };
 
   if (persist) saveConversationContext(out);
   return out;

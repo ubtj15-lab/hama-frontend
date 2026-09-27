@@ -1,7 +1,10 @@
 import type { HomeCard } from "@/lib/storeTypes";
 import type { IntentionType } from "@/lib/intention";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
-import { storeCategoryMatchesIntentCategory } from "@/lib/scenarioEngine/intentClassification";
+import {
+  evaluateStrictCategoryCompatibility,
+  type StrictCategoryCompatibilityDebug,
+} from "./strictCategoryCompatibility";
 import { resolveScenarioConfig } from "@/lib/scenarioEngine/resolveScenarioConfig";
 import { configTagBoostRaw, placeTypePreferenceRaw } from "@/lib/scenarioEngine/scoringBoost";
 import { scenarioObjectToIntention, scenarioTypeToRankKey } from "@/lib/scenarioEngine/scenarioRankBridge";
@@ -14,6 +17,9 @@ import {
   DIVERSITY_PENALTY_SAME_MAIN_CATEGORY,
   DIVERSITY_PENALTY_SAME_SUB_CATEGORY,
   DIVERSITY_PENALTY_SAME_SCENARIO_VOICE,
+  EXPLICIT_MENU_FOOD_BLEND,
+  IMPLICIT_FOOD_BLEND,
+  MENU_RANK_GENERIC_PENALTY,
 } from "./recommendConstants";
 import { computeScenarioForcedRawDelta, convenienceScoreFromParts } from "./scenarioForcedRules";
 import { distanceBlendForScenarioFit } from "./scenarioRiskAndFit";
@@ -27,8 +33,12 @@ import {
   cardMatchesStrictFoodIntent,
   filterFoodCandidatesByMenuIntent,
   foodMenuMatchNormalized,
+  foodMenuMatchRaw,
   inferPlaceFoodSub,
+  poolHasMenuSignal,
 } from "./foodIntentRanking";
+import { menuRankBoostForTier, resolveMenuIntentsForMatch, type MenuMatchTier } from "./menuRelevance";
+import { applySecondaryConstraintScoring } from "./secondaryConstraintScoring";
 import {
   compareScoredFoodTieOrder,
   collapseGenericFoodRealWorldDuplicatesWithinExactFinalScoreTies,
@@ -80,6 +90,7 @@ import {
   isHardExcludedForFamilyKidsListRecommend,
   parentGatheringOrRestorativeQuery,
 } from "./placeFamilyClassification";
+import { cardViolatesHardNegation, softNegationScorePenalty } from "@/lib/scenarioEngine/negationUnderstanding";
 import type { UserProfile } from "@/lib/onboardingProfile";
 
 export type RecommendScoreBreakdown = {
@@ -91,6 +102,11 @@ export type RecommendScoreBreakdown = {
   bonusScore: number;
   foodIntentScore: number;
   compositeScore: number;
+  menuTier?: MenuMatchTier;
+  menuExactScore?: number;
+  menuSynonymScore?: number;
+  menuSemanticScore?: number;
+  menuRankBoost?: number;
   scenarioRaw: number;
   /** 룰 기반 시나리오 가산·감산 반영 후 블렌드 점수 */
   scenarioRichScore: number;
@@ -99,6 +115,11 @@ export type RecommendScoreBreakdown = {
   behaviorVisibility: number;
   personalizationScore: number;
   finalScore: number;
+  /** Hybrid+menu+negation score before secondary composition. */
+  baseRankingScore?: number;
+  scoreAfterComposition?: number;
+  secondaryComposition?: import("./secondaryConstraintScoring").SecondaryCompositionDebug;
+  strictCategoryCompatibility?: StrictCategoryCompatibilityDebug;
   businessState: BusinessState;
   activeScenario: RecommendScenarioKey;
 };
@@ -121,6 +142,11 @@ export type BuildRecommendationsContext = {
   scenarioObject?: ScenarioObject | null;
   userProfile?: UserProfile | null;
   relaxPersonalRules?: boolean;
+  /**
+   * Optional hook for an independent exposure/diversity layer.
+   * Does not change ranking scores; called with the full scored list and the UI deck.
+   */
+  attachScoredPool?: (scored: ScoredRecommendItem[], deck: ScoredRecommendItem[]) => void;
 };
 
 function normBlob(card: HomeCard): string {
@@ -467,10 +493,19 @@ export function buildTopRecommendations(
     pool = filterFoodCandidatesByMenuIntent(pool, so);
   }
 
+  const rankingMenus = resolveMenuIntentsForMatch(so?.menuIntent, ctx.searchQuery ?? so?.rawQuery);
+  const enforceMenuHit = Boolean(
+    rankingMenus.length > 0 &&
+      (strictFood || strictCafe) &&
+      poolHasMenuSignal(pool, rankingMenus, so?.foodSubCategory, ctx.searchQuery ?? so?.rawQuery)
+  );
+
   const runPass = (relaxed: boolean): ScoredRecommendItem[] => {
     const out: ScoredRecommendItem[] = [];
+    const categoryCompatById = new Map<string, StrictCategoryCompatibilityDebug>();
     for (const card of pool) {
       if (exclude.has(card.id)) continue;
+      if (cardViolatesHardNegation(card, so?.queryUnderstanding?.negation)) continue;
 
       if (strictIntentCategorySearch) {
         if (isHardExcludedNonPoi(card)) continue;
@@ -490,16 +525,20 @@ export function buildTopRecommendations(
       }
 
       const strict = ctx.scenarioObject;
-      if (
-        strict?.intentType === "search_strict" &&
-        strict.intentCategory &&
-        strict.intentStrict !== false &&
-        !storeCategoryMatchesIntentCategory(card, strict.intentCategory)
-      ) {
-        continue;
+      if (strict?.intentType === "search_strict" && strict.intentCategory && strict.intentStrict !== false) {
+        const compat = evaluateStrictCategoryCompatibility(card, strict, ctx.searchQuery ?? null);
+        if (compat.finalDecision !== "KEEP") continue;
+        categoryCompatById.set(card.id, compat);
       }
 
-      if (strictFood && so && !cardMatchesStrictFoodIntent(card, so)) {
+      if (
+        strictFood &&
+        so &&
+        !cardMatchesStrictFoodIntent(card, so, {
+          requireMenuHit: enforceMenuHit,
+          menuIntents: rankingMenus,
+        })
+      ) {
         continue;
       }
       if (!relaxed && strictCafe && isChainCafe(card)) {
@@ -509,7 +548,12 @@ export function buildTopRecommendations(
         continue;
       }
 
-      if (ctx.userProfile?.young_child === "없음" && isKidVenueExcludedWhenNoYoungChild(card)) {
+      // Current-query withKids=true outranks stored/default young_child=없음 for this request only.
+      if (
+        ctx.userProfile?.young_child === "없음" &&
+        so?.withKids !== true &&
+        isKidVenueExcludedWhenNoYoungChild(card)
+      ) {
         continue;
       }
 
@@ -646,12 +690,20 @@ export function buildTopRecommendations(
       bonS = Math.max(0, bonS - 12);
     }
 
+    const hasExplicitMenu = (so?.menuIntent?.length ?? 0) > 0;
     const useFoodRanking =
       strictFood &&
       so &&
-      ((so.menuIntent?.length ?? 0) > 0 || so.foodSubCategory != null);
-    const foodS = useFoodRanking
-      ? foodMenuMatchNormalized(card, so.menuIntent, so.foodSubCategory)
+      (hasExplicitMenu || so.foodSubCategory != null);
+    const useMenuDominant = Boolean(
+      hasExplicitMenu && so && (strictFood || strictCafe)
+    );
+    const rankingMenuList = rankingMenus.length ? rankingMenus : so?.menuIntent;
+    const menuRaw = (useMenuDominant || useFoodRanking) && so
+      ? foodMenuMatchRaw(card, rankingMenuList, so.foodSubCategory)
+      : null;
+    const foodS = (useMenuDominant || useFoodRanking) && so
+      ? foodMenuMatchNormalized(card, rankingMenuList, so.foodSubCategory)
       : 0;
 
     const useComposite =
@@ -668,17 +720,22 @@ export function buildTopRecommendations(
     const compS = useComposite ? compositeIntentRawScore(card, so) : 0;
 
     let scenarioRich = scenarioS;
-    if (useFoodRanking) {
-      scenarioRich = Math.min(100, scenarioRich * 0.82 + foodS * 0.18);
+    if (useMenuDominant) {
+      scenarioRich = Math.min(100, scenarioRich * (1 - EXPLICIT_MENU_FOOD_BLEND) + foodS * EXPLICIT_MENU_FOOD_BLEND);
+    } else if (useFoodRanking) {
+      scenarioRich = Math.min(100, scenarioRich * (1 - IMPLICIT_FOOD_BLEND) + foodS * IMPLICIT_FOOD_BLEND);
     }
     if (useComposite) {
       scenarioRich = Math.min(100, scenarioRich * 0.88 + compS * 0.12);
     }
     const familyRank =
       explicitScenarioKey === "family";
-    if (familyRank) {
+    if (familyRank && !useMenuDominant) {
       const cfp = childFriendlyScore(card) * 100;
       scenarioRich = Math.min(100, scenarioRich * 0.36 + cfp * 0.64);
+    } else if (familyRank && useMenuDominant) {
+      const cfp = childFriendlyScore(card) * 100;
+      scenarioRich = Math.min(100, scenarioRich * 0.88 + cfp * 0.12);
     }
 
     distS *= distanceBlendForScenarioFit(scenarioRich);
@@ -711,6 +768,12 @@ export function buildTopRecommendations(
       finalScore = Math.max(0, finalScore - 22);
     }
 
+    const menuTier = menuRaw?.tier ?? "none";
+    const menuBoost = useMenuDominant ? menuRankBoostForTier(menuTier) : 0;
+    if (menuBoost > 0) {
+      finalScore = Math.max(0, Math.min(100, finalScore + menuBoost));
+    }
+
     if (
       strict?.intentCategory === "BEAUTY" &&
       strict.beautySubCategory &&
@@ -721,6 +784,7 @@ export function buildTopRecommendations(
     }
 
     finalScore = Math.max(0, Math.min(100, finalScore + timeOfDayBonusForFoodCafe(card, strict, blob)));
+    finalScore = Math.max(0, finalScore - softNegationScorePenalty(card, strict?.queryUnderstanding?.negation));
 
     const breakdown: RecommendScoreBreakdown = {
       distanceScore: distS,
@@ -731,6 +795,11 @@ export function buildTopRecommendations(
       bonusScore: bonS,
       foodIntentScore: foodS,
       compositeScore: compS,
+      menuTier,
+      menuExactScore: menuRaw?.exactScore ?? 0,
+      menuSynonymScore: menuRaw?.synonymScore ?? 0,
+      menuSemanticScore: menuRaw?.semanticScore ?? 0,
+      menuRankBoost: menuBoost,
       scenarioRaw: rawScenario,
       scenarioRichScore: scenarioRich,
       convenienceScore: convS,
@@ -740,6 +809,7 @@ export function buildTopRecommendations(
       finalScore,
       businessState,
       activeScenario,
+      ...(categoryCompatById.get(card.id) ? { strictCategoryCompatibility: categoryCompatById.get(card.id) } : {}),
     };
 
     const reasonText = buildHomeRecommendationReason({
@@ -809,6 +879,33 @@ export function buildTopRecommendations(
     }
     scored = runPass(true);
   }
+  const neg = so?.queryUnderstanding?.negation;
+  if (scored.length === 0 && neg?.isNegationQuery && neg.hardExclusions.length) {
+    neg.fallbackReason = "hard_exclusion_emptied_deck";
+  }
+
+  const hasExplicitMenuAfter = (so?.menuIntent?.length ?? 0) > 0;
+  const useMenuDominantAfter = Boolean(
+    hasExplicitMenuAfter && so && (strictFood || strictCafe)
+  );
+  if (useMenuDominantAfter) {
+    const hasStrong = scored.some(
+      (s) => s.breakdown.menuTier === "exact" || s.breakdown.menuTier === "synonym"
+    );
+    if (hasStrong) {
+      for (const s of scored) {
+        if (s.breakdown.menuTier === "none") {
+          s.breakdown.finalScore = Math.max(
+            0,
+            s.breakdown.finalScore - MENU_RANK_GENERIC_PENALTY
+          );
+        }
+      }
+    }
+  }
+
+  applySecondaryConstraintScoring(scored, so);
+
   scored.sort((a, b) =>
     compareScoredFoodTieOrder(a, b, ctx.searchQuery ?? so?.rawQuery ?? "", so)
   );
@@ -839,14 +936,18 @@ export function buildTopRecommendations(
   });
 
   if (strictIntentCategorySearch) {
-    return selectWithDiversity(scored, RECOMMEND_DECK_SIZE);
+    const deck = selectWithDiversity(scored, RECOMMEND_DECK_SIZE);
+    ctx.attachScoredPool?.(scored, deck);
+    return deck;
   }
-  return pickDeckWithBackupRoles(
+  const deck = pickDeckWithBackupRoles(
     scored,
     { scenarioObject: ctx.scenarioObject },
     rankKeyForCategory,
     RECOMMEND_DECK_SIZE
   ) as ScoredRecommendItem[];
+  ctx.attachScoredPool?.(scored, deck);
+  return deck;
 }
 
 /** strict 시나리오 랭킹 — 내부적으로 buildTopRecommendations와 동일 */

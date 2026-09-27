@@ -39,7 +39,7 @@ const FOOD_PREF_RULES: { id: string; patterns: RegExp[] }[] = [
   },
   {
     id: "hangover",
-    patterns: [/해장/],
+    patterns: [/해장/, /숙취/, /속\s*풀리는/, /속풀리는/],
   },
   {
     id: "kid_friendly_menu",

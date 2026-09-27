@@ -63,6 +63,12 @@ export function extractPartialFromUtterance(
     out.hardConstraints = uniq(["indoor", ...(out.hardConstraints ?? [])]);
   }
 
+  if (/비\s*오|비가|비오는|우천/.test(q)) {
+    out.weatherHint = "rain";
+    out.indoorPreferred = true;
+    out.hardConstraints = uniq(["indoor", ...(out.hardConstraints ?? [])]);
+  }
+
   if (/조용|한적|잔잔/.test(q)) {
     out.vibePreference = uniq(["calm", ...(out.vibePreference ?? []), ...detectVibePreference(raw)]);
   }
@@ -90,7 +96,7 @@ function parseRejection(
   const q = norm(text);
   const rejection: NonNullable<ParseTurnResult["rejection"]> = {};
 
-  if (/다른\s*데|다른데|딴\s*거|다시\s*골라|별로/.test(q)) {
+  if (/다른\s*데|다른데|다른\s*곳|다른곳|이거\s*말고|딴\s*거|다시\s*골라|별로/.test(q)) {
     rejection.rejectShownPlaces = true;
   }
 

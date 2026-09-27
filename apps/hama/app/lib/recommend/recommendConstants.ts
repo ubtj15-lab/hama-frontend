@@ -30,6 +30,18 @@ export const WEIGHT_KEYWORD = 0.05;
 export const WEIGHT_BONUS = 0.02;
 /** search_strict + FOOD + (menuIntent | foodSubCategory) 일 때만 가산 */
 export const WEIGHT_FOOD_INTENT = 0.17;
+/**
+ * 명시 메뉴 query(menuIntent 있음)에서 scenarioRich에 섞는 메뉴 비중.
+ * 일반 FOOD 서브카테고리만 있는 경우는 WEIGHT_FOOD_INTENT 근처의 기존 0.18을 유지.
+ */
+export const EXPLICIT_MENU_FOOD_BLEND = 0.58;
+export const IMPLICIT_FOOD_BLEND = 0.18;
+/** 명시 메뉴일 때 hybrid 위에 더하는 relevance boost (0~100 스케일) */
+export const MENU_RANK_BOOST_EXACT = 26;
+export const MENU_RANK_BOOST_SYNONYM = 20;
+export const MENU_RANK_BOOST_SEMANTIC = 8;
+/** 풀에 강한 메뉴 매치가 있을 때 generic(무매치) 후보 감점 */
+export const MENU_RANK_GENERIC_PENALTY = 18;
 /** 복합 의도(취향·시나리오 fit·hard/soft·시간대) */
 export const WEIGHT_COMPOSITE = 0.08;
 /** 가족·아이 시나리오 랭킹 — childFriendlyScore(0~1) 가산 */

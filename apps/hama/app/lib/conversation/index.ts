@@ -19,4 +19,5 @@ export {
   saveConversationContext,
   clearConversationContext,
   patchLastRecommendations,
+  recordShownPlayCards,
 } from "./storage";

@@ -13,6 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.join(root, "app"),
+      "@icons": path.join(root, "src/components/icons/index.ts"),
     },
   },
 });

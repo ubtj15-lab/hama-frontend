@@ -69,24 +69,19 @@ describe("Open Beta Home V4 presentation", () => {
     expect(fs.existsSync(path.join(homeDir, "OsanDiscoveryVisual.tsx"))).toBe(false);
   });
 
-  it("asks what to do, keeps voice, situations, surprise, and hides mission", () => {
+  it("keeps the ivory home composer, voice, and login without category menus", () => {
     const page = fs.readFileSync(pagePath, "utf8");
-    const prompt = fs.readFileSync(path.join(homeDir, "HomePrompt.tsx"), "utf8");
-    const situations = fs.readFileSync(path.join(homeDir, "TodaySituations.tsx"), "utf8");
-    expect(prompt).toContain("오늘 뭐 하고");
-    expect(prompt).toContain("하고 싶은 걸 말해보세요");
-    expect(prompt).toContain("직접 입력");
-    expect(page).toContain("openSearch(true)");
-    expect(page).toContain("handleSituationSelect");
-    expect(page).toContain("handleSurpriseMe");
-    expect(page).toContain("HomeBottomNav");
-    expect(page).toContain("stashPlaceForSession");
-    expect(page).toContain("/place/");
+    const stage = fs.readFileSync(path.join(homeDir, "HamaHomeStage.tsx"), "utf8");
+    expect(stage).toContain("HAMA");
+    expect(stage).toContain("지금 상황이나 원하는 걸 말해줘");
+    expect(stage).toContain("webkitSpeechRecognition");
+    expect(stage).toContain("HamaSceneLoop");
+    expect(page).toContain("EmbeddedResults");
+    expect(page).toContain("handleLoginClick");
+    expect(page).toContain("addPoints");
+    expect(page).toContain("HamaHomeComposer");
+    expect(page).not.toContain("HomeBottomNav");
     expect(page).not.toMatch(/VisitMission|방문 미션/);
-    expect(situations).toContain("모르겠어, 하마가 골라줘");
-    expect(situations).toContain("다른 상황 보기");
-    expect(situations).not.toMatch(/맞춤 추천|취향 기반|AI가 분석|OO님을 위한/);
-    expect(situations).not.toMatch(/식당|카페|미용실|박물관/);
   });
 
   it("builds a client-only day/time context line without weather", () => {

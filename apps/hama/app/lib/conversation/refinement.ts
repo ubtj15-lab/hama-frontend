@@ -1,4 +1,5 @@
 import type { ConversationContext } from "./types";
+import { namedAreaFromUtterance } from "./namedRegion";
 import type { RefinementType } from "./types";
 import { isSelfContainedCurrentTurn } from "./selfContainedTurn";
 
@@ -36,10 +37,19 @@ export function detectRefinementType(
   }
 
   if (
-    /별로야|별로\s*야|별로다|다른\s*데|다른데|싫어|안\s*갈래|패스|다시\s*골라|딴\s*거/.test(q) ||
+    /별로야|별로\s*야|별로다|다른\s*데|다른데|다른\s*곳|다른곳|싫어|안\s*갈래|패스|다시\s*골라|딴\s*거|이거\s*말고/.test(q) ||
     (/말고\s*$/.test(q) && !/(짜장|짬뽕|초밥|돈까스|국밥|파스타|중식|중국)/.test(q))
   ) {
     return "reject";
+  }
+
+  if (
+    previous &&
+    /이번엔|이번에는|이번\s*에는/.test(q) &&
+    namedAreaFromUtterance(text) &&
+    !/카페|미용|네일|식당|데이트|코스|맛집/.test(q)
+  ) {
+    return "refine";
   }
 
   if (

@@ -117,6 +117,8 @@ export type ScenarioObject = {
   recommendationMode?: RecommendationMode;
   /** search_strict일 때 단일 카테고리 하드 필터 */
   intentCategory?: IntentCategory;
+  /** 브런치/디저트 등 복수 vertical 후보 (primary는 intentCategory) */
+  intentCategories?: IntentCategory[];
   /** Query Understanding 디버그 스냅샷 */
   queryUnderstanding?: ParsedRecommendationQuery;
   /** 명시적 단일목적 검색(기본 true when intentCategory set) */

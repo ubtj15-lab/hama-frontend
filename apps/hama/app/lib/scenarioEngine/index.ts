@@ -16,6 +16,8 @@ export type {
   WeatherCondition,
   FamilyActivityType,
   DateTimeBand,
+  ParsedRecommendationQuery,
+  QueryUnderstandingCategory,
 } from "./types";
 export {
   inferChildAgeGroupFromQuery,
@@ -28,7 +30,6 @@ export {
   resolveDateTimeBand,
   defaultStartTimeForDateBand,
 } from "./dateCourseContext";
-export { resolveCourseStartTime, parseExplicitStartTime } from "./courseStartTime";
 export { inferDateCourseKind } from "./courseTemplateCatalog";
 export {
   CourseLearningStore,
@@ -73,6 +74,12 @@ export {
   buildCompositeTagsForCard,
   inferRecommendationMode,
 } from "./parseScenarioIntent";
+export { understandQuery } from "./queryUnderstanding";
+export {
+  reconcileVenuePolarity,
+  applyVenuePolarityToParsedQuery,
+  collectPositiveVenuesFromQuery,
+} from "./venuePolarity";
 export { resolveScenarioConfig } from "./resolveScenarioConfig";
 export { getScenarioTagWeights } from "./getScenarioTagWeights";
 export { mapPlaceToPlaceType } from "./placeTypeMap";

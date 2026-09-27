@@ -7,12 +7,10 @@
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { logEvent } from "@/lib/logEvent";
-import HomeTopBar from "./_components/HomeTopBar";
-import { SearchBottomSheet } from "./_components/home/SearchBottomSheet";
-import { HomePrompt } from "./_components/home/HomePrompt";
+import { clearConversationContext } from "@/lib/conversation/storage";
+import { EmbeddedResults } from "./results/ResultsScreen";
+import { HamaHomeComposer, HamaSceneLoop, HAMA_HOME_GREEN, HAMA_HOME_IVORY } from "./_components/home/HamaHomeStage";
 import { HomeSurpriseMe, HOME_SURPRISE, TodaySituations, type HomeSituationItem } from "./_components/home/TodaySituations";
-import { HomeBottomNav } from "./_components/home/HomeBottomNav";
-import { HOME_BG, HOME_PAGE_X } from "./_components/home/homeBetaTheme";
 import { useRecent } from "./_hooks/useRecent";
 import { useGeoLocation } from "./_hooks/useGeoLocation";
 import { HamaEvents } from "@/lib/analytics/events";
@@ -109,14 +107,16 @@ function isNearbyIntent(q: string) {
 type HomePageContentProps = {
   isLoggedIn: boolean;
   meUser: HamaMeUser | null;
+  loginFailReason?: string | null;
 };
 
-function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
+function HomePageContent({ isLoggedIn, meUser, loginFailReason }: HomePageContentProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const userLocation = useGeoLocation();
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
   const [searchOpen, setSearchOpen] = useState(false);
+  const [activeTurn, setActiveTurn] = useState<{ id: string; text: string } | null>(null);
   const [voiceStartOnOpen, setVoiceStartOnOpen] = useState(false);
   const { recentCards, recordView } = useRecent();
 
@@ -171,30 +171,15 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
         explicit_mode: nav?.mode ?? null,
       })
     );
-    if (isNearbyIntent(t)) {
-      addPoints(5, "근처 추천 요청");
-      logEvent("nearby_intent", { query: t });
-    } else {
-      addPoints(3, "상황 검색");
+    if (!activeTurn) {
+      if (isNearbyIntent(t)) {
+        addPoints(5, "근처 추천 요청");
+        logEvent("nearby_intent", { query: t });
+      } else {
+        addPoints(3, "상황 검색");
+      }
     }
-    const nextUrl = resolveHomeResultsUrl(t, nav);
-    const withGeo = (() => {
-      if (!userLocation) return nextUrl;
-      const usp = new URLSearchParams(nextUrl.split("?")[1] || "");
-      usp.set("lat", String(userLocation.lat));
-      usp.set("lng", String(userLocation.lng));
-      return `/results?${usp.toString()}`;
-    })();
-    console.log("[HAMA_HOME_NAV_TO_RESULTS]", { source, nextUrl: withGeo });
-    logHamaTabClickTrace({
-      source: `HomePage:${source}`,
-      key: nav?.category ?? null,
-      label: null,
-      href: null,
-      nav: nav ?? null,
-      nextUrl: withGeo,
-    });
-    router.push(withGeo);
+    setActiveTurn({ id: crypto.randomUUID(), text: t });
   };
 
   const handleSituationSelect = (item: HomeSituationItem) => {
@@ -232,80 +217,76 @@ function HomePageContent({ isLoggedIn, meUser }: HomePageContentProps) {
     window.location.href = "/api/auth/kakao/logout";
   };
 
+  const accountButton: React.CSSProperties = {
+    border: "none",
+    background: "transparent",
+    color: HAMA_HOME_GREEN,
+    fontSize: 12,
+    cursor: "pointer",
+    padding: 0,
+  };
+
   return (
     <main
       style={{
-        minHeight: "100vh",
-        paddingBottom: "calc(78px + env(safe-area-inset-bottom, 0px))",
-        overflowX: "hidden",
-        background: HOME_BG,
+        height: "100vh",
+        overflow: "hidden",
+        background: HAMA_HOME_IVORY,
+        color: HAMA_HOME_GREEN,
       }}
     >
-      <style>{`
-        @keyframes hamaFadeUp {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
       <div
         style={{
           maxWidth: 430,
           margin: "0 auto",
-          padding: `6px ${HOME_PAGE_X}px 0`,
-          paddingBottom: 10,
-          overflowX: "hidden",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          padding: "22px 20px 0",
           boxSizing: "border-box",
-          minWidth: 0,
-          width: "100%",
         }}
       >
-        <div style={{ animation: "hamaFadeUp 360ms ease both", position: "relative", zIndex: 40 }}>
-          <HomeTopBar
-            isLoggedIn={isLoggedIn}
-            nickname={user.nickname}
-            onLoginClick={handleLoginClick}
-            onLogoutClick={handleLogoutClick}
-            onGoMy={() => router.push("/my")}
-            onSearchClick={() => {
-              logEvent("home_search_icon_click", { page: "home" });
-              openSearch(false);
-            }}
-            onAlertClick={() => {
-              logEvent("home_alert_click", { page: "home" });
-            }}
-          />
-        </div>
-        <div style={{ animation: "hamaFadeUp 360ms ease 80ms both", position: "relative", zIndex: 10 }}>
-          <HomePrompt
-            onAsk={() => {
-              logEvent("home_search_icon_click", { page: "home", source: "primary_prompt" });
-              openSearch(false);
-            }}
-            onVoice={() => {
-              logEvent(HamaEvents.voice_mic_click, { page: "home", source: "primary_prompt" });
-              openSearch(true);
-            }}
-          />
-        </div>
-        <div style={{ animation: "hamaFadeUp 360ms ease 140ms both", position: "relative", zIndex: 10 }}>
-          <TodaySituations onSelect={handleSituationSelect} />
-        </div>
-        <div style={{ animation: "hamaFadeUp 360ms ease 180ms both", position: "relative", zIndex: 10 }}>
-          <HomeSurpriseMe onSelect={handleSurpriseMe} />
+        <header
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "center",
+            minHeight: 36,
+          }}
+        >
+          <span />
+          <strong style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.42em", marginRight: "-0.42em" }}>HAMA</strong>
+          {isLoggedIn ? (
+            <span style={{ justifySelf: "end", display: "flex", gap: 8, alignItems: "center" }}>
+              <button type="button" onClick={() => router.push("/my")} style={accountButton}>
+                {user.nickname} · {user.points}
+              </button>
+              <button type="button" onClick={handleLogoutClick} style={accountButton}>
+                로그아웃
+              </button>
+            </span>
+          ) : (
+            <button type="button" onClick={handleLoginClick} style={{ ...accountButton, justifySelf: "end" }}>
+              로그인
+            </button>
+          )}
+        </header>
+        {loginFailReason ? (
+          <p role="alert" style={{ margin: "12px 0 0", color: "#B91C1C", fontSize: 13 }}>
+            로그인에 실패했습니다. ({loginFailReason})
+          </p>
+        ) : null}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 120, boxSizing: "border-box" }}>
+          {activeTurn ? <EmbeddedResults utterance={activeTurn} /> : <HamaSceneLoop />}
         </div>
       </div>
-      <HomeBottomNav active="home" />
-      <SearchBottomSheet
-        open={searchOpen}
-        startVoiceOnOpen={voiceStartOnOpen}
-        onClose={() => {
-          setSearchOpen(false);
-          setVoiceStartOnOpen(false);
+      <HamaHomeComposer
+        onSubmit={(text) => goResults(text, "home_composer")}
+        onNewConversation={() => {
+          clearConversationContext();
+          setActiveTurn(null);
         }}
-        onSubmitQuery={(q) => {
-          logEvent(HamaEvents.home_scenario_submit, { query: q, page: "home", source: "search_sheet" });
-          goResults(q, "search_sheet");
-        }}
+        onOpenCalendar={() => router.push("/calendar")}
       />
     </main>
   );
@@ -455,46 +436,6 @@ function HomeEntryGate() {
     );
   }
 
-  if (!isLoggedIn) {
-    return (
-      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: colors.bgDefault, padding: 20 }}>
-        <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 8px 20px rgba(15,23,42,0.08)" }}>
-          <h1 style={{ margin: "0 0 8px", fontSize: 24 }}>HAMA 시작하기</h1>
-          <p style={{ margin: "0 0 16px", color: "#475569", lineHeight: 1.45 }}>
-            카카오 로그인 후 바로 맞춤 추천을 받아보세요.
-          </p>
-          {loginFailReason ? (
-            <p
-              role="alert"
-              style={{
-                margin: "0 0 16px",
-                padding: "10px 12px",
-                borderRadius: 10,
-                background: "#FEF2F2",
-                color: "#B91C1C",
-                fontSize: 13,
-                lineHeight: 1.45,
-                wordBreak: "break-all",
-              }}
-            >
-              로그인에 실패했습니다. ({loginFailReason})
-            </p>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              logEvent("login_start", { page: "home", source: "home_gate" });
-              window.location.href = kakaoLoginUrl("/");
-            }}
-            style={{ width: "100%", border: "none", borderRadius: 12, padding: "12px 14px", background: "#FEE500", fontWeight: 800, cursor: "pointer" }}
-          >
-            카카오로 로그인
-          </button>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <>
       {showLegacyPrompt && (
@@ -618,7 +559,7 @@ function HomeEntryGate() {
           </div>
         </div>
       )}
-      <HomePageContent isLoggedIn={isLoggedIn} meUser={meUser} />
+      <HomePageContent isLoggedIn={isLoggedIn} meUser={meUser} loginFailReason={loginFailReason} />
     </>
   );
 }

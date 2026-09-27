@@ -28,6 +28,7 @@ export type StoreRow = {
   image_url: string | null;
 
   kakao_place_url: string | null;
+  naver_place_url?: string | null;
   naver_place_id: string | null;
 
   mood: string[] | null;
@@ -35,6 +36,7 @@ export type StoreRow = {
 
   description?: string | null;
   menu_keywords?: string[] | null;
+  search_keywords?: string[] | null;
   food_sub_category?: string | null;
 
   with_kids: boolean | null;
@@ -77,6 +79,7 @@ export type HomeCard = {
   imageUrl?: string | null;
 
   kakao_place_url?: string | null;
+  naver_place_url?: string | null;
   naver_place_id?: string | null;
 
   // ✅ SearchResultList에서 쓰는 placeUrl (없으면 자동 생성해서 넣어줄 거임)

@@ -2,6 +2,12 @@ import type { HomeCard } from "@/lib/storeTypes";
 import type { FoodSubCategory, ScenarioObject } from "@/lib/scenarioEngine/types";
 import { FOOD_SUB_RULES } from "@/lib/scenarioEngine/foodIntent";
 import { distanceScoreFromKm, qualityScoreFromCard } from "./scoreParts";
+import {
+  matchMenuRelevance,
+  MENU_RAW_CAP_PER_INTENT,
+  resolveMenuIntentsForMatch,
+  type MenuMatchTier,
+} from "./menuRelevance";
 
 function normBlob(s: string): string {
   return String(s ?? "")
@@ -110,8 +116,9 @@ export function cardMatchesStrictFoodIntent(
   card: HomeCard,
   parsed: Pick<
     ScenarioObject,
-    "intentCategory" | "intentType" | "intentStrict" | "foodSubCategory" | "menuIntent"
-  >
+    "intentCategory" | "intentType" | "intentStrict" | "foodSubCategory" | "menuIntent" | "rawQuery"
+  >,
+  options?: { requireMenuHit?: boolean; menuIntents?: string[] }
 ): boolean {
   if (
     parsed.intentCategory !== "FOOD" ||
@@ -120,7 +127,9 @@ export function cardMatchesStrictFoodIntent(
   ) {
     return true;
   }
-  const menus = (parsed.menuIntent ?? []).filter(Boolean);
+  const menus = (options?.menuIntents ?? resolveMenuIntentsForMatch(parsed.menuIntent, parsed.rawQuery)).filter(
+    Boolean
+  );
   const sub = parsed.foodSubCategory ?? null;
   if (!menus.length && !sub) return true;
 
@@ -130,6 +139,19 @@ export function cardMatchesStrictFoodIntent(
   }
 
   const menuMatch = foodMenuMatchRaw(card, menus, sub);
+  const requireMenuHit = options?.requireMenuHit ?? menus.length > 0;
+
+  if (menus.length > 0 && requireMenuHit) {
+    if (wantsChinese) {
+      const fromStructuredMenu = menus.some(
+        (m) => menuInMenuKeywords(card, m) || menuInDescription(card, m)
+      );
+      if (fromStructuredMenu) return true;
+    }
+    if (menuMatch.hasStrongHit || menuMatch.hasMenuHit || menuMatch.hasSemanticHit) return true;
+    return false;
+  }
+
   if (menuMatch.hasSubHit) return true;
 
   if (wantsChinese) {
@@ -137,7 +159,7 @@ export function cardMatchesStrictFoodIntent(
       (m) => menuInMenuKeywords(card, m) || menuInDescription(card, m)
     );
     if (fromStructuredMenu) return true;
-  } else if (menuMatch.hasMenuHit) {
+  } else if (menuMatch.hasStrongHit || menuMatch.hasMenuHit) {
     return true;
   }
 
@@ -197,26 +219,45 @@ const SCORE_MENU_TAG = 35;
 const SCORE_MENU_DESC = 20;
 const SCORE_SUB_MATCH = 30;
 
+export type FoodMenuMatchRaw = {
+  raw: number;
+  hasMenuHit: boolean;
+  hasSubHit: boolean;
+  hasStrongHit: boolean;
+  hasExactHit: boolean;
+  hasSynonymHit: boolean;
+  hasSemanticHit: boolean;
+  exactScore: number;
+  synonymScore: number;
+  semanticScore: number;
+  tier: MenuMatchTier;
+};
+
 /**
  * 단일 장소에 대한 음식 의도 매칭 raw 점수. 정규화는 {@link foodMenuMatchNormalized}.
+ * Query Understanding과 같은 SEARCH_SYNONYM_GROUPS를 사용해 exact + strong synonym을 반영한다.
  */
 export function foodMenuMatchRaw(
   card: HomeCard,
   menuIntent: string[] | undefined | null,
   foodSubCategory: FoodSubCategory | undefined | null
-): { raw: number; hasMenuHit: boolean; hasSubHit: boolean } {
+): FoodMenuMatchRaw {
   const menus = (menuIntent ?? []).filter(Boolean);
-  let raw = 0;
-  let hasMenuHit = false;
+  const rel = matchMenuRelevance(card, menus);
+  let raw = rel.raw;
+  let hasMenuHit = rel.hasExactHit || rel.hasSynonymHit;
   let hasSubHit = false;
 
+  // 레거시 exact 채널도 유지 (동의어 사전에 없는 메뉴명)
   for (const menu of menus) {
     let best = 0;
     if (menuInMenuKeywords(card, menu)) best = Math.max(best, SCORE_MENU_KEYWORD);
     if (menuInTags(card, menu)) best = Math.max(best, SCORE_MENU_TAG);
     if (menuInDescription(card, menu)) best = Math.max(best, SCORE_MENU_DESC);
     if (best > 0) hasMenuHit = true;
-    raw += best;
+    if (best > rel.exactScore && !rel.hasSynonymHit && !rel.hasExactHit) {
+      raw += best;
+    }
   }
 
   const placeSub = readPlaceFoodSub(card);
@@ -225,7 +266,29 @@ export function foodMenuMatchRaw(
     raw += SCORE_SUB_MATCH;
   }
 
-  return { raw, hasMenuHit, hasSubHit };
+  const tier: MenuMatchTier = rel.hasExactHit
+    ? "exact"
+    : rel.hasSynonymHit || hasMenuHit
+      ? rel.hasSynonymHit
+        ? "synonym"
+        : "exact"
+      : rel.hasSemanticHit
+        ? "semantic"
+        : "none";
+
+  return {
+    raw,
+    hasMenuHit,
+    hasSubHit,
+    hasStrongHit: rel.hasStrongHit || hasMenuHit,
+    hasExactHit: rel.hasExactHit || (hasMenuHit && !rel.hasSynonymHit && !rel.hasSemanticHit),
+    hasSynonymHit: rel.hasSynonymHit,
+    hasSemanticHit: rel.hasSemanticHit,
+    exactScore: Math.max(rel.exactScore, hasMenuHit && rel.exactScore === 0 ? SCORE_MENU_KEYWORD : 0),
+    synonymScore: rel.synonymScore,
+    semanticScore: rel.semanticScore,
+    tier,
+  };
 }
 
 export function foodMenuMatchNormalized(
@@ -234,12 +297,29 @@ export function foodMenuMatchNormalized(
   foodSubCategory: FoodSubCategory | undefined | null
 ): number {
   const { raw } = foodMenuMatchRaw(card, menuIntent, foodSubCategory);
-  const menuCap = Math.max(1, (menuIntent?.length ?? 0)) * SCORE_MENU_KEYWORD;
+  const menuCap = Math.max(1, (menuIntent?.length ?? 0)) * MENU_RAW_CAP_PER_INTENT;
   const cap = menuCap + (foodSubCategory ? SCORE_SUB_MATCH : 0);
   return Math.min(100, Math.round((raw / cap) * 100));
 }
 
-type FoodFilterParsed = Pick<ScenarioObject, "intentCategory" | "menuIntent" | "foodSubCategory">;
+export function poolHasMenuSignal(
+  cards: HomeCard[],
+  menuIntent: string[] | undefined | null,
+  foodSubCategory: FoodSubCategory | undefined | null,
+  query?: string | null
+): boolean {
+  const menus = resolveMenuIntentsForMatch(menuIntent, query);
+  if (!menus.length) return false;
+  return cards.some((c) => {
+    const m = foodMenuMatchRaw(c, menus, foodSubCategory);
+    return m.hasStrongHit || m.hasSemanticHit || m.hasMenuHit;
+  });
+}
+
+type FoodFilterParsed = Pick<
+  ScenarioObject,
+  "intentCategory" | "menuIntent" | "foodSubCategory" | "rawQuery"
+>;
 
 function isRestaurant(card: HomeCard): boolean {
   return String(card.category ?? "").toLowerCase() === "restaurant";
@@ -255,7 +335,7 @@ export function filterFoodCandidatesByMenuIntent(
   const restaurants = candidates.filter(isRestaurant);
   if (parsed.intentCategory !== "FOOD" || restaurants.length === 0) return candidates;
 
-  const menus = parsed.menuIntent ?? [];
+  const menus = resolveMenuIntentsForMatch(parsed.menuIntent, parsed.rawQuery);
   const sub = parsed.foodSubCategory ?? null;
   if (menus.length === 0 && !sub) return candidates;
 
@@ -264,13 +344,15 @@ export function filterFoodCandidatesByMenuIntent(
     ...foodMenuMatchRaw(c, menus, sub),
   }));
 
-  const anyMenuTier = menus.length > 0 ? scored.some((s) => s.hasMenuHit) : true;
+  const anyMenuTier = menus.length > 0 ? scored.some((s) => s.hasStrongHit || s.hasSemanticHit) : true;
   const anySubTier = sub ? scored.some((s) => s.hasSubHit) : true;
 
   const tierOf = (s: (typeof scored)[number]): number => {
     if (menus.length > 0) {
       if (!anyMenuTier) return 0;
-      return s.hasMenuHit ? 0 : 1;
+      if (s.hasStrongHit) return 0;
+      if (s.hasSemanticHit) return 1;
+      return 2;
     }
     if (sub) {
       if (!anySubTier) return 0;

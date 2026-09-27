@@ -17,6 +17,9 @@ export {
   intentCategoryToHomeTab,
   storeCategoryMatchesIntentCategory,
 } from "./intentClassification";
+export { understandQuery } from "./queryUnderstanding";
+export { parseQueryNegation, cardViolatesHardNegation } from "./negationUnderstanding";
+export { reconcileVenuePolarity, applyVenuePolarityToParsedQuery } from "./venuePolarity";
 export { buildFoodTagsForCard, inferFoodSubFromMenus, FOOD_SUB_RULES } from "./foodIntent";
 export {
   augmentScenarioWithComposite,

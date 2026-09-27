@@ -108,4 +108,39 @@ describe("persona venue filters (키즈·보드)", () => {
     expect(out.some((r) => r.card.id === "kid-1")).toBe(false);
     expect(out.some((r) => r.card.id === "plain-1")).toBe(true);
   });
+
+  it("자녀 없음 프로필 + 현재 쿼리 withKids=true → 키즈 후보를 프로필만으로 제외하지 않음", () => {
+    const kidVenue = baseCard({
+      id: "kid-1",
+      name: "재미재미 키즈아트카페",
+      category: "activity",
+      with_kids: true,
+      tags: ["키즈카페"],
+    });
+    const plain = baseCard({
+      id: "plain-1",
+      name: "일반 체험 공방",
+      category: "activity",
+      with_kids: false,
+    });
+    const ctx: BuildRecommendationsContext = {
+      intent: "none",
+      ...ctxBase,
+      scenarioObject: {
+        intentType: "scenario_recommendation",
+        scenario: "generic",
+        withKids: true,
+        indoorPreferred: true,
+        rawQuery: "아이들이랑 실내에서 놀 만한 데 없어?",
+      },
+      userProfile: {
+        ...DEFAULT_USER_PROFILE,
+        companions: ["혼자"],
+        young_child: "없음",
+        onboarding_completed_at: "t",
+      },
+    };
+    const out = buildTopRecommendations([kidVenue, plain], ctx);
+    expect(out.some((r) => r.card.id === "kid-1")).toBe(true);
+  });
 });
