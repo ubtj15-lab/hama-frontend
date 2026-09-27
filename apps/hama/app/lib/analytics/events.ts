@@ -25,6 +25,11 @@ export const HamaEvents = {
 
   /** 결과 화면 — 추천 3장(또는 그 이하) 노출. payload: place_ids[], recommendation_voices[] */
   recommend_deck_impression: "recommend_deck_impression",
+  /**
+   * Final conversation turn result. Payload is turn_id, outcome, shown_card_count, latency_ms, and screen.
+   * Do not add the raw query.
+   */
+  conversation_turn_outcome: "conversation_turn_outcome",
   /** 추천 후보 풀은 있으나 덱이 비었을 때 */
   recommend_empty: "recommend_empty",
 

@@ -79,6 +79,11 @@ import { NextSuggestions } from "@/_components/results/NextSuggestions";
 import { colors, radius, space } from "@/lib/designTokens";
 import { logEvent } from "@/lib/logEvent";
 import { HamaEvents } from "@/lib/analytics/events";
+import {
+  claimConversationTurnOutcome,
+  CONVERSATION_TURN_OUTCOME_SCREEN,
+  resolveConversationTurnOutcome,
+} from "@/lib/analytics/conversationTurnOutcome";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { openDirections } from "@/lib/openDirections";
 import { stashPlaceForSession } from "@/lib/session/placeSession";
@@ -1392,6 +1397,43 @@ function ResultsContent({
 
   const askInstead = convCtx?.clarificationNeeded === true;
   const shownPlaceNames = askInstead ? [] : displayedPlayCards.slice(0, 3).map((card) => card.name);
+  const conversationShownPlayCount =
+    !askInstead && displayedPlayCards.length > 0 && (!pageBusy || mealKeepsPlay)
+      ? Math.min(3, displayedPlayCards.length)
+      : 0;
+  const conversationShownFoodCount =
+    linkedFoodActive && !linkedFoodLoading && !foodRecommendationBlocked && !foodRecommendationLoadFailed
+      ? Math.min(3, foodRestaurantCards.length)
+      : 0;
+  const conversationShownCardCount = conversationShownPlayCount + conversationShownFoodCount;
+  const conversationTurnPending = Boolean(
+    !utterance?.id ||
+      !convCtx?.turns.some((turn) => turn.turnId === utterance.id) ||
+      askInstead ||
+      !placeLookupDone ||
+      (pageBusy && !mealKeepsPlay) ||
+      (linkedFoodActive && linkedFoodLoading)
+  );
+  const conversationTurnOutcome = resolveConversationTurnOutcome({
+    pending: conversationTurnPending,
+    shownCardCount: conversationShownCardCount,
+    suppressionFailed: dataNotice.showSuppressionError || (!linkedFoodLoading && foodRecommendationBlocked),
+    fetchFailed:
+      dataNotice.showFetchError ||
+      (!linkedFoodLoading && !foodRecommendationBlocked && foodRecommendationLoadFailed),
+  });
+
+  useEffect(() => {
+    if (!embedded || !utterance?.id || !conversationTurnOutcome) return;
+    if (!claimConversationTurnOutcome(utterance.id)) return;
+    logEvent(HamaEvents.conversation_turn_outcome, {
+      turn_id: utterance.id,
+      outcome: conversationTurnOutcome,
+      shown_card_count: conversationShownCardCount,
+      latency_ms: Math.max(0, Math.round(performance.now() - started.current)),
+      screen: CONVERSATION_TURN_OUTCOME_SCREEN,
+    });
+  }, [embedded, utterance?.id, conversationTurnOutcome, conversationShownCardCount]);
   const shownPlaceKey = shownPlaceNames.join("|");
 
   useEffect(() => {

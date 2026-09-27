@@ -30,7 +30,8 @@ const gate: {
   generation: number;
   release: Set<number>;
   held: { generation: number; route: Route }[];
-} = { mode: "catalog", generation: 0, release: new Set<number>(), held: [] };
+  logs: { type?: string; data?: Record<string, unknown> }[];
+} = { mode: "catalog", generation: 0, release: new Set<number>(), held: [], logs: [] };
 
 function store(id: string, name: string, category: string, address: string): StoreRow {
   return {
@@ -251,6 +252,13 @@ async function installMocks(page: Page) {
       return;
     }
 
+    if (path === "/api/log") {
+      const body = route.request().postDataJSON() as { type?: string; data?: Record<string, unknown> } | null;
+      gate.logs.push({ type: body?.type, data: body?.data });
+      await fulfillJson(route, 200, { ok: true });
+      return;
+    }
+
     if (path === "/api/me" || path === "/api/users/me/profile") {
       await fulfillJson(route, 200, { user: null });
       return;
@@ -286,7 +294,12 @@ test.beforeEach(() => {
   gate.generation = 0;
   gate.release = new Set();
   gate.held = [];
+  gate.logs = [];
 });
+
+function outcomeLogs() {
+  return gate.logs.filter((entry) => entry.type === "conversation_turn_outcome");
+}
 
 test("keeps Dongtan context and adds a meal without replacing the play cards", async ({ page }) => {
   const network = await installMocks(page);
@@ -532,4 +545,123 @@ test("keeps the same search flow when motion is reduced", async ({ page }) => {
   await releaseHeldSearch();
   await expect.poll(async () => (await first.getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
   await expect(first.locator("[data-hama-play-list]")).toHaveCSS("animation-name", "none");
+});
+
+async function expectTurnOutcome(turn: ReturnType<typeof currentTurn>, outcome: string) {
+  const turnId = await turn.getAttribute("data-hama-turn-id");
+  expect(turnId).toBeTruthy();
+  await expect.poll(() => outcomeLogs().filter((entry) => entry.data?.turn_id === turnId)).toHaveLength(1);
+  const data = outcomeLogs().find((entry) => entry.data?.turn_id === turnId)?.data ?? {};
+  expect(data.outcome).toBe(outcome);
+  expect(data.screen).toBe("home_conversation");
+  expect(data.turn_id).toBe(turnId);
+  expect(typeof data.latency_ms).toBe("number");
+  expect(data).not.toHaveProperty("query");
+  if (outcome === "shown") expect(data.shown_card_count).toBeGreaterThan(0);
+  else expect(data.shown_card_count).toBe(0);
+}
+
+test("records one shown outcome after the search finishes, not while it is running", async ({ page }) => {
+  gate.mode = "search-hold";
+  await installMocks(page);
+  await page.goto("/");
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  const turn = currentTurn(page);
+  await expect(turn.locator("[data-hama-search-status]")).toHaveText("골라보는 중이에요.");
+  await expect.poll(() => gate.held.filter((item) => item.generation === 3).length).toBeGreaterThan(0);
+  expect(outcomeLogs()).toEqual([]);
+
+  await releaseHeldSearch();
+  await expect.poll(async () => (await turn.getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
+  await expectTurnOutcome(turn, "shown");
+  await page.waitForTimeout(400);
+  await expectTurnOutcome(turn, "shown");
+});
+
+test("records empty, fetch failure, partial success, and suppression failure", async ({ page }) => {
+  await installMocks(page);
+
+  gate.mode = "empty";
+  await page.goto("/");
+  await ask(page, "카페 찾아줘");
+  let turn = currentTurn(page);
+  await expect(turn).toHaveAttribute("data-hama-play-ids", "");
+  await expectTurnOutcome(turn, "empty");
+
+  gate.mode = "all-fail";
+  await ask(page, "조용한 카페 다시");
+  turn = currentTurn(page);
+  await expect(turn).toContainText(FETCH_ERROR);
+  await expectTurnOutcome(turn, "fetch_failed");
+
+  gate.mode = "partial";
+  await ask(page, "오산에서 조용한 카페");
+  turn = currentTurn(page);
+  await expect(turn).toContainText("오산 조용한 카페");
+  await expectTurnOutcome(turn, "shown");
+
+  gate.mode = "suppression";
+  await ask(page, "동탄 카페 확인해줘");
+  turn = currentTurn(page);
+  await expect(turn).toContainText("가게 확인에 실패해서 추천을 보여드리지 않았어요.");
+  await expectTurnOutcome(turn, "suppression_failed");
+});
+
+test("waits for the follow-up meal search before recording that turn", async ({ page }) => {
+  await installMocks(page);
+  await openPlayTurn(page);
+  const first = currentTurn(page);
+  await expectTurnOutcome(first, "shown");
+  const firstId = await first.getAttribute("data-hama-turn-id");
+
+  gate.mode = "food-hold";
+  await ask(page, "그 근처에 밥 먹을 곳도 있어?");
+  const meal = currentTurn(page);
+  await expect(meal).toContainText(MEAL_LOADING);
+  await expect.poll(() => gate.held.filter((item) => item.generation === 1).length).toBeGreaterThan(0);
+  const mealId = await meal.getAttribute("data-hama-turn-id");
+  expect(outcomeLogs().filter((entry) => entry.data?.turn_id === mealId)).toEqual([]);
+
+  await releaseHeldFood();
+  await expectTurnOutcome(meal, "shown");
+  expect(outcomeLogs().filter((entry) => entry.data?.turn_id === firstId)).toHaveLength(1);
+});
+
+test("does not record a cancelled first search when the next question wins", async ({ page }) => {
+  gate.mode = "race";
+  gate.generation = 1;
+  await installMocks(page);
+  await page.goto("/");
+  await ask(page, "카페 찾아줘");
+  await expect.poll(() => gate.held.filter((item) => item.generation === 1).length).toBeGreaterThan(0);
+  expect(outcomeLogs()).toEqual([]);
+
+  gate.generation = 2;
+  await ask(page, "아니, 오산에서 조용한 카페");
+  await expect.poll(() => gate.held.filter((item) => item.generation === 2).length).toBeGreaterThan(0);
+  expect(outcomeLogs()).toEqual([]);
+
+  gate.release.add(2);
+  for (const item of gate.held.filter((entry) => entry.generation === 2)) {
+    const url = item.route.request().url();
+    const body = url.includes("/api/stores/search-by-name") ? { items: OSAN_CAFE } : raceRows(2, url);
+    await fulfillJson(item.route, 200, body);
+  }
+
+  const current = currentTurn(page);
+  await expect(current).toContainText("오산 조용한 카페");
+  await expectTurnOutcome(current, "shown");
+  const winnerId = await current.getAttribute("data-hama-turn-id");
+
+  gate.release.add(1);
+  for (const item of gate.held.filter((entry) => entry.generation === 1)) {
+    const url = item.route.request().url();
+    const body = url.includes("/api/stores/search-by-name") ? { items: FIRST_CAFE } : raceRows(1, url);
+    await fulfillJson(item.route, 200, body);
+  }
+
+  await page.waitForTimeout(800);
+  expect(outcomeLogs()).toHaveLength(1);
+  expect(outcomeLogs()[0]?.data?.turn_id).toBe(winnerId);
+  expect(outcomeLogs()[0]?.data?.outcome).toBe("shown");
 });
