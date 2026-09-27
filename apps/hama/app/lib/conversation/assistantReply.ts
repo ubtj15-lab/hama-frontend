@@ -30,6 +30,8 @@ export function composeAssistantReply(input: {
   foodPlaceNames?: readonly string[];
   foodNearNeedsAnchor?: boolean;
   foodAnchorNote?: string;
+  /** Current meal search has not finished, or it failed closed. Do not call that an empty result. */
+  suppressEmptyFoodResult?: boolean;
   indoorEvidenceOnly?: boolean;
 }): AssistantReply {
   const conditions = conditionLine(input.intent);
@@ -55,7 +57,9 @@ export function composeAssistantReply(input: {
       ? " 가까운 식당의 거리를 보려면 놀이 장소 하나를 기준으로 골라 주세요."
       : foodNames.length
         ? ` 식사 쪽은 이 순서로 골랐어요: ${foodNames.join(", ")}.${input.foodAnchorNote ?? ""}`
-        : ` 식사 조건은 기억했지만, 보여줄 식당이 없어요.${input.foodAnchorNote ?? ""}`;
+        : input.suppressEmptyFoodResult
+          ? ""
+          : ` 식사 조건은 기억했지만, 보여줄 식당이 없어요.${input.foodAnchorNote ?? ""}`;
   const separate = foodLine;
   const indoorNote = input.indoorEvidenceOnly
     ? " 이름에 실내·키즈카페·보드게임이 없는 장소는 넣지 않았어요. 이건 영업장 실내 여부의 확인이 아니라 이름 추정입니다."

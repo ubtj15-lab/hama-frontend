@@ -1048,8 +1048,8 @@ function ResultsContent({
     nameSearchFailed,
     verifiedRecommendationCount: cards.length,
     verifiedPlaceHitCount: placeHits.length,
-    foodRecommendationBlocked,
-    foodRecommendationLoadFailed,
+    foodRecommendationBlocked: linkedFoodLoading ? false : foodRecommendationBlocked,
+    foodRecommendationLoadFailed: linkedFoodLoading ? false : foodRecommendationLoadFailed,
     baseShowEmptyState,
     forceShowListByCards,
   });
@@ -1404,7 +1404,12 @@ function ResultsContent({
       placeNames: shownPlaceNames,
       excludedPlaceCount: convCtx.rejectedPlaceIds?.length ?? 0,
       linkedFoodKeptSeparate: linkedFoodActive,
-      foodPlaceNames: foodRestaurantCards.slice(0, 3).map((card) => card.name),
+      foodPlaceNames:
+        linkedFoodActive && !linkedFoodLoading && !foodRecommendationBlocked && !foodRecommendationLoadFailed
+          ? foodRestaurantCards.slice(0, 3).map((card) => card.name)
+          : [],
+      suppressEmptyFoodResult:
+        linkedFoodActive && (linkedFoodLoading || foodRecommendationBlocked || foodRecommendationLoadFailed),
       foodNearNeedsAnchor,
       foodAnchorNote: foodAnchor
         ? foodAnchorProvisional
@@ -1436,6 +1441,9 @@ function ResultsContent({
     foodRestaurantCards,
     foodNearNeedsAnchor,
     linkedFoodActive,
+    linkedFoodLoading,
+    foodRecommendationBlocked,
+    foodRecommendationLoadFailed,
     qRaw,
   ]);
 
@@ -1707,7 +1715,10 @@ function ResultsContent({
           : saved?.playCards ?? [],
         foodCards: !current
           ? saved?.foodCards ?? []
-          : linkedFoodActive && !foodRecommendationBlocked && !foodRecommendationLoadFailed
+          : linkedFoodActive &&
+              !linkedFoodLoading &&
+              !foodRecommendationBlocked &&
+              !foodRecommendationLoadFailed
             ? foodRestaurantCards.slice(0, 3)
             : [],
         blockedMessage: current && dataNotice.showSuppressionError
@@ -1715,8 +1726,11 @@ function ResultsContent({
           : current && dataNotice.showFetchError
             ? RECOMMEND_DATA_UNAVAILABLE_MESSAGE
             : null,
-        foodBlocked: current && foodRecommendationBlocked,
-        foodUnavailableMessage: current && foodRecommendationLoadFailed ? RECOMMEND_DATA_UNAVAILABLE_MESSAGE : null,
+        foodBlocked: current && !linkedFoodLoading && foodRecommendationBlocked,
+        foodUnavailableMessage:
+          current && !linkedFoodLoading && !foodRecommendationBlocked && foodRecommendationLoadFailed
+            ? RECOMMEND_DATA_UNAVAILABLE_MESSAGE
+            : null,
         anchorName: current ? foodAnchor?.name ?? saved?.anchorName ?? null : saved?.anchorName ?? null,
         provisional: current ? foodAnchorProvisional : Boolean(saved?.provisional),
         current,
@@ -1981,9 +1995,13 @@ function ResultsContent({
           </div>
         )}
 
-        {linkedFoodActive && !askInstead && !foodRecommendationBlocked ? (
+        {linkedFoodActive && !askInstead && (linkedFoodLoading || (!foodRecommendationBlocked && !foodRecommendationLoadFailed)) ? (
           <LinkedFoodGroup
-            cards={foodRecommendationBlocked ? [] : foodRestaurantCards.slice(0, 5)}
+            cards={
+              linkedFoodLoading || foodRecommendationBlocked || foodRecommendationLoadFailed
+                ? []
+                : foodRestaurantCards.slice(0, 5)
+            }
             loading={linkedFoodLoading}
             anchorName={foodAnchor?.name ?? null}
             provisional={foodAnchorProvisional}

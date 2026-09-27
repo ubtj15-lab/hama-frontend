@@ -3622,6 +3622,27 @@ export function useHomeCards(
   const strictGateCategoryDep =
     strictExplicitGateCategoryFromUrl(options.explicitCategory, options.explicitIntent) ?? "";
   const scenarioIntentCategoryDep = options.scenarioObject?.intentCategory ?? "";
+  const fetchInputKey = [
+    tab,
+    String(shuffleKey),
+    intent,
+    String(options.userLat ?? ""),
+    String(options.userLng ?? ""),
+    options.searchQuery ?? "",
+    excludeKey,
+    avoidKey,
+    scenarioKey,
+    profileOverrideKey,
+    relaxPersonalRules ? "1" : "0",
+    deferRanking ? "1" : "0",
+    skipFetch ? "1" : "0",
+    explicitKey,
+    canonicalExplicitCategoryDep,
+    strictGateCategoryDep,
+    scenarioIntentCategoryDep,
+  ].join("\u0001");
+  const [settledFetchKey, setSettledFetchKey] = useState<string | null>(null);
+  const currentFetchPending = !skipFetch && settledFetchKey !== fetchInputKey;
 
   const effectiveUserProfile = useMemo(() => {
     return mergeUserProfile(userProfile ?? null, options.profileOverride ?? null);
@@ -3655,6 +3676,8 @@ export function useHomeCards(
     if (skipFetch) {
       setIsLoading(false);
       setRecommendationBlocked(false);
+      setRecommendationLoadFailed(false);
+      setSettledFetchKey(fetchInputKey);
       if (options.retainCardsOnSkip) return;
       setRecommendEngine(null);
       console.log("[HAMA_USE_HOME_CARDS_DEBUG]", {
@@ -5616,7 +5639,10 @@ export function useHomeCards(
           setRecommendationLoadFailed(true);
         }
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+          setSettledFetchKey(fetchInputKey);
+        }
       }
     };
 
@@ -5646,5 +5672,15 @@ export function useHomeCards(
     scenarioIntentCategoryDep,
   ]);
 
-  return { cards, deckRotationKey, recommendEngine, candidatePool: pool, courseCandidatePool: coursePool, isLoading, deckIncomplete, recommendationBlocked, recommendationLoadFailed };
+  return {
+    cards,
+    deckRotationKey,
+    recommendEngine,
+    candidatePool: pool,
+    courseCandidatePool: coursePool,
+    isLoading: isLoading || currentFetchPending,
+    deckIncomplete,
+    recommendationBlocked,
+    recommendationLoadFailed,
+  };
 }

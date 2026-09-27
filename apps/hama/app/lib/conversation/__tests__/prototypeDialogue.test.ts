@@ -107,6 +107,36 @@ describe("rule conversation prototype", () => {
     expect(withAssistantReply(saved, reply.text)).toBe(saved);
   });
 
+  it("does not call a meal search empty until that search has finished", () => {
+    const intent = turns[3]!.merged!;
+    const pending = composeAssistantReply({
+      intent,
+      placeNames: ["동탄 키즈플레이"],
+      linkedFoodKeptSeparate: true,
+      foodPlaceNames: [],
+      suppressEmptyFoodResult: true,
+    });
+    expect(pending.text).not.toContain("보여줄 식당이 없어요");
+    expect(pending.text).toContain("동탄 키즈플레이");
+
+    const empty = composeAssistantReply({
+      intent,
+      placeNames: ["동탄 키즈플레이"],
+      linkedFoodKeptSeparate: true,
+      foodPlaceNames: [],
+    });
+    expect(empty.text).toContain("보여줄 식당이 없어요");
+
+    const failed = composeAssistantReply({
+      intent,
+      placeNames: ["동탄 키즈플레이"],
+      linkedFoodKeptSeparate: true,
+      foodPlaceNames: [],
+      suppressEmptyFoodResult: true,
+    });
+    expect(failed.text).not.toContain("보여줄 식당이 없어요");
+  });
+
   it("keeps engine order while dropping places outside the named region", () => {
     const shown = filterCardsByNamedRegion(
       [
