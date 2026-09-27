@@ -1,5 +1,6 @@
 import { toHomeCard, type StoreRow } from "@/lib/storeRepository";
 import { filterHamaV1UserCatalog } from "@/lib/recommend/hamaV1UserCatalog";
+import { readHttpCardBody, type CardFetch } from "@/lib/recommend/recommendFetchStatus";
 import type { HomeCard } from "@/lib/storeTypes";
 import { matchNamedFoodPreset } from "@/lib/recommend/namedFoodPresets";
 import { normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
@@ -56,9 +57,9 @@ export function buildSearchByNameApiUrl(
 }
 
 /** search-by-name API — Supabase menu_keywords/search_keywords 확장 검색 */
-export async function fetchDirectSearchHomeCards(query: string): Promise<HomeCard[]> {
+export async function fetchDirectSearchHomeCards(query: string): Promise<CardFetch<HomeCard>> {
   const q = String(query ?? "").trim();
-  if (q.length < 2) return [];
+  if (q.length < 2) return { status: "ok", cards: [] };
 
   try {
     const seed = getOrCreateHamaSearchSeed();
@@ -78,31 +79,37 @@ export async function fetchDirectSearchHomeCards(query: string): Promise<HomeCar
       headers: Object.keys(headers).length ? headers : undefined,
     }
     );
-    if (!res.ok) return [];
-    const json = (await res.json()) as {
+    const body = (await res.json().catch(() => null)) as {
       items?: StoreRow[];
+      error?: unknown;
       supabaseErrors?: { menu?: string | null; search?: string | null };
       merged?: number;
       menuKeywordHits?: number;
-    };
+    } | null;
+    const parsed = readHttpCardBody({ ok: res.ok, body });
+    if (parsed.status === "failed") return { status: "failed" };
+    const cards = filterHamaV1UserCatalog((parsed.cards as StoreRow[]).map((row) => toHomeCard(row)));
     if (process.env.NODE_ENV !== "production") {
       logDirectSearchPipeline("[SEARCH_API_RESULT_COUNT]", {
         query,
-        count: (json.items ?? []).length,
-        merged: json.merged,
-        menuKeywordHits: json.menuKeywordHits,
-        supabaseErrors: json.supabaseErrors,
+        count: cards.length,
+        merged: body?.merged,
+        menuKeywordHits: body?.menuKeywordHits,
+        supabaseErrors: body?.supabaseErrors,
       });
     }
-    return filterHamaV1UserCatalog((json.items ?? []).map((row) => toHomeCard(row)));
+    return { status: "ok", cards };
   } catch {
-    return [];
+    return { status: "failed" };
   }
 }
 
-export async function fetchDirectSearchStoreRows(query: string): Promise<StoreRow[]> {
-  const cards = await fetchDirectSearchHomeCards(query);
-  return cards.map((c) => ({
+export async function fetchDirectSearchStoreRows(query: string): Promise<CardFetch<StoreRow>> {
+  const result = await fetchDirectSearchHomeCards(query);
+  if (result.status !== "ok") return { status: "failed" };
+  return {
+    status: "ok",
+    cards: result.cards.map((c) => ({
     id: c.id,
     name: c.name,
     category: c.category ?? null,
@@ -123,7 +130,8 @@ export async function fetchDirectSearchStoreRows(query: string): Promise<StoreRo
     reservation_required: c.reservation_required ?? null,
     price_level: c.price_level ?? null,
     updated_at: c.updated_at ?? null,
-  }));
+  })),
+  };
 }
 
 export function logDirectSearchPipeline(step: string, payload: Record<string, unknown>): void {

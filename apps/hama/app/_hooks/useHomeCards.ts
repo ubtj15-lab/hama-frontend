@@ -4064,12 +4064,15 @@ export function useHomeCards(
         const directSearchMode = isDirectSearchModeQuery(options.searchQuery);
         if (directSearchMode && !cancelled) {
           fetchTabsTried.push("direct:search_by_name_api");
-          directSearchCandidates = await fetchDirectSearchHomeCards(String(options.searchQuery ?? "").trim());
-          logDirectSearchPipeline("[SEARCH_API_RESULT_COUNT]", {
-            query: options.searchQuery ?? null,
-            count: directSearchCandidates.length,
-            topNames: directSearchCandidates.slice(0, 12).map((c) => c.name),
-          });
+          const directSearchResult = await fetchDirectSearchHomeCards(String(options.searchQuery ?? "").trim());
+          directSearchCandidates = takePrimary(directSearchResult);
+          if (directSearchResult.status === "ok") {
+            logDirectSearchPipeline("[SEARCH_API_RESULT_COUNT]", {
+              query: options.searchQuery ?? null,
+              count: directSearchCandidates.length,
+              topNames: directSearchCandidates.slice(0, 12).map((c) => c.name),
+            });
+          }
           if (directSearchCandidates.length > 0) {
             fetchedRaw = mergeHomeCardsUniqueById(directSearchCandidates, fetchedRaw);
             countsByTab.direct_search_by_name = directSearchCandidates.length;
