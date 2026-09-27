@@ -8,6 +8,7 @@ import React, { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { logEvent } from "@/lib/logEvent";
 import { clearConversationContext } from "@/lib/conversation/storage";
+import { clearHomeResume, consumeHomeReturn, type HomeResume } from "@/lib/conversation/homeResume";
 import { EmbeddedResults } from "./results/ResultsScreen";
 import { HamaHomeComposer, HamaHomePanels, HamaSceneLoop, HAMA_HOME_GREEN, HAMA_HOME_IVORY } from "./_components/home/HamaHomeStage";
 import { HomeSurpriseMe, HOME_SURPRISE, TodaySituations, type HomeSituationItem } from "./_components/home/TodaySituations";
@@ -117,6 +118,8 @@ function HomePageContent({ isLoggedIn, meUser, loginFailReason }: HomePageConten
   const [user, setUser] = useState<HamaUser>({ nickname: "게스트", points: 0 });
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeTurn, setActiveTurn] = useState<{ id: string; text: string } | null>(null);
+  const [resume, setResume] = useState<HomeResume | null>(null);
+  const [homeReady, setHomeReady] = useState(false);
   const [voiceStartOnOpen, setVoiceStartOnOpen] = useState(false);
   const { recentCards, recordView } = useRecent();
 
@@ -129,6 +132,15 @@ function HomePageContent({ isLoggedIn, meUser, loginFailReason }: HomePageConten
       setUser(loadUserFromStorage());
     }
   }, [meUser]);
+
+  useEffect(() => {
+    const restored = consumeHomeReturn();
+    if (restored) {
+      setResume(restored);
+      setActiveTurn({ id: restored.turnId, text: restored.text });
+    }
+    setHomeReady(true);
+  }, []);
 
   useEffect(() => {
     logEvent("session_start", { page: "home" });
@@ -226,6 +238,10 @@ function HomePageContent({ isLoggedIn, meUser, loginFailReason }: HomePageConten
     padding: 0,
   };
 
+  if (!homeReady) {
+    return <main style={{ height: "100vh", overflow: "hidden", background: HAMA_HOME_IVORY }} />;
+  }
+
   return (
     <main
       style={{
@@ -278,14 +294,17 @@ function HomePageContent({ isLoggedIn, meUser, loginFailReason }: HomePageConten
         ) : null}
         <HamaHomePanels
           showConversation={Boolean(activeTurn)}
+          instant={Boolean(resume && activeTurn && resume.turnId === activeTurn.id)}
           intro={<HamaSceneLoop />}
-          conversation={activeTurn ? <EmbeddedResults utterance={activeTurn} /> : null}
+          conversation={activeTurn ? <EmbeddedResults utterance={activeTurn} resume={resume} /> : null}
         />
       </div>
       <HamaHomeComposer
         onSubmit={(text) => goResults(text, "home_composer")}
         onNewConversation={() => {
           clearConversationContext();
+          clearHomeResume();
+          setResume(null);
           setActiveTurn(null);
         }}
         onOpenCalendar={() => router.push("/calendar")}

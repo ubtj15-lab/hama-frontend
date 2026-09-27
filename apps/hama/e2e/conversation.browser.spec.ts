@@ -665,3 +665,120 @@ test("does not record a cancelled first search when the next question wins", asy
   expect(outcomeLogs()[0]?.data?.turn_id).toBe(winnerId);
   expect(outcomeLogs()[0]?.data?.outcome).toBe("shown");
 });
+
+test("keeps earlier questions in one transcript and does not pull the reader back down", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  await page.goto("/");
+  const composer = page.getByPlaceholder("지금 상황이나 원하는 걸 말해줘");
+  const composerY = (await composer.boundingBox())?.y ?? 0;
+
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  const first = page.locator("[data-hama-turn]").first();
+  await expect.poll(async () => (await first.getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
+  await expect(page.locator(".hama-conversation-thread")).toHaveCSS("justify-content", "flex-end");
+  const firstY = await first.evaluate((element) => element.getBoundingClientRect().top);
+
+  await ask(page, "그 근처에 밥 먹을 곳도 있어?");
+  await ask(page, "오산에서 조용한 카페");
+  const turns = page.locator("[data-hama-turn]");
+  await expect(turns).toHaveCount(3);
+  await expect(turns.nth(2)).toContainText("오산 조용한 카페");
+  await expect(turns.nth(0)).toContainText("동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  await expect(turns.nth(1)).toContainText("그 근처에 밥 먹을 곳도 있어?");
+  const laterY = await first.evaluate((element) => element.getBoundingClientRect().top);
+  expect(laterY).toBeLessThan(firstY - 40);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect((await composer.boundingBox())?.y ?? 0).toBe(composerY);
+  await expect(first).not.toHaveClass(/hama-turn-current/);
+  await expect(first.locator(".hama-user-line")).toHaveCSS("animation-name", "none");
+
+  const scroller = page.locator("[data-hama-conversation-scroll]");
+  await scroller.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await page.waitForTimeout(500);
+  expect(await scroller.evaluate((element) => element.scrollTop)).toBeLessThan(40);
+  await expect(page.locator("[data-hama-jump-latest]")).toBeVisible();
+  await page.locator("[data-hama-jump-latest]").click();
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight - element.scrollTop - element.clientHeight)).toBeLessThan(80);
+
+  await first.getByRole("button", { name: "접기" }).click();
+  await expect(first.locator("[data-hama-place-id]")).toHaveCount(0);
+  await first.getByRole("button", { name: /추천 \d+곳 다시 보기/ }).click();
+  await expect(first.locator("[data-hama-place-id]").first()).toBeVisible();
+});
+
+test("restores the same conversation when returning from place detail", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  await page.goto("/");
+  const savedTurns = () =>
+    page.evaluate(() => {
+      const raw = sessionStorage.getItem("hama_conversation_context_v1");
+      if (!raw) return 0;
+      const parsed = JSON.parse(raw) as { dialogueHistory?: unknown[] };
+      return Array.isArray(parsed.dialogueHistory) ? parsed.dialogueHistory.length : 0;
+    });
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  await expect.poll(async () => (await page.locator("[data-hama-turn]").nth(0).getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
+  await expect.poll(savedTurns).toBe(1);
+  await ask(page, "그 근처에 밥 먹을 곳도 있어?");
+  await expect.poll(async () => (await page.locator("[data-hama-turn]").nth(1).getAttribute("data-hama-food-ids")) ?? "").not.toBe("");
+  await expect.poll(savedTurns).toBe(2);
+  await ask(page, "오산에서 조용한 카페 찾아줘");
+
+  const turns = page.locator("[data-hama-turn]");
+  await expect(turns).toHaveCount(3);
+  const first = turns.nth(0);
+  const third = turns.nth(2);
+  await expect(third).toContainText("오산 조용한 카페");
+  await expect(third).toContainText("이 순서로 골랐어요");
+  const playIds = await third.getAttribute("data-hama-play-ids");
+  expect(playIds).toBeTruthy();
+
+  await first.getByRole("button", { name: "접기" }).click();
+  await expect(first.getByRole("button", { name: /다시 보기/ })).toBeVisible();
+  const scroller = page.locator("[data-hama-conversation-scroll]");
+  const scrollBefore = await scroller.evaluate((element) => element.scrollTop);
+
+  const openDetail = () => third.getByRole("button", { name: "상세 보기" }).first().evaluate((element: HTMLButtonElement) => element.click());
+  await openDetail();
+  await expect(page).toHaveURL(/\/place\//);
+  await page.getByRole("button", { name: "←" }).click();
+  await expect(page).not.toHaveURL(/\/place\//);
+  await expect(turns).toHaveCount(3);
+  await expect(turns.nth(0)).toContainText("동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  await expect(turns.nth(1)).toContainText("그 근처에 밥 먹을 곳도 있어?");
+  await expect(third).toContainText("오산에서 조용한 카페 찾아줘");
+  await expect(third).toContainText("오산 조용한 카페");
+  await expect(third).toContainText("이 순서로 골랐어요");
+  expect(await third.getAttribute("data-hama-play-ids")).toBe(playIds);
+  await expect(first.getByRole("button", { name: /다시 보기/ })).toBeVisible();
+  await expect.poll(() => scroller.evaluate((element, before) => Math.abs(element.scrollTop - before), scrollBefore)).toBeLessThan(40);
+
+  await openDetail();
+  await expect(page).toHaveURL(/\/place\//);
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/place\//);
+  await expect(turns).toHaveCount(3);
+  await expect(third).toContainText("오산 조용한 카페");
+  await expect(third).toContainText("이 순서로 골랐어요");
+  expect(await third.getAttribute("data-hama-play-ids")).toBe(playIds);
+  await expect.poll(() => scroller.evaluate((element, before) => Math.abs(element.scrollTop - before), scrollBefore)).toBeLessThan(40);
+
+  await page.getByRole("button", { name: "더보기" }).click();
+  await page.getByRole("menuitem", { name: "새 대화" }).click();
+  await expect(page.locator("[data-hama-intro]")).toHaveAttribute("data-leaving", "false");
+  await expect(page.locator("[data-hama-turn]")).toHaveCount(0);
+
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  const only = page.locator("[data-hama-turn]");
+  await expect(only).toHaveCount(1);
+  await expect.poll(async () => (await only.first().getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
+  await only.first().getByRole("button", { name: "상세 보기" }).first().evaluate((element: HTMLButtonElement) => element.click());
+  await expect(page).toHaveURL(/\/place\//);
+  await page.goto("/");
+  await expect(page.locator("[data-hama-intro]")).toHaveAttribute("data-leaving", "false");
+  await expect(page.locator("[data-hama-turn]")).toHaveCount(0);
+});

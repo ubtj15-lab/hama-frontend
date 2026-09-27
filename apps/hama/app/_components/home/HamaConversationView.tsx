@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import { OpenExplorationMapButton } from "@/map/OpenExplorationMapButton";
 
@@ -34,20 +34,132 @@ type Props = {
   onPickAnchor: (id: string) => void;
   onOpen: (card: HomeCard) => void;
   onReject: (id: string) => void;
+  quiet?: boolean;
+  initialScrollTop?: number;
+  initialOpened?: Record<string, boolean>;
+  transcriptRef?: React.MutableRefObject<{ scrollTop: number; opened: Record<string, boolean> } | null>;
 };
 
-export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpen, onReject }: Props) {
-  const [opened, setOpened] = useState<Record<string, boolean>>({});
-  const endRef = useRef<HTMLDivElement | null>(null);
-  const last = entries[entries.length - 1]?.userText ?? "";
+const PIN_THRESHOLD = 72;
+
+function distanceFromBottom(element: HTMLElement) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight;
+}
+
+export function HamaConversationView({
+  entries,
+  playChoices,
+  onPickAnchor,
+  onOpen,
+  onReject,
+  quiet = false,
+  initialScrollTop,
+  initialOpened,
+  transcriptRef,
+}: Props) {
+  const [opened, setOpened] = useState<Record<string, boolean>>(initialOpened ?? {});
+  const [showJump, setShowJump] = useState(false);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const followingRef = useRef(initialScrollTop == null);
+  const restoreScrollRef = useRef<number | null>(initialScrollTop ?? null);
+  const tail = entries[entries.length - 1];
+  const followToken = [
+    entries.length,
+    tail?.turnId ?? "",
+    tail?.userText ?? "",
+    tail?.assistantText ?? "",
+    tail?.playCards.length ?? 0,
+    tail?.foodCards.length ?? 0,
+    tail?.loading ? 1 : 0,
+    tail?.foodLoading ? 1 : 0,
+    tail?.blockedMessage ?? "",
+    tail?.foodBlocked ? 1 : 0,
+    tail?.foodUnavailableMessage ?? "",
+  ].join("|");
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [last, entries.length]);
+    if (!transcriptRef) return;
+    transcriptRef.current = { scrollTop: scrollerRef.current?.scrollTop ?? 0, opened };
+  }, [opened, transcriptRef]);
+
+  useEffect(() => {
+    const element = scrollerRef.current;
+    if (!element) return;
+    const onScroll = () => {
+      const nearBottom = distanceFromBottom(element) <= PIN_THRESHOLD;
+      followingRef.current = nearBottom;
+      if (transcriptRef) transcriptRef.current = { scrollTop: element.scrollTop, opened };
+      setShowJump(element.scrollHeight > element.clientHeight + 8 && !nearBottom);
+    };
+    element.addEventListener("scroll", onScroll, { passive: true });
+    return () => element.removeEventListener("scroll", onScroll);
+  }, [opened, transcriptRef]);
+
+  useLayoutEffect(() => {
+    const element = scrollerRef.current;
+    if (!element) return;
+    if (restoreScrollRef.current != null) {
+      if (entries.length === 0) return;
+      const target = restoreScrollRef.current;
+      const max = element.scrollHeight - element.clientHeight;
+      if (target > 24 && max + 24 < target) return;
+      element.scrollTop = target;
+      const nearBottom = distanceFromBottom(element) <= PIN_THRESHOLD;
+      followingRef.current = nearBottom;
+      restoreScrollRef.current = null;
+      if (transcriptRef) transcriptRef.current = { scrollTop: element.scrollTop, opened };
+      setShowJump(element.scrollHeight > element.clientHeight + 8 && !nearBottom);
+      return;
+    }
+    if (!followingRef.current) {
+      setShowJump(element.scrollHeight > element.clientHeight + 8);
+      return;
+    }
+    element.scrollTop = element.scrollHeight;
+    if (transcriptRef) transcriptRef.current = { scrollTop: element.scrollTop, opened };
+  }, [followToken, opened, transcriptRef]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 18, paddingTop: 18 }}>
+    <div className="hama-conversation-frame">
       <style>{`
+        .hama-conversation-frame {
+          position: relative;
+          flex: 1;
+          min-height: 0;
+          height: 100%;
+        }
+        .hama-conversation-scroll {
+          height: 100%;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          overflow-anchor: none;
+        }
+        .hama-conversation-thread {
+          min-height: 100%;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          gap: 18px;
+          padding: 18px 0 120px;
+          box-sizing: border-box;
+        }
+        .hama-jump-latest {
+          position: absolute;
+          left: 50%;
+          bottom: 128px;
+          transform: translateX(-50%);
+          z-index: 2;
+          border: 1px solid ${LINE};
+          background: #fff;
+          color: ${GREEN};
+          border-radius: 999px;
+          padding: 8px 12px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 0 8px 24px rgba(25, 88, 74, 0.08);
+        }
         @keyframes hamaTurnIn {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: none; }
@@ -79,13 +191,15 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
           }
         }
       `}</style>
+      <div ref={scrollerRef} className="hama-conversation-scroll" data-hama-conversation-scroll="">
+      <div className="hama-conversation-thread">
       {entries.map((entry, index) => {
-        const expanded = entry.current || opened[entry.userText] === true;
+        const expanded = entry.current || opened[entry.userText] !== false;
         const playCount = entry.playCards.length;
         return (
           <section
             key={`${entry.turnId ?? entry.userText}-${index}`}
-            className={entry.current ? "hama-turn-current" : undefined}
+            className={entry.current && !quiet ? "hama-turn-current" : undefined}
             data-hama-turn={entry.userText}
             data-hama-turn-id={entry.turnId ?? ""}
             data-hama-play-ids={entry.playCards.map((card) => card.id).join("|")}
@@ -221,7 +335,24 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
           </section>
         );
       })}
-      <div ref={endRef} />
+      </div>
+      </div>
+      {showJump ? (
+        <button
+          type="button"
+          className="hama-jump-latest"
+          data-hama-jump-latest=""
+          onClick={() => {
+            followingRef.current = true;
+            const element = scrollerRef.current;
+            if (!element) return;
+            const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            element.scrollTo({ top: element.scrollHeight, behavior: reduce ? "auto" : "smooth" });
+          }}
+        >
+          최신 대화
+        </button>
+      ) : null}
     </div>
   );
 }

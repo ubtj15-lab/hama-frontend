@@ -67,6 +67,7 @@ import { OpenExplorationMapButton } from "@/map/OpenExplorationMapButton";
 import { ResultsConversation } from "@/_components/results/ResultsConversation";
 import { composeAssistantReply, persistAssistantReply } from "@/lib/conversation/assistantReply";
 import { recordDialogueSnapshot } from "@/lib/conversation/storage";
+import { armHomeReturn, type HomeResume } from "@/lib/conversation/homeResume";
 import { filterCardsByNamedRegion } from "@/lib/conversation/namedRegion";
 import { buildLinkedFoodScenario, detectLinkedFoodPurpose, resolveFoodAnchor, validShownPlayCards } from "@/lib/conversation/linkedPurpose";
 import { storeCategoryMatchesIntentCategory } from "@/lib/scenarioEngine/intentClassification";
@@ -136,9 +137,11 @@ const DEBUG_FORCE_SEARCH_SECTION = process.env.NEXT_PUBLIC_DEBUG_FORCE_SEARCH_SE
 function ResultsContent({
   embedded = false,
   utterance = null,
+  resume = null,
 }: {
   embedded?: boolean;
   utterance?: { id: string; text: string } | null;
+  resume?: HomeResume | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -146,6 +149,8 @@ function ResultsContent({
   const courseSnapFromSearch = searchParams.get("courseSnap")?.trim() ?? "";
   const urlQuery = searchParams.get("q")?.trim() ?? "";
   const qRaw = embedded ? (utterance?.text.trim() ?? "") : urlQuery;
+  const holdTranscript = Boolean(embedded && resume && utterance?.id && resume.turnId === utterance.id);
+  const transcriptRef = useRef<{ scrollTop: number; opened: Record<string, boolean> } | null>(null);
   const explicitIntent = searchParams.get("intent")?.trim() || null;
   const explicitCategory = searchParams.get("category")?.trim() || null;
   const explicitMode = searchParams.get("mode")?.trim() || null;
@@ -657,7 +662,7 @@ function ResultsContent({
     scenarioObject: scenarioObjectForHomeCards,
     courseIdParam,
     tonkatsuRecommendDisabled,
-    skipFetchExtra: mealKeepsPlay,
+    skipFetchExtra: mealKeepsPlay || holdTranscript,
     retainCardsOnSkip: mealKeepsPlay,
     explicitIntent: resolvedExplicitIntentForHome,
     explicitCategory: resolvedExplicitCategoryForHome,
@@ -867,8 +872,8 @@ function ResultsContent({
     excludeStoreIds: [],
     searchQuery: foodScenarioForFetch?.region ? `${foodScenarioForFetch.region} 식당` : "식당",
     scenarioObject: foodScenarioForFetch,
-    skipFetch: !foodScenarioForFetch,
-    deferRanking: !foodScenarioForFetch,
+    skipFetch: !foodScenarioForFetch || holdTranscript,
+    deferRanking: !foodScenarioForFetch || holdTranscript,
   });
   const foodRestaurantCards = useMemo(
     () => (linkedFoodCards ?? []).filter((card) => storeCategoryMatchesIntentCategory(card, "FOOD")),
@@ -1424,6 +1429,7 @@ function ResultsContent({
   });
 
   useEffect(() => {
+    if (holdTranscript) return;
     if (!embedded || !utterance?.id || !conversationTurnOutcome) return;
     if (!claimConversationTurnOutcome(utterance.id)) return;
     logEvent(HamaEvents.conversation_turn_outcome, {
@@ -1433,10 +1439,11 @@ function ResultsContent({
       latency_ms: Math.max(0, Math.round(performance.now() - started.current)),
       screen: CONVERSATION_TURN_OUTCOME_SCREEN,
     });
-  }, [embedded, utterance?.id, conversationTurnOutcome, conversationShownCardCount]);
+  }, [embedded, holdTranscript, utterance?.id, conversationTurnOutcome, conversationShownCardCount]);
   const shownPlaceKey = shownPlaceNames.join("|");
 
   useEffect(() => {
+    if (holdTranscript) return;
     if (!convCtx || pageBusy || bootstrapBusy) return;
     const intent = effectiveScenario ?? convCtx.currentIntent;
     const reply = composeAssistantReply({
@@ -1487,6 +1494,7 @@ function ResultsContent({
     foodRecommendationBlocked,
     foodRecommendationLoadFailed,
     qRaw,
+    holdTranscript,
   ]);
 
   useEffect(() => {
@@ -1495,6 +1503,7 @@ function ResultsContent({
   }, [qRaw, pageBusy, bootstrapBusy]);
 
   useEffect(() => {
+    if (holdTranscript) return;
     if (!embedded || !convCtx?.sessionId || askInstead) return;
     if ((pageBusy && !mealKeepsPlay) || bootstrapBusy) return;
     if (!mealKeepsPlay && rankingSeenForQuery.current !== qRaw) return;
@@ -1537,6 +1546,7 @@ function ResultsContent({
     foodAnchorProvisional,
     qRaw,
     utterance?.id,
+    holdTranscript,
   ]);
 
   const applyNewQuery = (next: string, src?: string) => {
@@ -1733,6 +1743,9 @@ function ResultsContent({
       : [];
     const history = convCtx?.dialogueHistory ?? [];
     const turns = convCtx?.turns ?? [];
+    const heldEntry = holdTranscript
+      ? history.find((entry) => (utterance?.id ? entry.turnId === utterance.id : entry.userText === qRaw))
+      : undefined;
     const userTurns = turns.filter((turn) => turn.role === "user");
     const entries = userTurns.map((userTurn) => {
       const current = Boolean(utterance?.id) && userTurn.turnId === utterance?.id;
@@ -1751,18 +1764,22 @@ function ResultsContent({
         userText: userTurn.text,
         assistantText,
         playCards: current
-          ? dataNotice.showRecommendationCards && visiblePlay.length
-            ? visiblePlay
-            : []
+          ? heldEntry?.playCards?.length
+            ? heldEntry.playCards
+            : dataNotice.showRecommendationCards && visiblePlay.length
+              ? visiblePlay
+              : []
           : saved?.playCards ?? [],
         foodCards: !current
           ? saved?.foodCards ?? []
-          : linkedFoodActive &&
-              !linkedFoodLoading &&
-              !foodRecommendationBlocked &&
-              !foodRecommendationLoadFailed
-            ? foodRestaurantCards.slice(0, 3)
-            : [],
+          : heldEntry
+            ? heldEntry.foodCards ?? []
+            : linkedFoodActive &&
+                !linkedFoodLoading &&
+                !foodRecommendationBlocked &&
+                !foodRecommendationLoadFailed
+              ? foodRestaurantCards.slice(0, 3)
+              : [],
         blockedMessage: current && dataNotice.showSuppressionError
           ? SUPPRESSION_UNAVAILABLE_MESSAGE
           : current && dataNotice.showFetchError
@@ -1776,11 +1793,15 @@ function ResultsContent({
         anchorName: current ? foodAnchor?.name ?? saved?.anchorName ?? null : saved?.anchorName ?? null,
         provisional: current ? foodAnchorProvisional : Boolean(saved?.provisional),
         current,
-        loading: current && Boolean(pageBusy && !mealKeepsPlay),
-        showFood: current ? Boolean(linkedFoodActive && !askInstead) : Boolean(saved?.foodCards?.length),
-        foodLoading: current && linkedFoodLoading,
-        animatePlay: current && !mealKeepsPlay,
-        animateFood: current,
+        loading: current && !heldEntry && Boolean(pageBusy && !mealKeepsPlay),
+        showFood: current
+          ? heldEntry
+            ? Boolean(heldEntry.foodCards?.length)
+            : Boolean(linkedFoodActive && !askInstead)
+          : Boolean(saved?.foodCards?.length),
+        foodLoading: current && !heldEntry && linkedFoodLoading,
+        animatePlay: current && !heldEntry && !mealKeepsPlay,
+        animateFood: current && !heldEntry,
       };
     });
     if (utterance && !userTurns.some((turn) => turn.turnId === utterance.id)) {
@@ -1806,9 +1827,21 @@ function ResultsContent({
     return (
       <HamaConversationView
         entries={entries}
+        quiet={holdTranscript}
+        initialScrollTop={holdTranscript ? resume?.scrollTop : undefined}
+        initialOpened={holdTranscript ? resume?.opened : undefined}
+        transcriptRef={transcriptRef}
         playChoices={visiblePlay.filter((card) => typeof card.lat === "number" && typeof card.lng === "number")}
         onPickAnchor={setFoodAnchorId}
         onOpen={(card) => {
+          if (embedded && utterance?.id) {
+            armHomeReturn({
+              turnId: utterance.id,
+              text: utterance.text,
+              scrollTop: transcriptRef.current?.scrollTop ?? 0,
+              opened: transcriptRef.current?.opened ?? {},
+            });
+          }
           stashPlaceForSession(card);
           router.push(`/place/${encodeURIComponent(card.id)}`);
         }}
@@ -2206,10 +2239,16 @@ function ResultsContent({
   );
 }
 
-export function EmbeddedResults({ utterance }: { utterance: { id: string; text: string } | null }) {
+export function EmbeddedResults({
+  utterance,
+  resume = null,
+}: {
+  utterance: { id: string; text: string } | null;
+  resume?: HomeResume | null;
+}) {
   return (
     <Suspense fallback={null}>
-      <ResultsContent embedded utterance={utterance} />
+      <ResultsContent embedded utterance={utterance} resume={resume} />
     </Suspense>
   );
 }

@@ -138,10 +138,12 @@ export function HamaSceneLoop() {
 
 export function HamaHomePanels({
   showConversation,
+  instant = false,
   intro,
   conversation,
 }: {
   showConversation: boolean;
+  instant?: boolean;
   intro: React.ReactNode;
   conversation: React.ReactNode;
 }) {
@@ -162,10 +164,13 @@ export function HamaHomePanels({
         .hama-conversation-pane {
           flex: 1;
           min-height: 0;
-          overflow-y: auto;
-          padding-bottom: 120px;
-          box-sizing: border-box;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
           animation: hamaConversationIn 320ms ease;
+        }
+        .hama-conversation-pane[data-instant="true"] {
+          animation: none;
         }
         @keyframes hamaConversationIn {
           from { opacity: 0; }
@@ -183,7 +188,7 @@ export function HamaHomePanels({
         {intro}
       </div>
       {showConversation ? (
-        <div className="hama-conversation-pane" data-hama-conversation="">
+        <div className="hama-conversation-pane" data-hama-conversation="" data-instant={instant ? "true" : "false"}>
           {conversation}
         </div>
       ) : null}
