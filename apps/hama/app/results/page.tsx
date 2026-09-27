@@ -6,7 +6,12 @@ import { useHomeMode } from "@/_hooks/useHomeMode";
 import { useRecent } from "@/_hooks/useRecent";
 import { useResultsRecommendationDeck } from "@/_hooks/useResultsRecommendationDeck";
 import { normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
-import { assembleResultsCardLists } from "@/lib/results/resultsRecommendationDeck";
+import {
+  assembleResultsCardLists,
+  RECOMMEND_DATA_UNAVAILABLE_MESSAGE,
+  resolveResultsDataNotice,
+} from "@/lib/results/resultsRecommendationDeck";
+import { SUPPRESSION_UNAVAILABLE_MESSAGE } from "@/lib/recommend/storeSuppression";
 import { resolveOrdinaryRecommendationListVisible } from "@/lib/results/courseResultVisibility";
 import {
   COURSE_REFRESH_BUTTON_COPY,
@@ -606,6 +611,10 @@ function ResultsContent() {
     courseCandidatePool,
     isLoading,
     deckIncomplete,
+    recommendationBlocked,
+    recommendationLoadFailed,
+    nameSearchBlocked,
+    nameSearchFailed,
     bootstrapBusy,
     pageBusy,
     placeLookupBusy,
@@ -980,7 +989,17 @@ function ResultsContent() {
       primaryListCards.length === 0 &&
       placeLookupDone
   );
-  const showEmptyState = forceShowListByCards ? false : baseShowEmptyState;
+  const dataNotice = resolveResultsDataNotice({
+    recommendationBlocked,
+    recommendationLoadFailed,
+    nameSearchBlocked,
+    nameSearchFailed,
+    verifiedRecommendationCount: cards.length,
+    verifiedPlaceHitCount: placeHits.length,
+    baseShowEmptyState,
+    forceShowListByCards,
+  });
+  const showEmptyState = dataNotice.showEmptyState;
 
   useEffect(() => {
     logDirectSearchPipeline("[SEARCH_API_RESULT_COUNT]", {
@@ -1027,14 +1046,10 @@ function ResultsContent() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isGenericFoodResultsQuery) return;
-    const showEmptyState =
-      !pageBusy &&
-      !showNameSearch &&
-      !showCourseDeck &&
-      primaryRecommendationCards.length === 0 &&
-      placeLookupDone;
     let renderedMode = "other";
     if (showCourseDeck) renderedMode = "course_deck";
+    else if (dataNotice.showSuppressionError) renderedMode = "suppression_error";
+    else if (dataNotice.showFetchError) renderedMode = "fetch_error";
     else if (showRecommendationList && primaryRecommendationCards.length > 0) renderedMode = "recommendation_list";
     else if (showEmptyState) renderedMode = "empty_message";
     console.log("[generic food results render]", {
@@ -1062,6 +1077,9 @@ function ResultsContent() {
     showCourseDeck,
     pageBusy,
     placeLookupDone,
+    showEmptyState,
+    dataNotice.showSuppressionError,
+    dataNotice.showFetchError,
   ]);
 
   useEffect(() => {
@@ -1556,7 +1574,7 @@ function ResultsContent() {
           </p>
         )}
 
-        {!bootstrapBusy && placeLookupDone && showNameSearch && (
+        {!bootstrapBusy && placeLookupDone && showNameSearch && dataNotice.showPlaceHits && (
           <SearchResultSection
             results={placeHits}
             scenarioObject={effectiveScenario}
@@ -1571,6 +1589,7 @@ function ResultsContent() {
 
         {!bootstrapBusy &&
           showNameSearch &&
+          dataNotice.showRecommendationCards &&
           !isLoading &&
           secondaryListCards.length > 0 && (
             <section style={{ marginBottom: space.section }}>
@@ -1631,14 +1650,29 @@ function ResultsContent() {
         {!bootstrapBusy &&
           placeSearchEnabled &&
           placeLookupDone &&
+          !nameSearchFailed &&
+          !nameSearchBlocked &&
           !showNameSearch &&
           !pageBusy &&
           !showCourseDeck &&
+          dataNotice.showRecommendationCards &&
           primaryListCards.length > 0 && (
             <p style={{ fontSize: 13, color: colors.textSecondary, margin: "0 0 12px", lineHeight: 1.45 }}>
               같은 이름의 매장은 못 찾았어. 대신 이런 곳은 어때?
             </p>
           )}
+
+        {dataNotice.showSuppressionError && !pageBusy ? (
+          <p data-hama-suppression-error="" style={{ color: colors.textPrimary, lineHeight: 1.5, margin: "0 0 16px" }}>
+            {SUPPRESSION_UNAVAILABLE_MESSAGE}
+          </p>
+        ) : null}
+
+        {dataNotice.showFetchError && !pageBusy ? (
+          <p data-hama-recommend-error="" style={{ color: colors.textPrimary, lineHeight: 1.5, margin: "0 0 16px" }}>
+            {RECOMMEND_DATA_UNAVAILABLE_MESSAGE}
+          </p>
+        ) : null}
 
         {showEmptyState && (
             <p style={{ color: colors.textSecondary }}>
@@ -1668,7 +1702,11 @@ function ResultsContent() {
           </p>
         )}
 
-        {!pageBusy && !showNameSearch && showRecommendationList && primaryListCards.length > 0 && (
+        {!pageBusy &&
+          dataNotice.showRecommendationCards &&
+          !showNameSearch &&
+          showRecommendationList &&
+          primaryListCards.length > 0 && (
           <>
             {matchedNamedFoodPreset?.id === "chinese" && (
               <p style={{ fontSize: 14, color: colors.textPrimary, margin: "0 0 10px", lineHeight: 1.5 }}>

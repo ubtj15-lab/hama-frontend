@@ -10,7 +10,11 @@ import { useRecent } from "@/_hooks/useRecent";
 import { useResultsRecommendationDeck } from "@/_hooks/useResultsRecommendationDeck";
 import { normalizeBrandQuery } from "@/lib/results/placeNameSearchIntent";
 import { logDirectSearchPipeline } from "@/lib/search/directSearch";
-import { assembleResultsCardLists } from "@/lib/results/resultsRecommendationDeck";
+import {
+  assembleResultsCardLists,
+  RECOMMEND_DATA_UNAVAILABLE_MESSAGE,
+  resolveResultsDataNotice,
+} from "@/lib/results/resultsRecommendationDeck";
 import {
   parseScenarioIntent,
   explainCourseGenerationMatch,
@@ -69,9 +73,6 @@ import { storeCategoryMatchesIntentCategory } from "@/lib/scenarioEngine/intentC
 import { LinkedFoodGroup } from "@/_components/results/LinkedFoodGroup";
 import { HamaConversationView } from "@/_components/home/HamaConversationView";
 import { SUPPRESSION_UNAVAILABLE_MESSAGE } from "@/lib/recommend/storeSuppression";
-
-const RECOMMEND_DATA_UNAVAILABLE_MESSAGE =
-  "추천 정보를 불러오지 못해서 결과를 보여드리지 않았어요. 잠시 후 다시 시도해 주세요.";
 import { SearchResultSection } from "@/_components/results/SearchResultSection";
 import { CourseDeckCard } from "@/_components/results/CourseDeckCard";
 import { NextSuggestions } from "@/_components/results/NextSuggestions";
@@ -1040,11 +1041,19 @@ function ResultsContent({
       primaryListCards.length === 0 &&
       placeLookupDone
   );
-  const recommendDataFailed = recommendationLoadFailed || nameSearchFailed;
-  const showEmptyState =
-    forceShowListByCards || recommendationBlocked || nameSearchBlocked || recommendDataFailed || foodRecommendationLoadFailed
-      ? false
-      : baseShowEmptyState;
+  const dataNotice = resolveResultsDataNotice({
+    recommendationBlocked,
+    recommendationLoadFailed,
+    nameSearchBlocked,
+    nameSearchFailed,
+    verifiedRecommendationCount: cards.length,
+    verifiedPlaceHitCount: placeHits.length,
+    foodRecommendationBlocked,
+    foodRecommendationLoadFailed,
+    baseShowEmptyState,
+    forceShowListByCards,
+  });
+  const showEmptyState = dataNotice.showEmptyState;
 
   useEffect(() => {
     logDirectSearchPipeline("[SEARCH_API_RESULT_COUNT]", {
@@ -1091,14 +1100,10 @@ function ResultsContent({
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!isGenericFoodResultsQuery) return;
-    const showEmptyState =
-      !pageBusy &&
-      !showNameSearch &&
-      !showCourseDeck &&
-      primaryRecommendationCards.length === 0 &&
-      placeLookupDone;
     let renderedMode = "other";
     if (showCourseDeck) renderedMode = "course_deck";
+    else if (dataNotice.showSuppressionError) renderedMode = "suppression_error";
+    else if (dataNotice.showFetchError) renderedMode = "fetch_error";
     else if (showRecommendationList && primaryRecommendationCards.length > 0) renderedMode = "recommendation_list";
     else if (showEmptyState) renderedMode = "empty_message";
     console.log("[generic food results render]", {
@@ -1126,6 +1131,9 @@ function ResultsContent({
     showCourseDeck,
     pageBusy,
     placeLookupDone,
+    showEmptyState,
+    dataNotice.showSuppressionError,
+    dataNotice.showFetchError,
   ]);
 
   useEffect(() => {
@@ -1688,27 +1696,23 @@ function ResultsContent({
         if (!turn || turn.role === "user") break;
         if (turn.role === "assistant") assistantText = turn.text;
       }
-      const currentBlocked = recommendationBlocked || nameSearchBlocked;
-      const currentFailed = recommendationLoadFailed || nameSearchFailed;
       return {
         turnId: userTurn.turnId,
         userText: userTurn.text,
         assistantText,
         playCards: current
-          ? currentBlocked || currentFailed
-            ? []
-            : visiblePlay.length
-              ? visiblePlay
-              : saved?.playCards ?? []
+          ? dataNotice.showRecommendationCards && visiblePlay.length
+            ? visiblePlay
+            : []
           : saved?.playCards ?? [],
-        foodCards: current && linkedFoodActive && !foodRecommendationBlocked && !foodRecommendationLoadFailed
-          ? foodRestaurantCards.slice(0, 3)
-          : current && (foodRecommendationBlocked || foodRecommendationLoadFailed)
-            ? []
-            : saved?.foodCards ?? [],
-        blockedMessage: current && currentBlocked
+        foodCards: !current
+          ? saved?.foodCards ?? []
+          : linkedFoodActive && !foodRecommendationBlocked && !foodRecommendationLoadFailed
+            ? foodRestaurantCards.slice(0, 3)
+            : [],
+        blockedMessage: current && dataNotice.showSuppressionError
           ? SUPPRESSION_UNAVAILABLE_MESSAGE
-          : current && currentFailed
+          : current && dataNotice.showFetchError
             ? RECOMMEND_DATA_UNAVAILABLE_MESSAGE
             : null,
         foodBlocked: current && foodRecommendationBlocked,
@@ -1795,7 +1799,7 @@ function ResultsContent({
           </p>
         )}
 
-        {!askInstead && !bootstrapBusy && placeLookupDone && showNameSearch && (
+        {!askInstead && !bootstrapBusy && placeLookupDone && showNameSearch && dataNotice.showPlaceHits && (
           <SearchResultSection
             results={placeHits}
             scenarioObject={effectiveScenario}
@@ -1811,6 +1815,7 @@ function ResultsContent({
         {!askInstead &&
           !bootstrapBusy &&
           showNameSearch &&
+          dataNotice.showRecommendationCards &&
           !isLoading &&
           secondaryListCards.length > 0 && (
             <section style={{ marginBottom: space.section }}>
@@ -1871,22 +1876,25 @@ function ResultsContent({
         {!bootstrapBusy &&
           placeSearchEnabled &&
           placeLookupDone &&
+          !nameSearchFailed &&
+          !nameSearchBlocked &&
           !showNameSearch &&
           !pageBusy &&
           !showCourseDeck &&
+          dataNotice.showRecommendationCards &&
           primaryListCards.length > 0 && (
             <p style={{ fontSize: 13, color: colors.textSecondary, margin: "0 0 12px", lineHeight: 1.45 }}>
               같은 이름의 매장은 못 찾았어. 대신 이런 곳은 어때?
             </p>
           )}
 
-        {(recommendationBlocked || nameSearchBlocked || foodRecommendationBlocked) && !askInstead && !pageBusy ? (
+        {dataNotice.showSuppressionError && !askInstead && !pageBusy ? (
           <p data-hama-suppression-error="" style={{ color: colors.textPrimary, lineHeight: 1.5, margin: "0 0 16px" }}>
             {SUPPRESSION_UNAVAILABLE_MESSAGE}
           </p>
         ) : null}
 
-        {(recommendDataFailed || foodRecommendationLoadFailed) && !askInstead && !pageBusy && !recommendationBlocked && !nameSearchBlocked ? (
+        {dataNotice.showFetchError && !askInstead && !pageBusy ? (
           <p data-hama-recommend-error="" style={{ color: colors.textPrimary, lineHeight: 1.5, margin: "0 0 16px" }}>
             {RECOMMEND_DATA_UNAVAILABLE_MESSAGE}
           </p>
@@ -1920,7 +1928,11 @@ function ResultsContent({
           </p>
         )}
 
-        {!askInstead && !showNameSearch && displayedPlayCards.length > 0 && (!pageBusy || mealKeepsPlay) && (
+        {!askInstead &&
+          dataNotice.showRecommendationCards &&
+          !showNameSearch &&
+          displayedPlayCards.length > 0 &&
+          (!pageBusy || mealKeepsPlay) && (
           <div data-hama-play-list="">
             {matchedNamedFoodPreset?.id === "chinese" && (
               <p style={{ fontSize: 14, color: colors.textPrimary, margin: "0 0 10px", lineHeight: 1.5 }}>

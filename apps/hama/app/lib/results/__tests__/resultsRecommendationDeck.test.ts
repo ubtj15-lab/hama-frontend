@@ -8,6 +8,7 @@ import {
   buildResultsHomeCardsOptions,
   classifyPlaceSearchStatus,
   resolvePlaceSearchEnabled,
+  resolveResultsDataNotice,
   resolveResultsLookupFlow,
 } from "../resultsRecommendationDeck";
 
@@ -234,6 +235,65 @@ describe("results recommendation deck", () => {
     });
     expect(suppressed.primaryListCards).toEqual([]);
     expect(suppressed.secondaryListCards).toEqual([]);
+  });
+
+  it("keeps a verified partial result distinct from an all-channel failure and a real empty result", () => {
+    const base = {
+      recommendationBlocked: false,
+      recommendationLoadFailed: false,
+      nameSearchBlocked: false,
+      nameSearchFailed: false,
+      verifiedRecommendationCount: 0,
+      verifiedPlaceHitCount: 0,
+      baseShowEmptyState: true,
+      forceShowListByCards: false,
+    };
+    expect(resolveResultsDataNotice({ ...base, verifiedRecommendationCount: 3, forceShowListByCards: true })).toMatchObject({
+      showSuppressionError: false,
+      showFetchError: false,
+      showEmptyState: false,
+      showRecommendationCards: true,
+    });
+    expect(resolveResultsDataNotice({
+      ...base,
+      recommendationLoadFailed: true,
+      verifiedPlaceHitCount: 2,
+    })).toMatchObject({
+      showFetchError: false,
+      showEmptyState: false,
+      showPlaceHits: true,
+      showRecommendationCards: true,
+    });
+    expect(resolveResultsDataNotice({ ...base, recommendationLoadFailed: true, nameSearchFailed: true })).toMatchObject({
+      showFetchError: true,
+      showEmptyState: false,
+      showSuppressionError: false,
+    });
+    expect(resolveResultsDataNotice(base)).toMatchObject({
+      showFetchError: false,
+      showEmptyState: true,
+      showSuppressionError: false,
+    });
+    expect(resolveResultsDataNotice({
+      ...base,
+      recommendationBlocked: true,
+      verifiedRecommendationCount: 4,
+    })).toMatchObject({
+      showSuppressionError: true,
+      showEmptyState: false,
+      showRecommendationCards: false,
+    });
+    expect(resolveResultsDataNotice({
+      ...base,
+      nameSearchBlocked: true,
+      verifiedPlaceHitCount: 3,
+      verifiedRecommendationCount: 2,
+    })).toMatchObject({
+      showSuppressionError: false,
+      showPlaceHits: false,
+      showRecommendationCards: true,
+      showEmptyState: false,
+    });
   });
 
   it("does not start place search for a solo situation that is not a direct query", () => {

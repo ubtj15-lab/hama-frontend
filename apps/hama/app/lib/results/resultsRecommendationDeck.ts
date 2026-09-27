@@ -43,6 +43,61 @@ export function resolveResultsLookupFlow(input: {
   };
 }
 
+export const RECOMMEND_DATA_UNAVAILABLE_MESSAGE =
+  "추천 정보를 불러오지 못해서 결과를 보여드리지 않았어요. 잠시 후 다시 시도해 주세요.";
+
+export type ResultsDataNoticeInput = {
+  recommendationBlocked: boolean;
+  recommendationLoadFailed: boolean;
+  nameSearchBlocked: boolean;
+  nameSearchFailed: boolean;
+  verifiedRecommendationCount: number;
+  verifiedPlaceHitCount: number;
+  foodRecommendationBlocked?: boolean;
+  foodRecommendationLoadFailed?: boolean;
+  baseShowEmptyState: boolean;
+  forceShowListByCards: boolean;
+};
+
+export type ResultsDataNotice = {
+  showSuppressionError: boolean;
+  showFetchError: boolean;
+  showEmptyState: boolean;
+  showRecommendationCards: boolean;
+  showPlaceHits: boolean;
+};
+
+/**
+ * Partial verified results stay visible.
+ * A suppression failure hides that channel, and an all-channel failure is not an empty success.
+ */
+export function resolveResultsDataNotice(input: ResultsDataNoticeInput): ResultsDataNotice {
+  const verifiedRecommendationCount = input.recommendationBlocked ? 0 : input.verifiedRecommendationCount;
+  const verifiedPlaceHitCount = input.nameSearchBlocked ? 0 : input.verifiedPlaceHitCount;
+  const verifiedCount = verifiedRecommendationCount + verifiedPlaceHitCount;
+  const mainBlocked = input.recommendationBlocked || input.nameSearchBlocked;
+  const mainFailed = input.recommendationLoadFailed || input.nameSearchFailed;
+  const foodBlocked = Boolean(input.foodRecommendationBlocked);
+  const foodFailed = Boolean(input.foodRecommendationLoadFailed);
+  const showSuppressionError = (mainBlocked && verifiedCount === 0) || foodBlocked;
+  const showFetchError =
+    !showSuppressionError && ((mainFailed && verifiedCount === 0 && !mainBlocked) || foodFailed);
+  return {
+    showSuppressionError,
+    showFetchError,
+    showEmptyState:
+      !showSuppressionError &&
+      !showFetchError &&
+      !foodBlocked &&
+      !foodFailed &&
+      !input.forceShowListByCards &&
+      input.baseShowEmptyState &&
+      verifiedCount === 0,
+    showRecommendationCards: !input.recommendationBlocked,
+    showPlaceHits: !input.nameSearchBlocked,
+  };
+}
+
 export function classifyPlaceSearchStatus(
   meta: { apiOk: boolean; error?: string } | null
 ): { nameSearchBlocked: boolean; nameSearchFailed: boolean } {
