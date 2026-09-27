@@ -101,12 +101,18 @@ export function HamaSceneLoop() {
           38.33% { opacity: 0; }
           100% { opacity: 0; }
         }
+        @media (prefers-reduced-motion: reduce) {
+          .hama-scene-frame { animation: none !important; opacity: 0 !important; }
+          .hama-scene-frame[data-static="true"] { opacity: 1 !important; }
+        }
       `}</style>
       {SCENES.map((scene, index) => {
         const Drawing = DRAWINGS[index]!;
         return (
           <div
             key={scene.title}
+            className="hama-scene-frame"
+            data-static={index === 0 ? "true" : undefined}
             style={{
               position: "absolute",
               inset: 0,
@@ -126,6 +132,61 @@ export function HamaSceneLoop() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+export function HamaHomePanels({
+  showConversation,
+  intro,
+  conversation,
+}: {
+  showConversation: boolean;
+  intro: React.ReactNode;
+  conversation: React.ReactNode;
+}) {
+  return (
+    <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
+      <style>{`
+        .hama-scene-pane {
+          flex: 1;
+          min-height: 0;
+          transition: opacity 360ms ease;
+        }
+        .hama-scene-pane[data-leaving="true"] {
+          position: absolute;
+          inset: 0;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .hama-conversation-pane {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          padding-bottom: 120px;
+          box-sizing: border-box;
+          animation: hamaConversationIn 320ms ease;
+        }
+        @keyframes hamaConversationIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hama-scene-pane,
+          .hama-conversation-pane {
+            transition: none;
+            animation: none;
+          }
+        }
+      `}</style>
+      <div className="hama-scene-pane" data-hama-intro="" data-leaving={showConversation ? "true" : "false"}>
+        {intro}
+      </div>
+      {showConversation ? (
+        <div className="hama-conversation-pane" data-hama-conversation="">
+          {conversation}
+        </div>
+      ) : null}
     </div>
   );
 }

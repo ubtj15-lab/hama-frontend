@@ -1737,8 +1737,30 @@ function ResultsContent({
         loading: current && Boolean(pageBusy && !mealKeepsPlay),
         showFood: current ? Boolean(linkedFoodActive && !askInstead) : Boolean(saved?.foodCards?.length),
         foodLoading: current && linkedFoodLoading,
+        animatePlay: current && !mealKeepsPlay,
+        animateFood: current,
       };
     });
+    if (utterance && !userTurns.some((turn) => turn.turnId === utterance.id)) {
+      entries.push({
+        turnId: utterance.id,
+        userText: utterance.text,
+        assistantText: "",
+        playCards: [],
+        foodCards: [],
+        blockedMessage: null,
+        foodBlocked: false,
+        foodUnavailableMessage: null,
+        anchorName: null,
+        provisional: false,
+        current: true,
+        loading: Boolean(pageBusy && !mealKeepsPlay),
+        showFood: false,
+        foodLoading: false,
+        animatePlay: false,
+        animateFood: false,
+      });
+    }
     return (
       <HamaConversationView
         entries={entries}

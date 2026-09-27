@@ -12,7 +12,7 @@ type StoreRow = {
   updated_at: string;
 };
 
-type Mode = "catalog" | "empty" | "all-fail" | "partial" | "suppression" | "race" | "food-hold" | "food-empty" | "food-fail" | "food-block";
+type Mode = "catalog" | "empty" | "all-fail" | "partial" | "suppression" | "race" | "food-hold" | "food-empty" | "food-fail" | "food-block" | "search-hold";
 
 const PLAY = [
   store("play-dongtan-1", "동탄 키즈플레이", "activity", "경기도 화성시 동탄대로 11"),
@@ -67,6 +67,10 @@ function foodRequestHeld(): boolean {
   return gate.mode === "food-hold" && !gate.release.has(1);
 }
 
+function searchRequestHeld(): boolean {
+  return gate.mode === "search-hold" && !gate.release.has(3);
+}
+
 function rowsForCategory(url: string): StoreRow[] {
   const category = new URL(url).searchParams.get("category") ?? "";
   const all = gate.mode === "race" ? [...FIRST_CAFE, ...OSAN_CAFE, ...PLAY, ...FOOD] : catalog();
@@ -90,6 +94,10 @@ async function installMocks(page: Page) {
   });
 
   await page.route("**/rest/v1/**", async (route) => {
+    if (searchRequestHeld()) {
+      gate.held.push({ generation: 3, route });
+      return;
+    }
     if (foodRequestHeld()) {
       gate.held.push({ generation: 1, route });
       return;
@@ -138,6 +146,10 @@ async function installMocks(page: Page) {
     const path = url.pathname;
 
     if (path.startsWith("/api/stores/search-by-name")) {
+      if (searchRequestHeld()) {
+        gate.held.push({ generation: 3, route });
+        return;
+      }
       if (foodRequestHeld()) {
         gate.held.push({ generation: 1, route });
         return;
@@ -207,6 +219,10 @@ async function installMocks(page: Page) {
     }
 
     if (path.startsWith("/api/home-recommend") || path === "/api/stores/home") {
+      if (searchRequestHeld()) {
+        gate.held.push({ generation: 3, route });
+        return;
+      }
       if (foodRequestHeld()) {
         gate.held.push({ generation: 1, route });
         return;
@@ -449,4 +465,71 @@ test("meal fetch and suppression failures keep the existing error copy", async (
   await expect(meal).not.toContainText(EMPTY_MEAL);
   await expect(meal).not.toContainText(ASSISTANT_EMPTY_MEAL);
   await expect(meal).toHaveAttribute("data-hama-food-ids", "");
+});
+
+async function releaseHeldSearch() {
+  gate.release.add(3);
+  const pending = gate.held.filter((item) => item.generation === 3);
+  gate.held = gate.held.filter((item) => item.generation !== 3);
+  for (const item of pending) {
+    const url = item.route.request().url();
+    if (url.includes("/api/stores/search-by-name")) {
+      const query = new URL(url).searchParams.get("query") ?? "";
+      const items = query.includes("오산") ? OSAN_CAFE : query.includes("카페") ? FIRST_CAFE : catalog();
+      await fulfillJson(item.route, 200, { items });
+      continue;
+    }
+    if (url.includes("/api/home-recommend") || url.includes("/api/stores/home")) {
+      await fulfillJson(item.route, 200, { items: catalog() });
+      continue;
+    }
+    await fulfillJson(item.route, 200, rowsForCategory(url));
+  }
+}
+
+test("shows the question immediately and reveals cards after the real search", async ({ page }) => {
+  gate.mode = "search-hold";
+  await installMocks(page);
+  await page.goto("/");
+  await expect(page.locator("[data-hama-intro]")).toBeVisible();
+
+  const question = "동탄에서 아이들이랑 갈 만한 곳 찾아줘";
+  await ask(page, question);
+  const first = currentTurn(page);
+  await expect(first).toContainText(question);
+  await expect(first.locator("[data-hama-search-status]")).toHaveText("골라보는 중이에요.");
+  await expect(first).toHaveAttribute("data-hama-play-ids", "");
+  await expect(page.locator("[data-hama-intro]")).toHaveAttribute("data-leaving", "true");
+  await expect.poll(() => gate.held.filter((item) => item.generation === 3).length).toBeGreaterThan(0);
+
+  await releaseHeldSearch();
+  await expect(first).not.toContainText("골라보는 중");
+  await expect.poll(async () => (await first.getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
+
+  gate.mode = "catalog";
+  await ask(page, "그 근처에 밥 먹을 곳도 있어?");
+  await expect(page.locator("[data-hama-turn]").first()).toContainText(question);
+  const second = currentTurn(page);
+  await expect(second).toContainText("그 근처에 밥 먹을 곳도 있어?");
+  await expect.poll(async () => ((await second.getAttribute("data-hama-food-ids")) ?? "").split("|").filter(Boolean).length).toBeGreaterThan(0);
+  await expect(second).not.toContainText("고르는 중");
+});
+
+test("keeps the same search flow when motion is reduced", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  gate.mode = "search-hold";
+  await installMocks(page);
+  await page.goto("/");
+
+  const question = "동탄에서 아이들이랑 갈 만한 곳 찾아줘";
+  await ask(page, question);
+  const first = currentTurn(page);
+  await expect(first).toContainText(question);
+  await expect(first.locator("[data-hama-search-status]")).toHaveText("골라보는 중이에요.");
+  await expect(page.locator("[data-hama-conversation]")).toHaveCSS("animation-name", "none");
+  await expect(first.locator("[data-hama-search-status]")).toHaveCSS("animation-name", "none");
+
+  await releaseHeldSearch();
+  await expect.poll(async () => (await first.getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
+  await expect(first.locator("[data-hama-play-list]")).toHaveCSS("animation-name", "none");
 });

@@ -24,6 +24,8 @@ type ChatEntry = {
   blockedMessage?: string | null;
   foodBlocked?: boolean;
   foodUnavailableMessage?: string | null;
+  animatePlay?: boolean;
+  animateFood?: boolean;
 };
 
 type Props = {
@@ -45,12 +47,45 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18, paddingTop: 18 }}>
+      <style>{`
+        @keyframes hamaTurnIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: none; }
+        }
+        @keyframes hamaCardIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: none; }
+        }
+        @keyframes hamaSearchPulse {
+          0%, 100% { opacity: 0.45; }
+          50% { opacity: 1; }
+        }
+        .hama-turn-current > .hama-user-line,
+        .hama-turn-current > .hama-assistant-line {
+          animation: hamaTurnIn 280ms ease;
+        }
+        .hama-result-enter {
+          animation: hamaCardIn 360ms ease;
+        }
+        .hama-search-status {
+          animation: hamaSearchPulse 1.4s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hama-turn-current > .hama-user-line,
+          .hama-turn-current > .hama-assistant-line,
+          .hama-result-enter,
+          .hama-search-status {
+            animation: none;
+          }
+        }
+      `}</style>
       {entries.map((entry, index) => {
         const expanded = entry.current || opened[entry.userText] === true;
         const playCount = entry.playCards.length;
         return (
           <section
             key={`${entry.turnId ?? entry.userText}-${index}`}
+            className={entry.current ? "hama-turn-current" : undefined}
             data-hama-turn={entry.userText}
             data-hama-turn-id={entry.turnId ?? ""}
             data-hama-play-ids={entry.playCards.map((card) => card.id).join("|")}
@@ -58,6 +93,7 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
             style={{ display: "flex", flexDirection: "column", gap: 10 }}
           >
             <div
+              className="hama-user-line"
               style={{
                 alignSelf: "flex-end",
                 maxWidth: "84%",
@@ -72,9 +108,13 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
               {entry.userText}
             </div>
             {entry.assistantText ? (
-              <p style={{ margin: 0, color: GREEN, fontSize: 15, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{entry.assistantText}</p>
+              <p className={entry.current ? "hama-assistant-line" : undefined} style={{ margin: 0, color: GREEN, fontSize: 15, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{entry.assistantText}</p>
             ) : null}
-            {entry.loading ? <p style={{ margin: 0, color: MUTED, fontSize: 14 }}>골라보는 중이에요.</p> : null}
+            {entry.loading ? (
+              <p className="hama-search-status" data-hama-search-status="" style={{ margin: 0, color: MUTED, fontSize: 14 }}>
+                골라보는 중이에요.
+              </p>
+            ) : null}
             {entry.blockedMessage ? (
               <p data-hama-suppression-error="" style={{ margin: 0, color: GREEN, fontSize: 14, lineHeight: 1.5 }}>
                 {entry.blockedMessage}
@@ -90,7 +130,11 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
               </button>
             ) : null}
             {playCount > 0 && expanded ? (
-              <div data-hama-play-list={entry.current ? "" : undefined} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div
+                className={entry.animatePlay ? "hama-result-enter" : undefined}
+                data-hama-play-list={entry.current ? "" : undefined}
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
                 {!entry.current ? (
                   <button
                     type="button"
@@ -137,7 +181,11 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
                     ))}
                   </div>
                 ) : null}
-                {entry.foodLoading ? <p style={{ margin: 0, color: MUTED, fontSize: 14 }}>식당을 고르는 중이에요.</p> : null}
+                {entry.foodLoading ? (
+                  <p className="hama-search-status" data-hama-food-search-status="" style={{ margin: 0, color: MUTED, fontSize: 14 }}>
+                    식당을 고르는 중이에요.
+                  </p>
+                ) : null}
                 {!entry.foodLoading && entry.foodBlocked ? (
                   <p data-hama-food-suppression-error="" style={{ margin: 0, color: GREEN, fontSize: 14, lineHeight: 1.5 }}>
                     가게 확인에 실패해서 식사 추천을 보여드리지 않았어요. 잠시 후 다시 시도해 주세요.
@@ -151,8 +199,9 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
                 {!entry.foodLoading && !entry.foodBlocked && !entry.foodUnavailableMessage && entry.foodCards.length === 0 ? (
                   <p style={{ margin: 0, color: GREEN, fontSize: 14 }}>조건에 맞는 식당이 없어요.</p>
                 ) : null}
-                {expanded
-                  ? entry.foodCards.map((card, foodIndex) => (
+                {expanded && entry.foodCards.length > 0 ? (
+                  <div className={entry.animateFood ? "hama-result-enter" : undefined} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {entry.foodCards.map((card, foodIndex) => (
                       <div key={card.id} data-hama-food-id={entry.current ? card.id : undefined}>
                         <PlaceCard
                           card={card}
@@ -164,8 +213,9 @@ export function HamaConversationView({ entries, playChoices, onPickAnchor, onOpe
                           }
                         />
                       </div>
-                    ))
-                  : null}
+                    ))}
+                  </div>
+                ) : null}
               </section>
             ) : null}
           </section>

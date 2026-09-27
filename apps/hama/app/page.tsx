@@ -9,7 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { logEvent } from "@/lib/logEvent";
 import { clearConversationContext } from "@/lib/conversation/storage";
 import { EmbeddedResults } from "./results/ResultsScreen";
-import { HamaHomeComposer, HamaSceneLoop, HAMA_HOME_GREEN, HAMA_HOME_IVORY } from "./_components/home/HamaHomeStage";
+import { HamaHomeComposer, HamaHomePanels, HamaSceneLoop, HAMA_HOME_GREEN, HAMA_HOME_IVORY } from "./_components/home/HamaHomeStage";
 import { HomeSurpriseMe, HOME_SURPRISE, TodaySituations, type HomeSituationItem } from "./_components/home/TodaySituations";
 import { useRecent } from "./_hooks/useRecent";
 import { useGeoLocation } from "./_hooks/useGeoLocation";
@@ -276,9 +276,11 @@ function HomePageContent({ isLoggedIn, meUser, loginFailReason }: HomePageConten
             로그인에 실패했습니다. ({loginFailReason})
           </p>
         ) : null}
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 120, boxSizing: "border-box" }}>
-          {activeTurn ? <EmbeddedResults utterance={activeTurn} /> : <HamaSceneLoop />}
-        </div>
+        <HamaHomePanels
+          showConversation={Boolean(activeTurn)}
+          intro={<HamaSceneLoop />}
+          conversation={activeTurn ? <EmbeddedResults utterance={activeTurn} /> : null}
+        />
       </div>
       <HamaHomeComposer
         onSubmit={(text) => goResults(text, "home_composer")}
