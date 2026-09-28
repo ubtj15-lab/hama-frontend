@@ -3,6 +3,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import { OpenExplorationMapButton } from "@/map/OpenExplorationMapButton";
+import { HamaSwipeDeck } from "./HamaSwipeDeck";
+import { HamaPlaceDetailPanel } from "./HamaPlaceDetailPanel";
 
 const GREEN = "#19584A";
 const MUTED = "#7E948C";
@@ -24,6 +26,7 @@ type ChatEntry = {
   blockedMessage?: string | null;
   foodBlocked?: boolean;
   foodUnavailableMessage?: string | null;
+  playRefreshNote?: string | null;
   animatePlay?: boolean;
   animateFood?: boolean;
 };
@@ -32,13 +35,19 @@ type Props = {
   entries: ChatEntry[];
   playChoices: HomeCard[];
   onPickAnchor: (id: string) => void;
-  onOpen: (card: HomeCard) => void;
   onReject: (id: string) => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   quiet?: boolean;
   initialScrollTop?: number;
   initialOpened?: Record<string, boolean>;
-  transcriptRef?: React.MutableRefObject<{ scrollTop: number; opened: Record<string, boolean> } | null>;
+  initialSelected?: Record<string, number>;
+  transcriptRef?: React.MutableRefObject<{ scrollTop: number; opened: Record<string, boolean>; selected: Record<string, number> } | null>;
 };
+
+function turnDeckKey(entry: { turnId?: string; userText: string }, kind: "play" | "food") {
+  return `${entry.turnId || entry.userText}:${kind}`;
+}
 
 const PIN_THRESHOLD = 72;
 
@@ -50,14 +59,18 @@ export function HamaConversationView({
   entries,
   playChoices,
   onPickAnchor,
-  onOpen,
   onReject,
+  onRefresh,
+  refreshing = false,
   quiet = false,
   initialScrollTop,
   initialOpened,
+  initialSelected,
   transcriptRef,
 }: Props) {
   const [opened, setOpened] = useState<Record<string, boolean>>(initialOpened ?? {});
+  const [selected, setSelected] = useState<Record<string, number>>(initialSelected ?? {});
+  const [detailCard, setDetailCard] = useState<HomeCard | null>(null);
   const [showJump, setShowJump] = useState(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const followingRef = useRef(initialScrollTop == null);
@@ -75,12 +88,49 @@ export function HamaConversationView({
     tail?.blockedMessage ?? "",
     tail?.foodBlocked ? 1 : 0,
     tail?.foodUnavailableMessage ?? "",
+    tail?.playRefreshNote ?? "",
+    refreshing ? 1 : 0,
   ].join("|");
 
+  const currentPlayKey = entries
+    .filter((entry) => entry.current)
+    .map((entry) => entry.playCards.map((card) => card.id).join("|"))
+    .join("~");
+  const previousPlayKey = useRef<string | null>(null);
   useEffect(() => {
+    if (previousPlayKey.current == null) {
+      previousPlayKey.current = currentPlayKey;
+      return;
+    }
+    if (previousPlayKey.current === currentPlayKey) return;
+    previousPlayKey.current = currentPlayKey;
+    const currentEntry = entries.find((entry) => entry.current);
+    if (!currentEntry) return;
+    setSelected((state) => ({ ...state, [turnDeckKey(currentEntry, "play")]: 0 }));
+    setDetailCard((card) => {
+      if (!card) return null;
+      const visible = entries.some(
+        (entry) =>
+          entry.playCards.some((item) => item.id === card.id) ||
+          (entry.foodCards ?? []).some((item) => item.id === card.id)
+      );
+      return visible ? card : null;
+    });
+  }, [currentPlayKey, entries]);
+
+  const openedRef = useRef(opened);
+  const selectedRef = useRef(selected);
+  openedRef.current = opened;
+  selectedRef.current = selected;
+
+  const publish = (scrollTop: number) => {
     if (!transcriptRef) return;
-    transcriptRef.current = { scrollTop: scrollerRef.current?.scrollTop ?? 0, opened };
-  }, [opened, transcriptRef]);
+    transcriptRef.current = { scrollTop, opened: openedRef.current, selected: selectedRef.current };
+  };
+
+  useEffect(() => {
+    publish(scrollerRef.current?.scrollTop ?? transcriptRef?.current?.scrollTop ?? 0);
+  }, [opened, selected, transcriptRef]);
 
   useEffect(() => {
     const element = scrollerRef.current;
@@ -88,7 +138,7 @@ export function HamaConversationView({
     const onScroll = () => {
       const nearBottom = distanceFromBottom(element) <= PIN_THRESHOLD;
       followingRef.current = nearBottom;
-      if (transcriptRef) transcriptRef.current = { scrollTop: element.scrollTop, opened };
+      publish(element.scrollTop);
       setShowJump(element.scrollHeight > element.clientHeight + 8 && !nearBottom);
     };
     element.addEventListener("scroll", onScroll, { passive: true });
@@ -107,7 +157,7 @@ export function HamaConversationView({
       const nearBottom = distanceFromBottom(element) <= PIN_THRESHOLD;
       followingRef.current = nearBottom;
       restoreScrollRef.current = null;
-      if (transcriptRef) transcriptRef.current = { scrollTop: element.scrollTop, opened };
+      publish(element.scrollTop);
       setShowJump(element.scrollHeight > element.clientHeight + 8 && !nearBottom);
       return;
     }
@@ -116,7 +166,7 @@ export function HamaConversationView({
       return;
     }
     element.scrollTop = element.scrollHeight;
-    if (transcriptRef) transcriptRef.current = { scrollTop: element.scrollTop, opened };
+    publish(element.scrollTop);
   }, [followToken, opened, transcriptRef]);
 
   return (
@@ -234,6 +284,11 @@ export function HamaConversationView({
                 {entry.blockedMessage}
               </p>
             ) : null}
+            {!entry.blockedMessage && !entry.loading && playCount === 0 && entry.playRefreshNote ? (
+              <p data-hama-refresh-empty="" style={{ margin: 0, color: GREEN, fontSize: 14, lineHeight: 1.5 }}>
+                {entry.playRefreshNote}
+              </p>
+            ) : null}
             {playCount > 0 && !expanded ? (
               <button
                 type="button"
@@ -259,9 +314,16 @@ export function HamaConversationView({
                   </button>
                 ) : null}
                 <OpenExplorationMapButton cards={entry.playCards} />
-                {entry.playCards.map((card) => (
-                  <PlaceCard key={card.id} card={card} onOpen={onOpen} onReject={entry.current ? onReject : undefined} />
-                ))}
+                <HamaSwipeDeck
+                  kind="play"
+                  cards={entry.playCards}
+                  index={selected[turnDeckKey(entry, "play")] ?? 0}
+                  onIndex={(next) => setSelected((current) => ({ ...current, [turnDeckKey(entry, "play")]: next }))}
+                  onOpen={setDetailCard}
+                  onReject={entry.current ? onReject : undefined}
+                  onRefresh={entry.current ? onRefresh : undefined}
+                  refreshing={entry.current && refreshing}
+                />
               </div>
             ) : null}
             {entry.showFood ? (
@@ -314,20 +376,14 @@ export function HamaConversationView({
                   <p style={{ margin: 0, color: GREEN, fontSize: 14 }}>조건에 맞는 식당이 없어요.</p>
                 ) : null}
                 {expanded && entry.foodCards.length > 0 ? (
-                  <div className={entry.animateFood ? "hama-result-enter" : undefined} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {entry.foodCards.map((card, foodIndex) => (
-                      <div key={card.id} data-hama-food-id={entry.current ? card.id : undefined}>
-                        <PlaceCard
-                          card={card}
-                          onOpen={onOpen}
-                          extra={
-                            entry.anchorName && typeof card.distanceKm === "number" && Number.isFinite(card.distanceKm)
-                              ? `${foodIndex + 1}. 직선거리 ${card.distanceKm.toFixed(1)}km`
-                              : null
-                          }
-                        />
-                      </div>
-                    ))}
+                  <div className={entry.animateFood ? "hama-result-enter" : undefined}>
+                    <HamaSwipeDeck
+                      kind="food"
+                      cards={entry.foodCards}
+                      index={selected[turnDeckKey(entry, "food")] ?? 0}
+                      onIndex={(next) => setSelected((current) => ({ ...current, [turnDeckKey(entry, "food")]: next }))}
+                      onOpen={setDetailCard}
+                    />
                   </div>
                 ) : null}
               </section>
@@ -353,74 +409,8 @@ export function HamaConversationView({
           최신 대화
         </button>
       ) : null}
+      {detailCard ? <HamaPlaceDetailPanel card={detailCard} onClose={() => setDetailCard(null)} /> : null}
     </div>
-  );
-}
-
-function realImage(card: HomeCard): string | null {
-  const raw = card.image_url || card.imageUrl;
-  if (typeof raw !== "string") return null;
-  const value = raw.trim();
-  if (!/^https?:\/\//i.test(value)) return null;
-  return value;
-}
-
-function PlaceCard({
-  card,
-  onOpen,
-  onReject,
-  extra,
-}: {
-  card: HomeCard;
-  onOpen: (card: HomeCard) => void;
-  onReject?: (id: string) => void;
-  extra?: string | null;
-}) {
-  const [open, setOpen] = useState(false);
-  const image = realImage(card);
-  const address = String(card.address ?? "").trim();
-  const phone = String(card.phone ?? "").trim();
-  const reason = String(card.reasonText ?? "").trim();
-  const categoryLabel = String(card.categoryLabel ?? "").trim();
-  const category = /[가-힣]/.test(categoryLabel) ? categoryLabel : "";
-
-  return (
-    <article
-      data-hama-place-id={card.id}
-      style={{
-        background: "#fff",
-        border: `1px solid ${LINE}`,
-        borderRadius: 16,
-        padding: 14,
-      }}
-    >
-      {image ? (
-        <img src={image} alt="" style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 12, marginBottom: 10 }} />
-      ) : null}
-      <p style={{ margin: 0, color: GREEN, fontSize: 16, fontWeight: 700, letterSpacing: "-0.03em" }}>{card.name}</p>
-      {category ? <p style={{ margin: "4px 0 0", color: MUTED, fontSize: 13 }}>{category}</p> : null}
-      {reason ? (
-        <p style={{ margin: "8px 0 0", color: GREEN, fontSize: 14, lineHeight: 1.45 }}>{open ? reason : reason.slice(0, 72)}</p>
-      ) : null}
-      {extra ? <p style={{ margin: "6px 0 0", color: MUTED, fontSize: 13 }}>{extra}</p> : null}
-      {open && address ? <p style={{ margin: "8px 0 0", color: MUTED, fontSize: 13, lineHeight: 1.4 }}>{address}</p> : null}
-      {open && phone ? <p style={{ margin: "4px 0 0", color: MUTED, fontSize: 13 }}>{phone}</p> : null}
-      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-        <button type="button" onClick={() => onOpen(card)} style={textButton}>
-          상세 보기
-        </button>
-        {(address || phone || reason.length > 72) ? (
-          <button type="button" onClick={() => setOpen((value) => !value)} style={textButton}>
-            {open ? "접기" : "더 보기"}
-          </button>
-        ) : null}
-        {onReject ? (
-          <button type="button" onClick={() => onReject(card.id)} style={textButton}>
-            다른 곳
-          </button>
-        ) : null}
-      </div>
-    </article>
   );
 }
 

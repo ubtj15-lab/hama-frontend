@@ -8,6 +8,7 @@ export type DialogueEntry = {
   foodCards?: HomeCard[];
   anchorName?: string | null;
   provisional?: boolean;
+  playRefreshNote?: string | null;
 };
 
 function slim(card: HomeCard): HomeCard {
@@ -22,7 +23,8 @@ function slim(card: HomeCard): HomeCard {
     distanceKm: card.distanceKm,
     reasonText: card.reasonText,
     phone: card.phone ?? null,
-    image_url: card.image_url ?? null,
+    image_url: card.image_url ?? card.imageUrl ?? null,
+    imageUrl: card.imageUrl ?? card.image_url ?? null,
   };
 }
 
@@ -41,8 +43,9 @@ export function upsertDialogueEntry(history: readonly DialogueEntry[] | undefine
   prev[index] = {
     ...kept,
     ...nextEntry,
-    playCards: nextEntry.playCards.length ? nextEntry.playCards : kept.playCards,
+    playCards: nextEntry.playCards.length || nextEntry.playRefreshNote ? nextEntry.playCards : kept.playCards,
     foodCards: nextEntry.foodCards ?? kept.foodCards,
+    playRefreshNote: nextEntry.playRefreshNote === undefined ? kept.playRefreshNote : nextEntry.playRefreshNote,
   };
   return prev;
 }

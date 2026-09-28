@@ -167,6 +167,9 @@ export function HamaHomePanels({
           overflow: hidden;
           display: flex;
           flex-direction: column;
+          position: relative;
+          z-index: 1;
+          background: #FBFCF9;
           animation: hamaConversationIn 320ms ease;
         }
         .hama-conversation-pane[data-instant="true"] {

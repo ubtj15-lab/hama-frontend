@@ -227,27 +227,34 @@ const context = await browser.newContext({
 });
 await context.addInitScript(() => {
   const paint = () => {
-    if (!document.body || document.querySelector("[data-hama-demo-banner]")) return;
-    const bar = document.createElement("div");
-    bar.setAttribute("data-hama-demo-banner", "");
-    bar.textContent = "시연 화면 · 모의 매장만 표시됩니다";
-    bar.style.cssText = [
-      "position:fixed",
-      "left:50%",
-      "bottom:108px",
-      "transform:translateX(-50%)",
-      "z-index:40",
-      "background:#19584A",
-      "color:#FBFCF9",
-      "font:13px/1.4 sans-serif",
-      "padding:6px 12px",
-      "border-radius:999px",
-      "pointer-events:none",
-    ].join(";");
-    document.body.appendChild(bar);
+    const header = document.querySelector("main header");
+    if (!header) return;
+    let bar = document.querySelector("[data-hama-demo-banner]");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.setAttribute("data-hama-demo-banner", "");
+      bar.textContent = "시연 화면 · 모의 매장";
+      bar.style.cssText = [
+        "flex:0 0 auto",
+        "width:100%",
+        "box-sizing:border-box",
+        "margin:8px 0 0",
+        "padding:5px 8px",
+        "background:#E7F0EB",
+        "color:#19584A",
+        "font:600 12px/1.35 sans-serif",
+        "text-align:center",
+        "border-radius:8px",
+      ].join(";");
+    }
+    if (bar.previousElementSibling !== header) header.insertAdjacentElement("afterend", bar);
   };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", paint);
-  else paint();
+  const start = () => {
+    paint();
+    new MutationObserver(paint).observe(document.documentElement, { childList: true, subtree: true });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+  else start();
 });
 await context.route("**/*", handleRoute);
 const page = await context.newPage();

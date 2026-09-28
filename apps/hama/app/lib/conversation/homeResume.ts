@@ -5,6 +5,7 @@ export type HomeResume = {
   text: string;
   scrollTop: number;
   opened: Record<string, boolean>;
+  selected: Record<string, number>;
 };
 
 type StoredResume = HomeResume & {
@@ -28,6 +29,15 @@ function rememberBackNavigation() {
 
 rememberBackNavigation();
 
+function readSelected(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object") return {};
+  const selected: Record<string, number> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof item === "number" && Number.isFinite(item) && item >= 0) selected[key] = Math.floor(item);
+  }
+  return selected;
+}
+
 function readStored(): StoredResume | null {
   if (typeof window === "undefined") return null;
   try {
@@ -49,6 +59,7 @@ export function armHomeReturn(resume: HomeResume): void {
     text: resume.text,
     scrollTop: Number.isFinite(resume.scrollTop) ? resume.scrollTop : 0,
     opened: resume.opened ?? {},
+    selected: readSelected(resume.selected),
     returnPending: true,
   };
   try {
@@ -75,6 +86,7 @@ export function consumeHomeReturn(): HomeResume | null {
     text: stored.text,
     scrollTop: Number.isFinite(stored.scrollTop) ? stored.scrollTop : 0,
     opened: stored.opened && typeof stored.opened === "object" ? stored.opened : {},
+    selected: readSelected(stored.selected),
   };
 }
 

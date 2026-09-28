@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { mkdirSync } from "node:fs";
 
 type StoreRow = {
   id: string;
@@ -545,6 +546,7 @@ test("keeps the same search flow when motion is reduced", async ({ page }) => {
   await releaseHeldSearch();
   await expect.poll(async () => (await first.getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
   await expect(first.locator("[data-hama-play-list]")).toHaveCSS("animation-name", "none");
+  await expect(first.locator(".hama-swipe-track")).toHaveCSS("transition-duration", "0s");
 });
 
 async function expectTurnOutcome(turn: ReturnType<typeof currentTurn>, outcome: string) {
@@ -744,8 +746,12 @@ test("restores the same conversation when returning from place detail", async ({
 
   const openDetail = () => third.getByRole("button", { name: "상세 보기" }).first().evaluate((element: HTMLButtonElement) => element.click());
   await openDetail();
-  await expect(page).toHaveURL(/\/place\//);
-  await page.getByRole("button", { name: "←" }).click();
+  await expect(page).not.toHaveURL(/\/place\//);
+  const panel = page.getByRole("dialog");
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("오산 조용한 카페");
+  await page.getByRole("button", { name: "닫기" }).click();
+  await expect(panel).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/place\//);
   await expect(turns).toHaveCount(3);
   await expect(turns.nth(0)).toContainText("동탄에서 아이들이랑 갈 만한 곳 찾아줘");
@@ -758,8 +764,9 @@ test("restores the same conversation when returning from place detail", async ({
   await expect.poll(() => scroller.evaluate((element, before) => Math.abs(element.scrollTop - before), scrollBefore)).toBeLessThan(40);
 
   await openDetail();
-  await expect(page).toHaveURL(/\/place\//);
-  await page.goBack();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/place\//);
   await expect(turns).toHaveCount(3);
   await expect(third).toContainText("오산 조용한 카페");
@@ -777,8 +784,268 @@ test("restores the same conversation when returning from place detail", async ({
   await expect(only).toHaveCount(1);
   await expect.poll(async () => (await only.first().getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
   await only.first().getByRole("button", { name: "상세 보기" }).first().evaluate((element: HTMLButtonElement) => element.click());
-  await expect(page).toHaveURL(/\/place\//);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page).not.toHaveURL(/\/place\//);
   await page.goto("/");
   await expect(page.locator("[data-hama-intro]")).toHaveAttribute("data-leaving", "false");
   await expect(page.locator("[data-hama-turn]")).toHaveCount(0);
+});
+
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64"
+);
+
+test("swipes one card at a time and restores that card after place detail", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+    const shotDir = "C:/Users/ubtj1/AppData/Local/Temp/hama-swipe-cards";
+    mkdirSync(shotDir, { recursive: true });
+    const shownIds = ["play-dongtan-1", "cafe-first", "food-dongtan-1", "food-dongtan-2"];
+    const photoIds = new Set(["play-dongtan-1", "cafe-first"]);
+    const withPhoto = (rows: StoreRow[]) =>
+      rows
+        .filter((row) => shownIds.includes(row.id))
+        .map((row) => (photoIds.has(row.id) ? { ...row, image_url: "/hama-e2e-photo.png" } : row));
+
+    await installMocks(page);
+    await page.route("**/rest/v1/**", async (route) => {
+      const category = new URL(route.request().url()).searchParams.get("category") ?? "";
+      const rows = withPhoto(catalog());
+      await fulfillJson(route, 200, category ? rows.filter((row) => category.includes(row.category)) : rows);
+    });
+    await page.route("**/api/home-recommend**", async (route) => {
+      await fulfillJson(route, 200, { items: withPhoto(catalog()) });
+    });
+    await page.route("**/hama-e2e-photo.png", async (route) => {
+      await route.fulfill({ status: 200, contentType: "image/png", body: TINY_PNG });
+    });
+
+    await page.goto("/");
+    await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+    const turn = page.locator("[data-hama-turn]").first();
+    const deck = turn.locator("[data-hama-swipe='play']");
+    await expect.poll(async () => Number((await deck.getAttribute("data-hama-card-count")) ?? "0")).toBe(3);
+    await expect(turn.getByRole("button", { name: "지도에서 보기" })).toBeVisible();
+    await expect(deck.getByRole("button", { name: "다른 곳" })).toBeVisible();
+    await expect(deck.locator("[data-hama-place-id] .hama-swipe-count")).toHaveText("1 / 3");
+    const firstId = await deck.locator("[data-hama-place-id]").getAttribute("data-hama-place-id");
+    expect(firstId).toBeTruthy();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${shotDir}/mobile-card.png` });
+
+    await deck.getByRole("button", { name: "다음 추천" }).click();
+    await expect(deck).toHaveAttribute("data-hama-card-index", "1");
+    await expect(deck.locator("[data-hama-place-id] .hama-swipe-count")).toHaveText("2 / 3");
+    const secondId = await deck.locator("[data-hama-place-id]").getAttribute("data-hama-place-id");
+    expect(secondId).toBeTruthy();
+    expect(secondId).not.toBe(firstId);
+
+    await deck.focus();
+    await deck.press("ArrowLeft");
+    await expect(deck).toHaveAttribute("data-hama-card-index", "0");
+    await expect(deck.locator("[data-hama-place-id]")).toHaveAttribute("data-hama-place-id", firstId!);
+
+    const box = await deck.locator(".hama-swipe-viewport").boundingBox();
+    expect(box).toBeTruthy();
+    await page.mouse.move(box!.x + box!.width * 0.82, box!.y + box!.height * 0.45);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width * 0.18, box!.y + box!.height * 0.45, { steps: 12 });
+    await page.mouse.up();
+    await expect(deck).toHaveAttribute("data-hama-card-index", "1");
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${shotDir}/mobile-swiped.png` });
+
+    let sawPhoto = false;
+    let sawFallback = false;
+    await deck.getByRole("button", { name: "이전 추천" }).click();
+    for (let step = 0; step < 3; step += 1) {
+      await page.waitForTimeout(350);
+      const face = deck.locator("[data-hama-place-id]");
+      if ((await face.locator("[data-hama-card-photo]").count()) > 0) {
+        sawPhoto = true;
+        await expect(face.locator("img")).toBeVisible();
+        await page.screenshot({ path: `${shotDir}/mobile-photo.png` });
+      }
+      if ((await face.locator("[data-hama-card-fallback]").count()) > 0) {
+        sawFallback = true;
+        await expect(face.locator("img")).toHaveCount(0);
+        await page.screenshot({ path: `${shotDir}/mobile-no-photo.png` });
+      }
+      if (step < 2) await deck.getByRole("button", { name: "다음 추천" }).click();
+    }
+    expect(sawPhoto).toBe(true);
+    expect(sawFallback).toBe(true);
+
+    const selectedIndex = await deck.getAttribute("data-hama-card-index");
+    const selectedId = await deck.locator("[data-hama-place-id]").getAttribute("data-hama-place-id");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${shotDir}/desktop-card.png` });
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    const homeUrl = page.url();
+    await deck.getByRole("button", { name: "상세 보기" }).evaluate((element: HTMLButtonElement) => element.click());
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveAttribute("data-hama-panel-place", selectedId!);
+    await expect(page).toHaveURL(homeUrl);
+    await page.getByRole("button", { name: "닫기" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(deck).toHaveAttribute("data-hama-card-index", selectedIndex!);
+    await expect(deck.locator("[data-hama-place-id]")).toHaveAttribute("data-hama-place-id", selectedId!);
+
+    await ask(page, "그 근처에 밥 먹을 곳도 있어?");
+    const turns = page.locator("[data-hama-turn]");
+    await expect(turns).toHaveCount(2);
+    await expect.poll(async () => (await turns.nth(1).getAttribute("data-hama-food-ids")) ?? "").not.toBe("");
+    const previous = turns.nth(0).locator("[data-hama-swipe='play']");
+    await expect(previous).toHaveAttribute("data-hama-card-index", selectedIndex!);
+    await expect(previous.locator("[data-hama-place-id]")).toHaveAttribute("data-hama-place-id", selectedId!);
+    await expect(turns.nth(1).locator("[data-hama-swipe='play']")).toHaveAttribute("data-hama-card-index", "0");
+    await expect(turns.nth(0).getByRole("button", { name: "다른 곳" })).toHaveCount(0);
+    await expect(turns.nth(1).getByRole("button", { name: "다른 곳" })).toBeVisible();
+});
+
+test("opens a place panel over the third question and returns to the same card", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  await page.goto("/");
+  const shotDir = "C:/Users/ubtj1/AppData/Local/Temp/hama-place-panel";
+  mkdirSync(shotDir, { recursive: true });
+
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  await expect.poll(async () => (await page.locator("[data-hama-turn]").nth(0).getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
+  await ask(page, "그 근처에 밥 먹을 곳도 있어?");
+  await expect.poll(async () => (await page.locator("[data-hama-turn]").nth(1).getAttribute("data-hama-food-ids")) ?? "").not.toBe("");
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+
+  const turns = page.locator("[data-hama-turn]");
+  await expect(turns).toHaveCount(3);
+  const third = turns.nth(2);
+  const deck = third.locator("[data-hama-swipe='play']");
+  await expect.poll(async () => Number((await deck.getAttribute("data-hama-card-count")) ?? "0")).toBeGreaterThan(1);
+  await deck.getByRole("button", { name: "다음 추천" }).click();
+  await expect(deck).toHaveAttribute("data-hama-card-index", "1");
+  const selectedFace = deck.locator("[data-hama-place-id]");
+  const selectedId = await selectedFace.getAttribute("data-hama-place-id");
+  expect(selectedId).toBeTruthy();
+  await selectedFace.scrollIntoViewIfNeeded();
+  const scroller = page.locator("[data-hama-conversation-scroll]");
+  const scrollBefore = await scroller.evaluate((element) => element.scrollTop);
+  await page.screenshot({ path: `${shotDir}/mobile-swipe.png` });
+
+  const outcomesBefore = outcomeLogs().length;
+  const homeUrl = page.url();
+  await deck.getByRole("button", { name: "상세 보기" }).evaluate((element: HTMLButtonElement) => element.click());
+  const panel = page.getByRole("dialog");
+  await expect(panel).toBeVisible();
+  await expect(panel).toHaveAttribute("data-hama-panel-place", selectedId!);
+  await expect(page).toHaveURL(homeUrl);
+  await expect(page).not.toHaveURL(/\/place\//);
+  await expect(turns).toHaveCount(3);
+  await expect(panel.getByRole("button", { name: "길찾기" })).toBeVisible();
+  await expect(panel.getByRole("link", { name: "전화하기" })).toHaveCount(0);
+  await expect(panel.locator("[data-hama-panel-fallback]")).toBeVisible();
+  await expect(panel.locator("img")).toHaveCount(0);
+  await expect(panel).not.toContainText("영업중");
+  await expect(panel).not.toContainText("혼잡");
+  await expect(panel).not.toContainText("평점");
+  await page.screenshot({ path: `${shotDir}/mobile-panel.png` });
+
+  await page.getByRole("button", { name: "닫기" }).click();
+  await expect(panel).toHaveCount(0);
+  await expect(deck).toHaveAttribute("data-hama-card-index", "1");
+  await expect(deck.locator("[data-hama-place-id]")).toHaveAttribute("data-hama-place-id", selectedId!);
+  await expect.poll(() => scroller.evaluate((element, before) => Math.abs(element.scrollTop - before), scrollBefore)).toBeLessThan(40);
+  expect(outcomeLogs().length).toBe(outcomesBefore);
+  await page.screenshot({ path: `${shotDir}/mobile-returned.png` });
+
+  await ask(page, "오산에서 조용한 카페 찾아줘");
+  await expect(page.locator("[data-hama-turn]")).toHaveCount(4);
+  await expect(page.locator("[data-hama-turn]").nth(2).locator("[data-hama-swipe='play']")).toHaveAttribute("data-hama-card-index", "1");
+  await expect(page.locator("[data-hama-turn]").nth(3)).toContainText("오산 조용한 카페");
+});
+
+test("refreshes the current deck without repeating shown places or the turn outcome", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  await page.goto("/");
+  const shotDir = "C:/Users/ubtj1/AppData/Local/Temp/hama-find-again";
+  mkdirSync(shotDir, { recursive: true });
+
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  const turn = page.locator("[data-hama-turn]").first();
+  const deck = turn.locator("[data-hama-swipe='play']");
+  await expect.poll(async () => Number((await deck.getAttribute("data-hama-card-count")) ?? "0")).toBeGreaterThan(0);
+  await expect.poll(async () => Number((await deck.getAttribute("data-hama-card-count")) ?? "0")).toBeLessThanOrEqual(3);
+  const count = Number(await deck.getAttribute("data-hama-card-count"));
+  if (count > 1) {
+    await deck.getByRole("button", { name: "다음 추천" }).click();
+    await expect(deck).toHaveAttribute("data-hama-card-index", "1");
+    await deck.getByRole("button", { name: "이전 추천" }).click();
+    await expect(deck).toHaveAttribute("data-hama-card-index", "0");
+  }
+  const firstIds = ((await turn.getAttribute("data-hama-play-ids")) ?? "").split("|").filter(Boolean);
+  expect(firstIds.length).toBeGreaterThan(0);
+  const answer = await turn.locator(".hama-assistant-line").innerText();
+  const outcomesBefore = outcomeLogs().length;
+
+  await deck.getByRole("button", { name: "상세 보기" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "닫기" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(deck.locator("[data-hama-place-id]")).toHaveAttribute("data-hama-place-id", firstIds[0]!);
+
+  const again = deck.getByRole("button", { name: "다시 찾기" });
+  await again.click();
+  await expect.poll(async () => ((await turn.getAttribute("data-hama-play-ids")) ?? "").split("|").filter(Boolean).join("|")).not.toBe(firstIds.join("|"));
+  await expect(deck).toHaveAttribute("data-hama-card-index", "0");
+  await expect(turn.locator(".hama-assistant-line")).toHaveText(answer);
+  const nextIds = ((await turn.getAttribute("data-hama-play-ids")) ?? "").split("|").filter(Boolean);
+  expect(nextIds.length).toBeGreaterThan(0);
+  expect(nextIds.length).toBeLessThanOrEqual(3);
+  for (const id of nextIds) expect(firstIds).not.toContain(id);
+  expect(outcomeLogs().length).toBe(outcomesBefore);
+  await page.screenshot({ path: `${shotDir}/mobile-again.png` });
+
+  await ask(page, "그 근처에 밥 먹을 곳도 있어?");
+  await expect(page.locator("[data-hama-turn]")).toHaveCount(2);
+  const previous = page.locator("[data-hama-turn]").nth(0);
+  await expect(previous).toHaveAttribute("data-hama-play-ids", nextIds.join("|"));
+  await expect(previous.locator("[data-hama-swipe='play']")).toHaveAttribute("data-hama-card-index", "0");
+  await expect(previous.locator("[data-hama-find-again]")).toHaveCount(0);
+  await expect.poll(async () => (await page.locator("[data-hama-turn]").nth(1).getAttribute("data-hama-food-ids")) ?? "").not.toBe("");
+  await expect.poll(() => outcomeLogs().length).toBe(outcomesBefore + 1);
+});
+
+test("says when another refresh has no new place and ignores a second click", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  const only = catalog().slice(0, 1);
+  let refreshGate: Promise<void> | null = null;
+  let openRefresh = () => {};
+  const fulfillOnly = async (route: Route) => {
+    if (refreshGate) await refreshGate;
+    await fulfillJson(route, 200, route.request().url().includes("/api/") ? { items: only } : only);
+  };
+  await page.route("**/rest/v1/**", fulfillOnly);
+  await page.route("**/api/home-recommend**", fulfillOnly);
+  await page.route("**/api/stores/home**", fulfillOnly);
+
+  await page.goto("/");
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  const turn = page.locator("[data-hama-turn]").first();
+  const deck = turn.locator("[data-hama-swipe='play']");
+  await expect.poll(async () => Number((await deck.getAttribute("data-hama-card-count")) ?? "0")).toBe(1);
+  refreshGate = new Promise<void>((resolve) => {
+    openRefresh = resolve;
+  });
+  const again = deck.locator("[data-hama-find-again]");
+  await again.click();
+  await expect(again).toBeDisabled();
+  await expect(again).toHaveText("찾는 중이에요.");
+  await again.click({ force: true });
+  openRefresh();
+  refreshGate = null;
+  await expect(turn.locator("[data-hama-refresh-empty]")).toHaveText("조건에 맞는 다른 장소를 찾지 못했어요.");
+  await expect(deck).toHaveCount(0);
 });

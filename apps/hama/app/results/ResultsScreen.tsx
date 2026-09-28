@@ -67,7 +67,7 @@ import { OpenExplorationMapButton } from "@/map/OpenExplorationMapButton";
 import { ResultsConversation } from "@/_components/results/ResultsConversation";
 import { composeAssistantReply, persistAssistantReply } from "@/lib/conversation/assistantReply";
 import { recordDialogueSnapshot } from "@/lib/conversation/storage";
-import { armHomeReturn, type HomeResume } from "@/lib/conversation/homeResume";
+import { type HomeResume } from "@/lib/conversation/homeResume";
 import { filterCardsByNamedRegion } from "@/lib/conversation/namedRegion";
 import { buildLinkedFoodScenario, detectLinkedFoodPurpose, resolveFoodAnchor, validShownPlayCards } from "@/lib/conversation/linkedPurpose";
 import { storeCategoryMatchesIntentCategory } from "@/lib/scenarioEngine/intentClassification";
@@ -150,7 +150,7 @@ function ResultsContent({
   const urlQuery = searchParams.get("q")?.trim() ?? "";
   const qRaw = embedded ? (utterance?.text.trim() ?? "") : urlQuery;
   const holdTranscript = Boolean(embedded && resume && utterance?.id && resume.turnId === utterance.id);
-  const transcriptRef = useRef<{ scrollTop: number; opened: Record<string, boolean> } | null>(null);
+  const transcriptRef = useRef<{ scrollTop: number; opened: Record<string, boolean>; selected: Record<string, number> } | null>(null);
   const explicitIntent = searchParams.get("intent")?.trim() || null;
   const explicitCategory = searchParams.get("category")?.trim() || null;
   const explicitMode = searchParams.get("mode")?.trim() || null;
@@ -204,6 +204,7 @@ function ResultsContent({
 
   const [shuffleKey, setShuffleKey] = useState(0);
   const [rejectedMainPickIds, setRejectedMainPickIds] = useState<string[]>([]);
+  const [refreshingDeck, setRefreshingDeck] = useState(false);
   const [sessionRepeatAvoidIds, setSessionRepeatAvoidIds] = useState<string[]>(() => {
     const parsed = parseScenarioIntent(qRaw);
     return readContextRecentExposedIds(repeatAvoidanceContextKey(qRaw, parsed.scenario));
@@ -213,6 +214,9 @@ function ResultsContent({
   const [retryInput, setRetryInput] = useState("");
   const started = useRef<number>(0);
   const rankingSeenForQuery = useRef("");
+  const preserveAssistantRef = useRef(false);
+  const frozenPlayRef = useRef<HomeCard[] | null>(null);
+  const awaitingRefreshBusy = useRef(false);
   const [modeOverride, setModeOverride] = useState<RecommendationMode | null>(null);
 
   const [convCtx, setConvCtx] = useState<ConversationContext | null>(null);
@@ -258,6 +262,10 @@ function ResultsContent({
   useEffect(() => {
     setRejectedMainPickIds([]);
     setContextualReject(null);
+    preserveAssistantRef.current = false;
+    frozenPlayRef.current = null;
+    awaitingRefreshBusy.current = false;
+    setRefreshingDeck(false);
   }, [qRaw]);
 
   useEffect(() => {
@@ -854,6 +862,27 @@ function ResultsContent({
     return buildLinkedFoodScenario(scenarioObject, /근처|가까운|가까이/.test(qRaw));
   }, [linkedFoodActive, scenarioObject, qRaw]);
   const displayedPlayCards = mealKeepsPlay && savedPlayCards ? savedPlayCards : primaryListCards;
+  const freshPlayCards = rejectedMainPickIds.length
+    ? primaryListCards.filter((card) => card.id && !rejectedMainPickIds.includes(card.id))
+    : primaryListCards;
+  const conversationPlayCards =
+    mealKeepsPlay && savedPlayCards
+      ? savedPlayCards
+      : refreshingDeck && frozenPlayRef.current
+        ? frozenPlayRef.current
+        : freshPlayCards;
+
+  useEffect(() => {
+    if (!refreshingDeck) return;
+    if (pageBusy || isLoading) {
+      awaitingRefreshBusy.current = true;
+      return;
+    }
+    if (!awaitingRefreshBusy.current) return;
+    awaitingRefreshBusy.current = false;
+    frozenPlayRef.current = null;
+    setRefreshingDeck(false);
+  }, [refreshingDeck, pageBusy, isLoading]);
   const foodAnchorPick = resolveFoodAnchor(displayedPlayCards, foodAnchorId);
   const foodAnchor = foodAnchorPick.card;
   const foodAnchorLat = typeof foodAnchor?.lat === "number" ? foodAnchor.lat : null;
@@ -1296,8 +1325,16 @@ function ResultsContent({
     if (!qRaw || pageBusy || showNameSearch) return;
     if (!showRecommendationList || primaryListCards.length === 0) return;
     if (recommendDeckLogged.current) return;
+    const slice = (
+      embedded && rejectedMainPickIds.length
+        ? primaryListCards.filter((card) => card.id && !rejectedMainPickIds.includes(card.id))
+        : primaryListCards
+    ).slice(0, RECOMMEND_DECK_SIZE);
+    if (!slice.length) {
+      recommendDeckLogged.current = true;
+      return;
+    }
     recommendDeckLogged.current = true;
-    const slice = primaryListCards.slice(0, RECOMMEND_DECK_SIZE);
     logEvent(
       HamaEvents.recommend_deck_impression,
       mergeLogPayload(logBase, {
@@ -1379,6 +1416,8 @@ function ResultsContent({
     showNameSearch,
     showRecommendationList,
     primaryListCards,
+    rejectedMainPickIds,
+    embedded,
     isCourseFixedResults,
     logBase,
     effectiveScenario,
@@ -1444,6 +1483,7 @@ function ResultsContent({
 
   useEffect(() => {
     if (holdTranscript) return;
+    if (preserveAssistantRef.current) return;
     if (!convCtx || pageBusy || bootstrapBusy) return;
     const intent = effectiveScenario ?? convCtx.currentIntent;
     const reply = composeAssistantReply({
@@ -1508,8 +1548,17 @@ function ResultsContent({
     if ((pageBusy && !mealKeepsPlay) || bootstrapBusy) return;
     if (!mealKeepsPlay && rankingSeenForQuery.current !== qRaw) return;
     if (linkedFoodActive && linkedFoodLoading) return;
-    const play = displayedPlayCards.slice(0, 3);
-    if (!play.length) return;
+    const play = (rejectedMainPickIds.length ? freshPlayCards : displayedPlayCards).slice(0, 3);
+    const playRefreshNote =
+      rejectedMainPickIds.length > 0 &&
+      play.length === 0 &&
+      !dataNotice.showFetchError &&
+      !dataNotice.showSuppressionError &&
+      !recommendationBlocked &&
+      !recommendationLoadFailed
+        ? "조건에 맞는 다른 장소를 찾지 못했어요."
+        : null;
+    if (!play.length && !playRefreshNote) return;
     const turns = convCtx.turns;
     let assistantText = "";
     for (let index = turns.length - 1; index >= 0; index -= 1) {
@@ -1527,6 +1576,7 @@ function ResultsContent({
         foodCards: linkedFoodActive ? foodRestaurantCards.slice(0, 3) : [],
         anchorName: foodAnchor?.name ?? null,
         provisional: foodAnchorProvisional,
+        playRefreshNote,
       },
       qRaw
     );
@@ -1541,6 +1591,12 @@ function ResultsContent({
     linkedFoodActive,
     linkedFoodLoading,
     displayedPlayCards,
+    freshPlayCards,
+    rejectedMainPickIds,
+    dataNotice.showFetchError,
+    dataNotice.showSuppressionError,
+    recommendationBlocked,
+    recommendationLoadFailed,
     foodRestaurantCards,
     foodAnchor,
     foodAnchorProvisional,
@@ -1592,6 +1648,20 @@ function ResultsContent({
     const payload = buildFrozenContextualRejectPayload(contextualReject, reason);
     if (payload) logContextualRejectFeedback(payload);
     setContextualReject(null);
+  };
+
+  const findAgain = () => {
+    if (refreshingDeck || pageBusy || isLoading || mealKeepsPlay || holdTranscript) return;
+    const source = rejectedMainPickIds.length ? freshPlayCards : primaryListCards;
+    const deck = source.slice(0, RECOMMEND_DECK_SIZE);
+    const ids = deck.map((card) => card.id).filter(Boolean);
+    if (!ids.length) return;
+    frozenPlayRef.current = deck;
+    awaitingRefreshBusy.current = false;
+    preserveAssistantRef.current = true;
+    setRefreshingDeck(true);
+    setRejectedMainPickIds((prev) => mergeExcludeForDisplayedDeck(prev, ids));
+    setShuffleKey((key) => key + 1);
   };
 
   const rejectMainAndRefresh = () => {
@@ -1738,9 +1808,21 @@ function ResultsContent({
   }
 
   if (embedded) {
-    const visiblePlay = !askInstead && displayedPlayCards.length > 0 && (!pageBusy || mealKeepsPlay)
-      ? displayedPlayCards.slice(0, 3)
-      : [];
+    const visiblePlay =
+      !askInstead && conversationPlayCards.length > 0 && (!pageBusy || mealKeepsPlay || refreshingDeck)
+        ? conversationPlayCards.slice(0, 3)
+        : [];
+    const refreshEmptyNote =
+      !refreshingDeck &&
+      !pageBusy &&
+      rejectedMainPickIds.length > 0 &&
+      freshPlayCards.length === 0 &&
+      !dataNotice.showFetchError &&
+      !dataNotice.showSuppressionError &&
+      !recommendationBlocked &&
+      !recommendationLoadFailed
+        ? "조건에 맞는 다른 장소를 찾지 못했어요."
+        : null;
     const history = convCtx?.dialogueHistory ?? [];
     const turns = convCtx?.turns ?? [];
     const heldEntry = holdTranscript
@@ -1790,10 +1872,11 @@ function ResultsContent({
           current && !linkedFoodLoading && !foodRecommendationBlocked && foodRecommendationLoadFailed
             ? RECOMMEND_DATA_UNAVAILABLE_MESSAGE
             : null,
+        playRefreshNote: current ? (heldEntry?.playRefreshNote ?? refreshEmptyNote) : saved?.playRefreshNote ?? null,
         anchorName: current ? foodAnchor?.name ?? saved?.anchorName ?? null : saved?.anchorName ?? null,
         provisional: current ? foodAnchorProvisional : Boolean(saved?.provisional),
         current,
-        loading: current && !heldEntry && Boolean(pageBusy && !mealKeepsPlay),
+        loading: current && !heldEntry && Boolean(pageBusy && !mealKeepsPlay) && !refreshingDeck,
         showFood: current
           ? heldEntry
             ? Boolean(heldEntry.foodCards?.length)
@@ -1814,10 +1897,11 @@ function ResultsContent({
         blockedMessage: null,
         foodBlocked: false,
         foodUnavailableMessage: null,
+        playRefreshNote: null,
         anchorName: null,
         provisional: false,
         current: true,
-        loading: Boolean(pageBusy && !mealKeepsPlay),
+        loading: Boolean(pageBusy && !mealKeepsPlay) && !refreshingDeck,
         showFood: false,
         foodLoading: false,
         animatePlay: false,
@@ -1830,25 +1914,16 @@ function ResultsContent({
         quiet={holdTranscript}
         initialScrollTop={holdTranscript ? resume?.scrollTop : undefined}
         initialOpened={holdTranscript ? resume?.opened : undefined}
+        initialSelected={holdTranscript ? resume?.selected : undefined}
         transcriptRef={transcriptRef}
         playChoices={visiblePlay.filter((card) => typeof card.lat === "number" && typeof card.lng === "number")}
         onPickAnchor={setFoodAnchorId}
-        onOpen={(card) => {
-          if (embedded && utterance?.id) {
-            armHomeReturn({
-              turnId: utterance.id,
-              text: utterance.text,
-              scrollTop: transcriptRef.current?.scrollTop ?? 0,
-              opened: transcriptRef.current?.opened ?? {},
-            });
-          }
-          stashPlaceForSession(card);
-          router.push(`/place/${encodeURIComponent(card.id)}`);
-        }}
         onReject={(placeId) => {
           freezeRejectForPlace(placeId);
           rejectMainAndRefresh();
         }}
+        onRefresh={!mealKeepsPlay && !holdTranscript ? findAgain : undefined}
+        refreshing={refreshingDeck}
       />
     );
   }

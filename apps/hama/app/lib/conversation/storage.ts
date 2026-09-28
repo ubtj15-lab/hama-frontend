@@ -17,7 +17,11 @@ export function loadConversationContext(): ConversationContext | null {
     }
     if (Array.isArray(parsed.dialogueHistory)) {
       parsed.dialogueHistory = parsed.dialogueHistory.filter(
-        (entry) => entry && entry.userText && validShownPlayCards(entry.playCards)
+        (entry) =>
+          entry &&
+          entry.userText &&
+          (validShownPlayCards(entry.playCards) ||
+            (Boolean(entry.playRefreshNote) && Array.isArray(entry.playCards)))
       );
     }
     return parsed;
@@ -113,7 +117,7 @@ export function recordDialogueSnapshot(sessionId: string, entry: DialogueEntry, 
   const prev = loadConversationContext();
   if (!prev || prev.sessionId !== sessionId) return;
   if (!canWriteForTurn(prev, forQuery, entry.turnId)) return;
-  if (!validShownPlayCards(entry.playCards)) return;
+  if (!validShownPlayCards(entry.playCards) && !entry.playRefreshNote) return;
   saveConversationContext({
     ...prev,
     dialogueHistory: upsertDialogueEntry(prev.dialogueHistory, entry),
