@@ -8,8 +8,24 @@ export type ShownExclusion =
 
 const EXPLICIT_SHOWN_SET =
   /아까\s*(본|나왔|그)|방금\s*(본|나왔)|보여\s*준|보여준|나온\s*(데|곳|집)|다른\s*데|다른데|다른\s*곳|다른곳|이거\s*말고|별로|전부|다\s*빼|다\s*제외/;
+
+/** Another place of the same kind, not another menu, region, or a negated category. */
+function wholeShownSet(q: string): boolean {
+  if (/다른\s*(메뉴|지역|동네|시간|날|업종)/.test(q)) return false;
+  if (/다른\s*(식당|집|가게|카페|매장).{0,10}(아니|말고)/.test(q)) return false;
+  return (
+    /다른\s*(식당|집|가게|카페|매장)/.test(q) ||
+    /이\s*목록.{0,8}말고/.test(q) ||
+    /(나온|보여\s*준)\s*(식당|곳|데|집).{0,8}(말고|빼)/.test(q)
+  );
+}
+
 const SINGULAR_ANAPHOR = /그\s*(식당|카페|곳|데|매장|집|가게)|저\s*(식당|카페|곳|집)|거기/;
 const EXCLUSION_VERB = /빼\s*줘|빼줘|제외|가\s*봤|가봤|말고|안\s*갈|패스|별로/;
+
+function pluralShownSet(q: string): boolean {
+  return /그\s*(식당|카페|곳|데|매장|집|가게)들/.test(q) && EXCLUSION_VERB.test(q);
+}
 const CUISINE_OR_MENU =
   /(한식|일식|중식|양식|분식|중국|일본)\s*도?\s*말고|(짜장면|짬뽕|초밥|돈까스|국밥|파스타)\s*말고/;
 
@@ -58,6 +74,7 @@ export function classifyShownExclusion(text: string, previous: ConversationConte
   const wantsOut = EXCLUSION_VERB.test(q);
   if (named.length === 1 && wantsOut) return { kind: "ids", ids: [named[0]!.id] };
   if (named.length > 1 && wantsOut) return { kind: "ids", ids: named.map((card) => card.id) };
+  if (pluralShownSet(q) || wholeShownSet(q)) return { kind: "all" };
   if (EXPLICIT_SHOWN_SET.test(q)) return { kind: "all" };
   if (SINGULAR_ANAPHOR.test(q) && wantsOut) {
     if (cards.length === 1) return { kind: "ids", ids: [cards[0]!.id] };

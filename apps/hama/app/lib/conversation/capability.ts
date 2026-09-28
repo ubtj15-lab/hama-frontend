@@ -55,10 +55,42 @@ function decide(
   };
 }
 
+function asksForKnownPlace(text: string): boolean {
+  return /있는\s*(곳|데|카페|식당)|추천|찾아|많은/.test(text);
+}
+
+/** Grab a table. A window or corner seat stays a seat request, and a venue search stays a search. */
+function grabsTable(text: string): boolean {
+  if (asksForKnownPlace(text)) return false;
+  if (/(창가|코너|룸)/.test(text)) return false;
+  return /(테이블|자리).{0,12}(잡아|맡아|부탁)/.test(text);
+}
+
 function reservationExecute(text: string): boolean {
   if (/예약\s*없이|예약\s*안/.test(text)) return false;
   if (/예약\s*(가능|되는)|예약되는|예약\s*필수/.test(text) && !/예약\s*해|예약해/.test(text)) return false;
-  return /예약\s*(해\s*줘|해줘|좀|부탁)|예약해|예약\s*잡아|예약\s*넣어|테이블\s*예약|자리\s*예약/.test(text);
+  if (/예약\s*(해\s*줘|해줘|좀|부탁)|예약해|예약\s*잡아|예약\s*넣어|테이블\s*예약|자리\s*예약/.test(text)) {
+    return true;
+  }
+  return grabsTable(text);
+}
+
+function liveCongestion(text: string, previous: ConversationContext | null): boolean {
+  if (/복잡하지|복잡한\s*데|복잡.{0,8}싫/.test(text)) return false;
+  if (/피하|싫/.test(text) && !/[?？]/.test(text)) return false;
+  if (!/사람\s*많|북적|한가|한산|붐벼|붐비|혼잡도|혼잡해|혼잡하/.test(text)) return false;
+  if (/추천|찾아|싶은|원해|곳으로|데로|곳만/.test(text) && !(/[?？]|알려|지금|현재|실시간/.test(text))) return false;
+  if (/[?？]|알려|지금|현재|실시간/.test(text)) return true;
+  return Boolean(previous) && text.replace(/\s+/g, "").length <= 16;
+}
+
+function englishMenu(text: string): boolean {
+  if (/영어\s*(학원|회화|공부|수업|동호회)/.test(text)) return false;
+  return /영어\s*메뉴|영문\s*메뉴|영어판\s*메뉴|메뉴.{0,16}(영어|영문)|영어(로|판).{0,10}메뉴/.test(text);
+}
+
+function arrivalBeforeClose(text: string): boolean {
+  return /문\s*닫|닫(?:기|히기)\s*전|마감\s*전/.test(text);
 }
 
 function reservationSearch(text: string): boolean {
@@ -87,7 +119,7 @@ export function classifyRequestCapability(
     );
   }
 
-  if (/(창가|좌석|자리).{0,12}(잡아|지정|부탁)/.test(q)) {
+  if (/(창가|코너|룸|좌석|자리).{0,12}(잡아|지정|부탁)/.test(q) && !grabsTable(q)) {
     return decide(
       "external_action",
       "seat",
@@ -128,7 +160,7 @@ export function classifyRequestCapability(
     );
   }
 
-  if (/혼잡도|혼잡|붐비/.test(q)) {
+  if (liveCongestion(q, previous)) {
     return decide(
       "missing_data",
       "congestion",
@@ -137,12 +169,21 @@ export function classifyRequestCapability(
     );
   }
 
-  if (/지금\s*문\s*연|문\s*연\s*(곳|카페|데)|영업\s*중|지금\s*영업|열려\s*있는/.test(q)) {
+  if (/지금\s*문\s*열|아직\s*문\s*열|문\s*열었|지금\s*문\s*연|문\s*연\s*(곳|카페|데)|영업\s*중|지금\s*영업|열려\s*있는/.test(q)) {
     return decide(
       "missing_data",
       "open_now",
       "limit",
       "지금 영업 중인지는 확인된 영업시간이 없어 가려 드리지 못해요. 영업 중이라고 단정하지 않으니 방문 전에 매장 안내를 봐 주세요."
+    );
+  }
+
+  if (arrivalBeforeClose(q)) {
+    return decide(
+      "missing_data",
+      "hours_after",
+      "limit",
+      "영업시간과 가는 데 걸리는 시간을 확인할 수 없어요. 도착할 수 있다고 보장하지 않고, 갈 수 있는 곳으로 다시 고르지도 않을게요. 마감은 매장에 확인해 주세요."
     );
   }
 
@@ -191,7 +232,7 @@ export function classifyRequestCapability(
     );
   }
 
-  if (/영어\s*메뉴|영문\s*메뉴|영어판\s*메뉴/.test(q)) {
+  if (englishMenu(q)) {
     return decide(
       "missing_data",
       "english_menu",

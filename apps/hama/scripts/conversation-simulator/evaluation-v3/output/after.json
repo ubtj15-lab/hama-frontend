@@ -1,0 +1,2157 @@
+{
+  "phase": "after",
+  "sealedSha256": "9ca41c06cc78bf95f3d54e764a6c9aad30a9b2e58445387d0f762ce10338808f",
+  "note": "159턴, 55턴, 25개 시나리오 점수는 서로 합치지 않는다. 25개 정답은 수정 근거가 아니다.",
+  "legacy": {
+    "turns": {
+      "passed": 145,
+      "total": 159,
+      "percent": 91.2
+    },
+    "scenarios": {
+      "passed": 35,
+      "total": 40,
+      "percent": 87.5
+    },
+    "failures": [
+      {
+        "id": "S02#1",
+        "utterance": "동탄에서 아이랑 갈 만한 곳",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S02#2",
+        "utterance": "비 오면 실내만",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S02#3",
+        "utterance": "너무 멀지 않게",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S02#4",
+        "utterance": "다른 곳",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S02#5",
+        "utterance": "그 근처에 밥 먹을 곳도 있어?",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S06#1",
+        "utterance": "동탄에서 주말에 갈 곳",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S06#2",
+        "utterance": "비 오니까 실내로",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S06#3",
+        "utterance": "실내만",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S08#1",
+        "utterance": "동탄 키즈카페",
+        "passed": false,
+        "failed": [
+          "scenario_state",
+          "scenario_screen"
+        ]
+      },
+      {
+        "id": "S30#1",
+        "utterance": "동탄에서 아이랑 갈 곳",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S30#2",
+        "utterance": "그 근처 식사할 곳도",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S30#3",
+        "utterance": "맵지 않게",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S30#4",
+        "utterance": "그 식당은 말고",
+        "passed": false,
+        "failed": [
+          "refinement_state",
+          "refinement_classifier",
+          "refinement_screen",
+          "category_state",
+          "category_screen",
+          "clarification",
+          "exclude_ids",
+          "exclude_ids_screen"
+        ]
+      },
+      {
+        "id": "S33#5",
+        "utterance": "그 식당은 말고",
+        "passed": false,
+        "failed": [
+          "refinement_state",
+          "refinement_classifier",
+          "refinement_screen",
+          "clarification",
+          "exclude_ids",
+          "exclude_ids_screen"
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "id": "S01#1",
+        "utterance": "동탄에서 갈 만한 카페 알려 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S01#2",
+        "utterance": "조용한 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S01#3",
+        "utterance": "오산으로 바꿔 보자",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S01#4",
+        "utterance": "밥 먹을 곳도 찾아 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S02#1",
+        "utterance": "동탄에서 아이랑 갈 만한 곳",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S02#2",
+        "utterance": "비 오면 실내만",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S02#3",
+        "utterance": "너무 멀지 않게",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S02#4",
+        "utterance": "다른 곳",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S02#5",
+        "utterance": "그 근처에 밥 먹을 곳도 있어?",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S03#1",
+        "utterance": "오산에서 데이트 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S03#2",
+        "utterance": "조용한 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S03#3",
+        "utterance": "이번엔 동탄",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S03#4",
+        "utterance": "혼자 가고 싶어",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S04#1",
+        "utterance": "동탄에서 혼자 밥 먹을 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S04#2",
+        "utterance": "복잡한 데는 싫어",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S04#3",
+        "utterance": "가까운 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S04#4",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S05#1",
+        "utterance": "동탄에서 아이랑 놀 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S05#2",
+        "utterance": "이번엔 병점",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S05#3",
+        "utterance": "평택은 어때",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S05#4",
+        "utterance": "다시 동탄으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S06#1",
+        "utterance": "동탄에서 주말에 갈 곳",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S06#2",
+        "utterance": "비 오니까 실내로",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S06#3",
+        "utterance": "실내만",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S06#4",
+        "utterance": "카페로 바꿔 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S07#1",
+        "utterance": "오산에서 저녁 먹을 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S07#2",
+        "utterance": "가까운 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S07#3",
+        "utterance": "조용한 분위기",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S07#4",
+        "utterance": "주차되면 좋겠어",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S08#1",
+        "utterance": "동탄 키즈카페",
+        "passed": false,
+        "failed": [
+          "scenario_state",
+          "scenario_screen"
+        ]
+      },
+      {
+        "id": "S08#2",
+        "utterance": "별로야",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S08#3",
+        "utterance": "이거 말고",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S08#4",
+        "utterance": "다른 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S09#1",
+        "utterance": "동탄에서 조용한 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S09#2",
+        "utterance": "아까 본 데는 빼 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S09#3",
+        "utterance": "그래도 창가 쪽이면 좋겠어",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S09#4",
+        "utterance": "다른 곳도 봐 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S10#1",
+        "utterance": "아이랑 동탄 실내놀이",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S10#2",
+        "utterance": "식사할 곳도 알려 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S10#3",
+        "utterance": "아이랑 먹을 수 있는 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S10#4",
+        "utterance": "맵지 않게",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S11#1",
+        "utterance": "화성에서 카페 가고 싶어",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S11#2",
+        "utterance": "동탄으로 봐 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S11#3",
+        "utterance": "조용한 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S11#4",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S12#1",
+        "utterance": "호수 근처에서 산책할 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S12#2",
+        "utterance": "동탄호수로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S12#3",
+        "utterance": "비 오면 실내",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S12#4",
+        "utterance": "그럼 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S13#1",
+        "utterance": "동탄 데이트 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S13#2",
+        "utterance": "아니 미용실 찾아 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S13#3",
+        "utterance": "젤네일로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S13#4",
+        "utterance": "오산으로 가자",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S14#1",
+        "utterance": "동탄에서 저녁 먹을 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S14#2",
+        "utterance": "오늘 저녁 7시에 예약해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S14#3",
+        "utterance": "두 명이야",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S14#4",
+        "utterance": "창가 자리로 잡아 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S15#1",
+        "utterance": "동탄 키즈카페 추천해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S15#2",
+        "utterance": "지금 대기 없는 곳만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S15#3",
+        "utterance": "실시간 혼잡도 알려 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S15#4",
+        "utterance": "지금 문 연 곳만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S16#1",
+        "utterance": "부모님이랑 동탄에서 식사",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S16#2",
+        "utterance": "너무 복잡하지 않은 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S16#3",
+        "utterance": "한식으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S16#4",
+        "utterance": "가까운 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S17#1",
+        "utterance": "친구들이랑 동탄 저녁 식사",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S17#2",
+        "utterance": "조용한 고깃집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S17#3",
+        "utterance": "조용한 데는 아니어도 돼",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S17#4",
+        "utterance": "오산으로 가자",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S18#1",
+        "utterance": "오산 조용한 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S18#2",
+        "utterance": "배고프니까 밥으로 바꿔 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S18#3",
+        "utterance": "파스타 말고",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S18#4",
+        "utterance": "한식으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S19#1",
+        "utterance": "비 오는 날 아이랑 동탄",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S19#2",
+        "utterance": "실내 놀이",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S19#3",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S19#4",
+        "utterance": "간식도 먹을 곳 있어?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S20#1",
+        "utterance": "동탄 중식 맛집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S20#2",
+        "utterance": "중식 말고",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S20#3",
+        "utterance": "일식으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S20#4",
+        "utterance": "일식도 말고",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S21#1",
+        "utterance": "동탄에서 중식 맛집 찾아 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S21#2",
+        "utterance": "중식만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S21#3",
+        "utterance": "중식 아니어도 돼",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S22#1",
+        "utterance": "오산 카페 추천",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S22#2",
+        "utterance": "뭐가 좋아?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S22#3",
+        "utterance": "조용한 쪽",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S22#4",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S23#1",
+        "utterance": "동탄에서 아이랑 놀 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S23#2",
+        "utterance": "별로야",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S23#3",
+        "utterance": "처음부터 카페 추천해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S23#4",
+        "utterance": "오산으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S24#1",
+        "utterance": "동탄에서 혼자 노트북 하기 좋은 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S24#2",
+        "utterance": "조용한 곳으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S24#3",
+        "utterance": "콘센트 있는 곳으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S24#4",
+        "utterance": "가까운 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S25#1",
+        "utterance": "동탄에서 가족이랑 외식할 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S25#2",
+        "utterance": "주차되는 곳으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S25#3",
+        "utterance": "아이도 같이",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S25#4",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S26#1",
+        "utterance": "동탄 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S26#2",
+        "utterance": "지금 문 연 카페만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S26#3",
+        "utterance": "밤 10시 이후에도 하는 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S26#4",
+        "utterance": "오산으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S27#1",
+        "utterance": "동탄 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S27#2",
+        "utterance": "강아지랑 갈 수 있는 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S27#3",
+        "utterance": "오산에도 있어?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S28#1",
+        "utterance": "동탄에서 혼밥",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S28#2",
+        "utterance": "1인 1만원 이하만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S28#3",
+        "utterance": "가까운 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S28#4",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S29#1",
+        "utterance": "동탄 아이랑 실내놀이",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S29#2",
+        "utterance": "동탄 키즈플레이는 가 봤어",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S29#3",
+        "utterance": "나머지는 괜찮아",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S29#4",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S30#1",
+        "utterance": "동탄에서 아이랑 갈 곳",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S30#2",
+        "utterance": "그 근처 식사할 곳도",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S30#3",
+        "utterance": "맵지 않게",
+        "passed": false,
+        "failed": [
+          "category_state",
+          "category_screen"
+        ]
+      },
+      {
+        "id": "S30#4",
+        "utterance": "그 식당은 말고",
+        "passed": false,
+        "failed": [
+          "refinement_state",
+          "refinement_classifier",
+          "refinement_screen",
+          "category_state",
+          "category_screen",
+          "clarification",
+          "exclude_ids",
+          "exclude_ids_screen"
+        ]
+      },
+      {
+        "id": "S31#1",
+        "utterance": "동탄에서 데이트할 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S31#2",
+        "utterance": "비 와서 실내",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S31#3",
+        "utterance": "카페로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S31#4",
+        "utterance": "디저트도 먹고 싶어",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S32#1",
+        "utterance": "동탄에서 머리 자르러",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S32#2",
+        "utterance": "이번엔 네일",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S32#3",
+        "utterance": "오산으로 가자",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S32#4",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S33#1",
+        "utterance": "동탄 키즈카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S33#2",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S33#3",
+        "utterance": "밥 먹을 곳도",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S33#4",
+        "utterance": "맵지 않게",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S33#5",
+        "utterance": "그 식당은 말고",
+        "passed": false,
+        "failed": [
+          "refinement_state",
+          "refinement_classifier",
+          "refinement_screen",
+          "clarification",
+          "exclude_ids",
+          "exclude_ids_screen"
+        ]
+      },
+      {
+        "id": "S34#1",
+        "utterance": "동탄 실내 놀이터",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S34#2",
+        "utterance": "이번엔 오산",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S34#3",
+        "utterance": "이번엔 병점",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S34#4",
+        "utterance": "조용한 곳으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S35#1",
+        "utterance": "심심한데 어디 가지",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S35#2",
+        "utterance": "동탄으로 해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S35#3",
+        "utterance": "아이랑",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S35#4",
+        "utterance": "실내 놀이",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S36#1",
+        "utterance": "동탄에서 데이트 코스 짜 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S36#2",
+        "utterance": "식사는 꼭 넣어 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S36#3",
+        "utterance": "실내만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S36#4",
+        "utterance": "세 시간 정도로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S37#1",
+        "utterance": "동탄 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S37#2",
+        "utterance": "견과 알레르기 없는 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S37#3",
+        "utterance": "한식으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S38#1",
+        "utterance": "오산 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S38#2",
+        "utterance": "영어 메뉴 있는 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S38#3",
+        "utterance": "조용한 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S39#1",
+        "utterance": "동탄 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S39#2",
+        "utterance": "별로야",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S39#3",
+        "utterance": "다른 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S39#4",
+        "utterance": "처음부터 미용실 찾아 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S39#5",
+        "utterance": "오산 네일로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S40#1",
+        "utterance": "평택에서 조용한 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S40#2",
+        "utterance": "거기 말고 다른 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S40#3",
+        "utterance": "그래도 조용한 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "S40#4",
+        "utterance": "병점으로 가자",
+        "passed": true,
+        "failed": []
+      }
+    ],
+    "regressions": []
+  },
+  "heldout": {
+    "turns": {
+      "passed": 55,
+      "total": 55,
+      "percent": 100
+    },
+    "scenarios": {
+      "passed": 22,
+      "total": 22,
+      "percent": 100
+    },
+    "failures": [],
+    "rows": [
+      {
+        "id": "H01#1",
+        "utterance": "수원에서 저녁 식당 추천",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H01#2",
+        "utterance": "내일 여섯 시에 예약해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H01#3",
+        "utterance": "그럼 그냥 다른 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H02#1",
+        "utterance": "병점에서 고기 먹을 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H02#2",
+        "utterance": "네 명으로 예약해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H02#3",
+        "utterance": "창가 좌석으로 지정해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H03#1",
+        "utterance": "평택에서 점심",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H03#2",
+        "utterance": "예약 가능한 곳만 보여 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H03#3",
+        "utterance": "예약 없이 바로 갈 수 있는 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H04#1",
+        "utterance": "동탄 키즈카페 갈까",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H04#2",
+        "utterance": "웨이팅 없는 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H04#3",
+        "utterance": "지금 사람 많아?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H05#1",
+        "utterance": "오산 카페 추천해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H05#2",
+        "utterance": "지금 영업하니",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H05#3",
+        "utterance": "병점으로 바꿔 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H06#1",
+        "utterance": "동탄에서 공부할 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H06#2",
+        "utterance": "밤늦게까지 여는 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H06#3",
+        "utterance": "조용한 쪽으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H07#1",
+        "utterance": "평택에서 노트북 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H07#2",
+        "utterance": "충전 가능한 자리 있어?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H08#1",
+        "utterance": "동탄 공원 근처 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H08#2",
+        "utterance": "애견 동반돼요?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H09#1",
+        "utterance": "오산에서 혼밥",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H09#2",
+        "utterance": "예산은 2만 원",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H10#1",
+        "utterance": "병점 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H10#2",
+        "utterance": "땅콩 알러지 있어요",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H10#3",
+        "utterance": "일식으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H11#1",
+        "utterance": "동탄 브런치 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H11#2",
+        "utterance": "메뉴가 영어로 돼 있어?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H12#1",
+        "utterance": "심심해서 어디 가지",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H12#2",
+        "utterance": "동탄으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H12#3",
+        "utterance": "아이랑 실내 놀이",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H13#1",
+        "utterance": "주말에 평택에서 갈 만한 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H13#2",
+        "utterance": "비 오면 실내",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H14#1",
+        "utterance": "오산에서 부부랑 외식할 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H14#2",
+        "utterance": "주차되는 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H15#1",
+        "utterance": "동탄에서 아이랑 놀 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H15#2",
+        "utterance": "그 식당은 말고",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H16#1",
+        "utterance": "평택 키즈카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H16#2",
+        "utterance": "실내만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H17#1",
+        "utterance": "동탄 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H17#2",
+        "utterance": "콘센트 있어?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H17#3",
+        "utterance": "처음부터 오산 맛집 찾아 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H18#1",
+        "utterance": "동탄 파스타 맛집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H18#2",
+        "utterance": "테이블 좀 잡아 줄래",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H19#1",
+        "utterance": "오산 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H19#2",
+        "utterance": "문 닫기 전에 갈 수 있는 곳",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H20#1",
+        "utterance": "동탄 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H20#2",
+        "utterance": "아까 본 데는 빼 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H20#3",
+        "utterance": "강아지랑 들어갈 수 있어?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H21#1",
+        "utterance": "병점에서 국밥",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H21#2",
+        "utterance": "1만 원 넘지 않게",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H21#3",
+        "utterance": "가까운 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H22#1",
+        "utterance": "뭐 하지",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "H22#2",
+        "utterance": "오산 카페",
+        "passed": true,
+        "failed": []
+      }
+    ],
+    "regressions": []
+  },
+  "sealed": {
+    "turns": {
+      "passed": 75,
+      "total": 84,
+      "percent": 89.3
+    },
+    "scenarios": {
+      "passed": 18,
+      "total": 25,
+      "percent": 72
+    },
+    "failures": [
+      {
+        "id": "F01#3",
+        "utterance": "추천 집은 넘어갈게",
+        "passed": false,
+        "failed": [
+          "exclude:p1",
+          "exclude:p2"
+        ]
+      },
+      {
+        "id": "F01#4",
+        "utterance": "가까운 데로",
+        "passed": false,
+        "failed": [
+          "exclude:p1",
+          "exclude:p2"
+        ]
+      },
+      {
+        "id": "F04#2",
+        "utterance": "지금 만석이야?",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F08#2",
+        "utterance": "식탁 하나 잡아 둘래",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F08#3",
+        "utterance": "다섯 명으로 부탁해",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F09#2",
+        "utterance": "창가 쪽으로 앉아 줘",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold",
+          "prompt_missing:매장"
+        ]
+      },
+      {
+        "id": "F10#2",
+        "utterance": "브레이크타임 지나서도 갈 수 있나",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold",
+          "prompt_missing:보장하지"
+        ]
+      },
+      {
+        "id": "F11#2",
+        "utterance": "지금 장사해?",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F18#2",
+        "utterance": "줄 많이 섰어?",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      }
+    ],
+    "rows": [
+      {
+        "id": "F01#1",
+        "utterance": "동탄 파스타 집 추천",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F01#2",
+        "utterance": "내일 일곱 시에 자리 예약 부탁해",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F01#3",
+        "utterance": "추천 집은 넘어갈게",
+        "passed": false,
+        "failed": [
+          "exclude:p1",
+          "exclude:p2"
+        ]
+      },
+      {
+        "id": "F01#4",
+        "utterance": "가까운 데로",
+        "passed": false,
+        "failed": [
+          "exclude:p1",
+          "exclude:p2"
+        ]
+      },
+      {
+        "id": "F02#1",
+        "utterance": "오산 카페 하나 골라 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F02#2",
+        "utterance": "오산 골목 카페는 제외해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F02#3",
+        "utterance": "조용한 쪽으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F03#1",
+        "utterance": "병점 고깃집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F03#2",
+        "utterance": "그 집은 빼 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F03#3",
+        "utterance": "병점 고기 둘은 빼 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F04#1",
+        "utterance": "평택에서 점심 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F04#2",
+        "utterance": "지금 만석이야?",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F04#3",
+        "utterance": "북적거리는 편이야?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F04#4",
+        "utterance": "그래도 일식으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F05#1",
+        "utterance": "동탄 맛집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F05#2",
+        "utterance": "사람 많은 집을 원해",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F05#3",
+        "utterance": "너무 복잡하지 않은 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F06#1",
+        "utterance": "동탄역 근처 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F06#2",
+        "utterance": "메뉴판이 영문으로도 있어?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F06#3",
+        "utterance": "조용한 쪽으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F07#1",
+        "utterance": "오산 노트북 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F07#2",
+        "utterance": "영어 공부하기 좋은 쪽으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F07#3",
+        "utterance": "가까운 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F08#1",
+        "utterance": "병점 고깃집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F08#2",
+        "utterance": "식탁 하나 잡아 둘래",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F08#3",
+        "utterance": "다섯 명으로 부탁해",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F08#4",
+        "utterance": "가까운 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F09#1",
+        "utterance": "평택 카페 추천",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F09#2",
+        "utterance": "창가 쪽으로 앉아 줘",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold",
+          "prompt_missing:매장"
+        ]
+      },
+      {
+        "id": "F09#3",
+        "utterance": "예약되는 곳만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F09#4",
+        "utterance": "예약 없이 갈 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F10#1",
+        "utterance": "오산 저녁 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F10#2",
+        "utterance": "브레이크타임 지나서도 갈 수 있나",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold",
+          "prompt_missing:보장하지"
+        ]
+      },
+      {
+        "id": "F10#3",
+        "utterance": "가까운 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F11#1",
+        "utterance": "병점 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F11#2",
+        "utterance": "지금 장사해?",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F11#3",
+        "utterance": "동탄으로 바꿔 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F12#1",
+        "utterance": "동탄에서 혼밥",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F12#2",
+        "utterance": "콘센트 돼?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F12#3",
+        "utterance": "땅콩 알러지 괜찮아?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F12#4",
+        "utterance": "국밥으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F13#1",
+        "utterance": "오산 일식",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F13#2",
+        "utterance": "강아지 데리고 가도 돼?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F13#3",
+        "utterance": "처음부터 평택 카페 찾아 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F14#1",
+        "utterance": "평택 고기집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F14#2",
+        "utterance": "예약 넣어 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F14#3",
+        "utterance": "세 명이요",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F14#4",
+        "utterance": "네 명 식당 추천해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F15#1",
+        "utterance": "동탄 호수 근처 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F15#2",
+        "utterance": "파스타 말고 다른 메뉴",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F15#3",
+        "utterance": "가까운 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F16#1",
+        "utterance": "다른 식당 알려 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F16#2",
+        "utterance": "동탄으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F16#3",
+        "utterance": "그 집은 빼 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F17#1",
+        "utterance": "오산 디저트 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F17#2",
+        "utterance": "아까 본 데는 빼 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F17#3",
+        "utterance": "지금 붐벼?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F17#4",
+        "utterance": "조용한 쪽으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F18#1",
+        "utterance": "동탄 키즈카페 가자",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F18#2",
+        "utterance": "줄 많이 섰어?",
+        "passed": false,
+        "failed": [
+          "class",
+          "topic",
+          "hold"
+        ]
+      },
+      {
+        "id": "F18#3",
+        "utterance": "가까운 데",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F19#1",
+        "utterance": "병점에서 가족 외식",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F19#2",
+        "utterance": "메뉴 영어 버전 돼?",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F19#3",
+        "utterance": "가까운 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F20#1",
+        "utterance": "평택 국밥집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F20#2",
+        "utterance": "예산은 만 원대로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F20#3",
+        "utterance": "그 집들 말고 새로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F21#1",
+        "utterance": "동탄 초밥집",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F21#2",
+        "utterance": "예약 가능한 데만",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F21#3",
+        "utterance": "예약 안 하고 갈래",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F22#1",
+        "utterance": "동탄 조용한 식당",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F22#2",
+        "utterance": "코너석으로 지정해 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F22#3",
+        "utterance": "가까운 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F23#1",
+        "utterance": "병점 브런치 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F23#2",
+        "utterance": "테이블 있는 데 찾아 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F23#3",
+        "utterance": "조용한 쪽으로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F24#1",
+        "utterance": "평택에서 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F24#2",
+        "utterance": "그 카페는 말고",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F24#3",
+        "utterance": "평택 창가 카페는 빼 줘",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F24#4",
+        "utterance": "가까운 데로",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F25#1",
+        "utterance": "뭐 하지",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F25#2",
+        "utterance": "병점 애프터눈 카페",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F25#3",
+        "utterance": "지금 한가하니",
+        "passed": true,
+        "failed": []
+      },
+      {
+        "id": "F25#4",
+        "utterance": "처음부터 오산 맛집 찾아 줘",
+        "passed": true,
+        "failed": []
+      }
+    ],
+    "regressions": []
+  }
+}
