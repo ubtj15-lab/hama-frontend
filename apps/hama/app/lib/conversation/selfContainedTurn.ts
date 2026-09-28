@@ -1,5 +1,6 @@
 import { parseScenarioIntent } from "@/lib/scenarioEngine/intentClassification";
 import type { ScenarioObject } from "@/lib/scenarioEngine/types";
+import { isDependentFollowUp } from "./followUp";
 
 function hasDatePhrase(raw: string): boolean {
   return /데이트|연인|커플/.test(raw);
@@ -21,6 +22,7 @@ export function isSelfContainedCurrentTurn(
 ): boolean {
   const raw = String(text ?? "").trim();
   if (!raw) return false;
+  if (previous && isDependentFollowUp(raw)) return false;
 
   const parsed = parseScenarioIntent(raw);
   const purposes = parsed.queryUnderstanding?.purposeIntents ?? [];

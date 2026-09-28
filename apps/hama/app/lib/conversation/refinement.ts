@@ -2,6 +2,8 @@ import type { ConversationContext } from "./types";
 import { namedAreaFromUtterance } from "./namedRegion";
 import type { RefinementType } from "./types";
 import { isSelfContainedCurrentTurn } from "./selfContainedTurn";
+import { classifyShownExclusion } from "./shownReference";
+import { isAdditivePurpose } from "./followUp";
 
 function norm(s: string): string {
   return String(s ?? "")
@@ -13,19 +15,51 @@ function norm(s: string): string {
 /**
  * 후속 발화가 전체 의도를 바꾸는지 / 조건 추가인지 등 분류.
  */
+/**
+ * The screen classifies after the utterance is already stored.
+ * Drop that copy so the same sentence is not treated as a follow-up to itself.
+ */
+function contextBeforeUtterance(
+  text: string,
+  previous: ConversationContext | null
+): ConversationContext | null {
+  if (!previous?.turns.length) return previous;
+  const spoken = text.trim();
+  let removeAt = -1;
+  for (let i = previous.turns.length - 1; i >= 0; i -= 1) {
+    const turn = previous.turns[i];
+    if (turn?.role === "user" && turn.text.trim() === spoken) {
+      removeAt = i;
+      break;
+    }
+  }
+  if (removeAt < 0) return previous;
+  if (previous.turns.slice(removeAt + 1).some((turn) => turn.role === "user")) return previous;
+  const turns = previous.turns.filter((_, index) => index !== removeAt);
+  if (!turns.some((turn) => turn.role === "user")) return null;
+  return { ...previous, turns };
+}
+
 export function detectRefinementType(
+  text: string,
+  previous: ConversationContext | null
+): RefinementType {
+  return classifyRefinement(text, contextBeforeUtterance(text, previous));
+}
+
+function classifyRefinement(
   text: string,
   previous: ConversationContext | null
 ): RefinementType {
   const q = norm(text);
   if (!q) return previous ? "refine" : "new_request";
 
-  /* "짜장면 말고" 등 메뉴 제외는 refine */
+  /* "짜장면 말고", "일식도 말고" — 메뉴·음식 제외는 장소 거절이 아니다 */
   if (
     /(짜장면|짬뽕|초밥|돈까스|국밥|파스타)\s*말고/.test(q) ||
-    /중식\s*말고|중국\s*말고/.test(q)
+    /(한식|일식|중식|양식|분식|중국|일본)\s*도?\s*말고/.test(q)
   ) {
-    return "refine";
+    return previous ? "refine" : "new_request";
   }
 
   /* "너무 복잡한 데는 싫어" — 결과 거절이 아니라 조건 추가(refine) */
@@ -36,9 +70,15 @@ export function detectRefinementType(
     return previous ? "refine" : "new_request";
   }
 
+  if (previous) {
+    const shown = classifyShownExclusion(text, previous);
+    if (shown.kind === "ambiguous") return "clarify";
+    if (shown.kind === "all" || shown.kind === "ids") return "reject";
+  }
+
   if (
     /별로야|별로\s*야|별로다|다른\s*데|다른데|다른\s*곳|다른곳|싫어|안\s*갈래|패스|다시\s*골라|딴\s*거|이거\s*말고/.test(q) ||
-    (/말고\s*$/.test(q) && !/(짜장|짬뽕|초밥|돈까스|국밥|파스타|중식|중국)/.test(q))
+    (/말고\s*$/.test(q) && !/(짜장|짬뽕|초밥|돈까스|국밥|파스타|중식|중국|일식|한식|양식)/.test(q))
   ) {
     return "reject";
   }
@@ -76,6 +116,8 @@ export function detectRefinementType(
   if (previous && isSelfContainedCurrentTurn(text, previous.currentIntent)) {
     return "new_request";
   }
+
+  if (previous && isAdditivePurpose(text)) return "refine";
 
   if (/\?+\s*$|뭐가\s*좋|어디가\s*좋|추천해줘\?/.test(q) && q.length < 24) return "clarify";
 

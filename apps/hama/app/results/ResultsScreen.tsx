@@ -1488,7 +1488,7 @@ function ResultsContent({
     const intent = effectiveScenario ?? convCtx.currentIntent;
     const reply = composeAssistantReply({
       clarificationNeeded: askInstead,
-      clarificationText: convCtx.regionClarification,
+      clarificationText: convCtx.clarificationPrompt ?? convCtx.regionClarification,
       intent,
       placeNames: shownPlaceNames,
       excludedPlaceCount: convCtx.rejectedPlaceIds?.length ?? 0,

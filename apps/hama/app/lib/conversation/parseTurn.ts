@@ -4,6 +4,7 @@ import { detectMenuIntent, detectFoodSubCategory } from "@/lib/scenarioEngine/fo
 import { detectFoodPreference, detectVibePreference } from "@/lib/scenarioEngine/compositeIntent";
 import type { ConversationContext, ParseTurnResult, RefinementType } from "./types";
 import { detectRefinementType } from "./refinement";
+import { isAdditivePurpose, negatedFoodSub, venueVertical } from "./followUp";
 
 function norm(s: string): string {
   return String(s ?? "")
@@ -63,7 +64,7 @@ export function extractPartialFromUtterance(
     out.hardConstraints = uniq(["indoor", ...(out.hardConstraints ?? [])]);
   }
 
-  if (/비\s*오|비가|비오는|우천/.test(q)) {
+  if (/비\s*오|비\s*와|비가|비와|비오는|우천|소나기/.test(q)) {
     out.weatherHint = "rain";
     out.indoorPreferred = true;
     out.hardConstraints = uniq(["indoor", ...(out.hardConstraints ?? [])]);
@@ -84,7 +85,13 @@ export function extractPartialFromUtterance(
   if (menu.length) out.menuIntent = uniq([...(out.menuIntent ?? []), ...menu]);
 
   const sub = detectFoodSubCategory(raw);
-  if (sub) out.foodSubCategory = sub;
+  const droppedSub = negatedFoodSub(raw);
+  if (sub && sub !== droppedSub) out.foodSubCategory = sub;
+
+  if ((refinement === "refine" || refinement === "narrow") && !isAdditivePurpose(raw)) {
+    const vertical = venueVertical(raw);
+    if (vertical) out.intentCategory = vertical;
+  }
 
   return out;
 }
@@ -100,9 +107,10 @@ function parseRejection(
     rejection.rejectShownPlaces = true;
   }
 
-  if (/중식\s*말고|중국\s*말고|중식\s*아니/.test(q)) rejection.addRejectedCategory = "CHINESE";
-  if (/일식\s*말고/.test(q)) rejection.addRejectedCategory = "JAPANESE";
-  if (/한식\s*말고/.test(q)) rejection.addRejectedCategory = "KOREAN";
+  if (/(중식|중국)\s*도?\s*말고|(중식|중국)\s*아니/.test(q)) rejection.addRejectedCategory = "CHINESE";
+  if (/일식\s*도?\s*말고|일본\s*도?\s*말고/.test(q)) rejection.addRejectedCategory = "JAPANESE";
+  if (/한식\s*도?\s*말고/.test(q)) rejection.addRejectedCategory = "KOREAN";
+  if (/양식\s*도?\s*말고/.test(q)) rejection.addRejectedCategory = "WESTERN";
   if (/카페\s*말고/.test(q)) rejection.addRejectedCategory = "CAFE";
 
   const menuAnti = /(짜장면|짬뽕|초밥|돈까스|국밥|파스타)\s*말고/.exec(q);
@@ -156,7 +164,11 @@ export function parseTurnIntent(
   const qn = norm(raw);
   const menuAnti = /(짜장면|짬뽕|초밥|돈까스|국밥|파스타)\s*말고/.exec(qn);
   if (menuAnti) rejection = { ...rejection, removeMenuIntent: menuAnti[1]! };
-  if (/중식\s*말고|중국\s*말고/.test(qn)) rejection = { ...rejection, addRejectedCategory: "CHINESE" };
+  const droppedCuisine = negatedFoodSub(raw);
+  if (droppedCuisine) {
+    rejection = { ...rejection, addRejectedCategory: droppedCuisine, removeFoodSubCategory: true };
+    if (extracted.foodSubCategory === droppedCuisine) delete extracted.foodSubCategory;
+  }
 
   return {
     refinementType: refinement,

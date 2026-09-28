@@ -7,6 +7,8 @@ import { applyConversationMemory } from "./memory";
 import { saveConversationContext } from "./storage";
 import { nextLinkedPurposes, detectLinkedFoodPurpose, validShownPlayCards } from "./linkedPurpose";
 import { regionClarificationFor, withNamedRegion } from "./namedRegion";
+import { AMBIGUOUS_PLACE_PROMPT, classifyShownExclusion } from "./shownReference";
+import type { FoodSubCategory } from "@/lib/scenarioEngine/types";
 
 function makeSessionId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -17,6 +19,14 @@ function makeSessionId(): string {
 
 function uniq<T>(arr: T[]): T[] {
   return [...new Set(arr.filter((x) => x != null && x !== ""))] as T[];
+}
+
+function foodSubForRejected(category: string | undefined): FoodSubCategory | null {
+  const token = String(category ?? "").toUpperCase();
+  if (token === "CHINESE" || token === "JAPANESE" || token === "KOREAN" || token === "WESTERN" || token === "FASTFOOD") {
+    return token;
+  }
+  return null;
 }
 
 /**
@@ -90,19 +100,38 @@ export function processConversationTurn(
     rejectedTags = [];
   }
 
-  if (parsed.rejection?.rejectShownPlaces && previous.lastRecommendations?.placeIds?.length) {
+  const shownExclusion = classifyShownExclusion(raw, previous);
+  const ambiguousPlace = shownExclusion.kind === "ambiguous";
+  if (!ambiguousPlace && shownExclusion.kind === "ids") {
+    rejectedPlaceIds = uniq([...rejectedPlaceIds, ...shownExclusion.ids]);
+  } else if (!ambiguousPlace && shownExclusion.kind === "all" && previous.lastRecommendations?.placeIds?.length) {
+    rejectedPlaceIds = uniq([...rejectedPlaceIds, ...previous.lastRecommendations.placeIds]);
+  } else if (
+    !ambiguousPlace &&
+    parsed.rejection?.rejectShownPlaces &&
+    previous.lastRecommendations?.placeIds?.length
+  ) {
     rejectedPlaceIds = uniq([...rejectedPlaceIds, ...previous.lastRecommendations.placeIds]);
   }
   if (parsed.rejection?.addRejectedCategory) {
     rejectedCategories = uniq([...rejectedCategories, parsed.rejection.addRejectedCategory]);
+    const dropped = foodSubForRejected(parsed.rejection.addRejectedCategory);
+    if (dropped && nextIntent.foodSubCategory === dropped) delete nextIntent.foodSubCategory;
   }
   if (parsed.rejection?.removeMenuIntent) {
     const rm = parsed.rejection.removeMenuIntent;
     nextIntent.menuIntent = (nextIntent.menuIntent ?? []).filter((m) => m !== rm);
     rejectedTags = uniq([...rejectedTags, rm]);
   }
-  if (parsed.rejection?.broadenFood) {
-    delete (nextIntent as any).foodSubCategory;
+  if (parsed.rejection?.broadenFood || parsed.rejection?.removeFoodSubCategory) {
+    const dropped = foodSubForRejected(parsed.rejection?.addRejectedCategory);
+    if (!dropped || nextIntent.foodSubCategory === dropped) delete (nextIntent as any).foodSubCategory;
+  }
+  if (refinement === "broaden" && /조용|한적|잔잔/.test(raw) && /아니어도|괜찮아|상관없|뭐든\s*좋아/.test(raw)) {
+    const vibe = (nextIntent.vibePreference ?? []).filter((item) => item !== "calm");
+    if (vibe.length) nextIntent.vibePreference = vibe;
+    else delete nextIntent.vibePreference;
+    if (nextIntent.activityLevel === "calm") delete nextIntent.activityLevel;
   }
 
   const ctx: ConversationContext = {
@@ -115,7 +144,8 @@ export function processConversationTurn(
     rejectedTags: rejectedTags.length ? rejectedTags : undefined,
     cumulativeText,
     lastRecommendations: previous.lastRecommendations,
-    clarificationNeeded: refinement === "clarify" ? true : undefined,
+    clarificationNeeded: ambiguousPlace || refinement === "clarify" ? true : undefined,
+    clarificationPrompt: ambiguousPlace ? AMBIGUOUS_PLACE_PROMPT : undefined,
   };
 
   nextIntent = withNamedRegion(
@@ -145,7 +175,8 @@ export function processConversationTurn(
     ...ctx,
     currentIntent: playIntent,
     linkedPurposes: nextLinkedPurposes(previous.linkedPurposes, raw, refinement),
-    clarificationNeeded: regionQuestion ? true : ctx.clarificationNeeded,
+    clarificationNeeded: regionQuestion || ambiguousPlace || refinement === "clarify" ? true : undefined,
+    clarificationPrompt: ambiguousPlace ? AMBIGUOUS_PLACE_PROMPT : undefined,
     regionClarification: regionQuestion ?? undefined,
     shownPlayCards: previous.shownPlayCards,
     shownPlayKey: previous.shownPlayKey,

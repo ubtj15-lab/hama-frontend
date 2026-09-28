@@ -36,6 +36,8 @@ export type ConversationContext = {
   clarificationNeeded?: boolean;
   /** Question shown instead of a guessed region. */
   regionClarification?: string;
+  /** Question shown when a shown place cannot be identified. */
+  clarificationPrompt?: string;
   /** Added purposes that must not replace the primary recommendation list. */
   linkedPurposes?: import("./linkedPurpose").LinkedPurpose[];
   /** Play cards shown before a meal-only follow-up. */
@@ -58,6 +60,7 @@ export type ParseTurnResult = {
     removeMenuIntent?: string;
     removeFoodSubCategory?: boolean;
     broadenFood?: boolean;
+    ambiguousShownPlace?: boolean;
   };
   /** mergeIntent 에 넘길 lock 제안 */
   suggestedLocks?: string[];

@@ -1,10 +1,11 @@
 import { parseScenarioIntent } from "@/lib/scenarioEngine/intentClassification";
-import type { ScenarioObject } from "@/lib/scenarioEngine/types";
+import type { FoodSubCategory, ScenarioObject } from "@/lib/scenarioEngine/types";
 import type { ConversationContext } from "./types";
 import { detectRefinementType } from "./refinement";
 import { isSelfContainedCurrentTurn } from "./selfContainedTurn";
 import { detectLinkedFoodPurpose } from "./linkedPurpose";
 import { namedAreaFromUtterance, withNamedRegion } from "./namedRegion";
+import { negatedFoodSub } from "./followUp";
 
 /**
  * 결과 페이지 전용: 후보 풀·랭킹 분기(intentType / intentCategory / FOOD 세부)는
@@ -26,7 +27,8 @@ export function mergeResultsScenario(
   const m = convCtx.currentIntent;
   const refinement = detectRefinementType(raw, convCtx);
   const region = namedAreaFromUtterance(raw) ?? m.region;
-  const keepPrimaryList = detectLinkedFoodPurpose(raw) && Boolean(m.intentCategory);
+  const addsLinkedFood = detectLinkedFoodPurpose(raw);
+  const keepPrimaryList = addsLinkedFood && Boolean(m.intentCategory);
   const keepsEarlierConditions =
     refinement === "refine" ||
     refinement === "narrow" ||
@@ -34,6 +36,10 @@ export function mergeResultsScenario(
     refinement === "broaden" ||
     refinement === "clarify";
   const keepVertical = keepsEarlierConditions || keepPrimaryList;
+  const blockedSub = negatedFoodSub(raw);
+  const rejectedSubs = new Set(m.conversationRejectedFoodSubs ?? []);
+  const usableSub = (sub: FoodSubCategory | null | undefined) =>
+    sub && sub !== blockedSub && !rejectedSubs.has(sub) ? sub : undefined;
   if (!keepsEarlierConditions && isSelfContainedCurrentTurn(raw, m)) {
     return {
       ...base,
@@ -48,11 +54,17 @@ export function mergeResultsScenario(
     ...m,
     region,
     intentType: keepVertical ? (m.intentType ?? base.intentType) : (base.intentType ?? m.intentType),
-    recommendationMode: base.recommendationMode ?? m.recommendationMode,
-    intentCategory: keepVertical ? (m.intentCategory ?? base.intentCategory) : (base.intentCategory ?? m.intentCategory),
+    recommendationMode: keepsEarlierConditions
+      ? (m.recommendationMode ?? base.recommendationMode)
+      : (base.recommendationMode ?? m.recommendationMode),
+    intentCategory: addsLinkedFood
+      ? m.intentCategory
+      : keepVertical
+        ? (m.intentCategory ?? base.intentCategory)
+        : (base.intentCategory ?? m.intentCategory),
     intentStrict: keepVertical ? (m.intentStrict ?? base.intentStrict) : (base.intentStrict ?? m.intentStrict),
     mealRequired: keepPrimaryList ? m.mealRequired : (base.mealRequired ?? m.mealRequired),
-    foodSubCategory: keepPrimaryList ? m.foodSubCategory : (base.foodSubCategory ?? m.foodSubCategory),
+    foodSubCategory: keepPrimaryList ? usableSub(m.foodSubCategory) : (usableSub(base.foodSubCategory) ?? usableSub(m.foodSubCategory)),
     menuIntent: keepPrimaryList ? m.menuIntent : (base.menuIntent?.length ? base.menuIntent : m.menuIntent),
     indoorPreferred: base.indoorPreferred ?? m.indoorPreferred,
     withKids: base.withKids === true ? true : m.withKids,
