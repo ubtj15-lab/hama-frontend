@@ -36,8 +36,13 @@ export type ConversationContext = {
   clarificationNeeded?: boolean;
   /** Question shown instead of a guessed region. */
   regionClarification?: string;
-  /** Question shown when a shown place cannot be identified. */
+  /** Question shown when a shown place cannot be identified, or a capability limit. */
   clarificationPrompt?: string;
+  /** The latest turn must not fetch or replace recommendation cards. */
+  holdRecommendations?: boolean;
+  capabilityClass?: "search" | "needs_detail" | "missing_data" | "external_action";
+  capabilityTopic?: string;
+  responseKind?: "question" | "limit" | "alternative";
   /** Added purposes that must not replace the primary recommendation list. */
   linkedPurposes?: import("./linkedPurpose").LinkedPurpose[];
   /** Play cards shown before a meal-only follow-up. */

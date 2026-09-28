@@ -6,6 +6,7 @@ import { isSelfContainedCurrentTurn } from "./selfContainedTurn";
 import { detectLinkedFoodPurpose } from "./linkedPurpose";
 import { namedAreaFromUtterance, withNamedRegion } from "./namedRegion";
 import { negatedFoodSub } from "./followUp";
+import { diningOutCategory } from "./capability";
 
 /**
  * 결과 페이지 전용: 후보 풀·랭킹 분기(intentType / intentCategory / FOOD 세부)는
@@ -44,6 +45,7 @@ export function mergeResultsScenario(
     return {
       ...base,
       region,
+      intentCategory: base.intentCategory ?? diningOutCategory(raw) ?? undefined,
       conversationExcludePlaceIds: m.conversationExcludePlaceIds,
       conversationRejectedFoodSubs: m.conversationRejectedFoodSubs,
       conversationExcludeMenuTerms: m.conversationExcludeMenuTerms,
@@ -60,8 +62,8 @@ export function mergeResultsScenario(
     intentCategory: addsLinkedFood
       ? m.intentCategory
       : keepVertical
-        ? (m.intentCategory ?? base.intentCategory)
-        : (base.intentCategory ?? m.intentCategory),
+        ? (m.intentCategory ?? base.intentCategory ?? diningOutCategory(raw) ?? undefined)
+        : (base.intentCategory ?? m.intentCategory ?? diningOutCategory(raw) ?? undefined),
     intentStrict: keepVertical ? (m.intentStrict ?? base.intentStrict) : (base.intentStrict ?? m.intentStrict),
     mealRequired: keepPrimaryList ? m.mealRequired : (base.mealRequired ?? m.mealRequired),
     foodSubCategory: keepPrimaryList ? usableSub(m.foodSubCategory) : (usableSub(base.foodSubCategory) ?? usableSub(m.foodSubCategory)),

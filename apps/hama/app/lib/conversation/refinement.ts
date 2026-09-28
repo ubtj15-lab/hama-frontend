@@ -4,6 +4,7 @@ import type { RefinementType } from "./types";
 import { isSelfContainedCurrentTurn } from "./selfContainedTurn";
 import { classifyShownExclusion } from "./shownReference";
 import { isAdditivePurpose } from "./followUp";
+import { classifyRequestCapability } from "./capability";
 
 function norm(s: string): string {
   return String(s ?? "")
@@ -53,6 +54,8 @@ function classifyRefinement(
 ): RefinementType {
   const q = norm(text);
   if (!q) return previous ? "refine" : "new_request";
+
+  if (classifyRequestCapability(text, previous).forceClarify) return "clarify";
 
   /* "짜장면 말고", "일식도 말고" — 메뉴·음식 제외는 장소 거절이 아니다 */
   if (

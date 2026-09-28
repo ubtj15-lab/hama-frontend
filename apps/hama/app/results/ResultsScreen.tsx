@@ -69,6 +69,7 @@ import { composeAssistantReply, persistAssistantReply } from "@/lib/conversation
 import { recordDialogueSnapshot } from "@/lib/conversation/storage";
 import { type HomeResume } from "@/lib/conversation/homeResume";
 import { filterCardsByNamedRegion } from "@/lib/conversation/namedRegion";
+import { shouldHoldRecommendations } from "@/lib/conversation/capability";
 import { buildLinkedFoodScenario, detectLinkedFoodPurpose, resolveFoodAnchor, validShownPlayCards } from "@/lib/conversation/linkedPurpose";
 import { storeCategoryMatchesIntentCategory } from "@/lib/scenarioEngine/intentClassification";
 import { LinkedFoodGroup } from "@/_components/results/LinkedFoodGroup";
@@ -619,6 +620,7 @@ function ResultsContent({
     setModeOverride("single");
   }, [courseIdParam, isGenericFoodResultsQuery, isFamilyDiningAliasQuery, matchedNamedFoodPreset, isSoloSituationQuery, qRaw]);
 
+  const holdRecommendations = shouldHoldRecommendations(qRaw, convCtx);
   const savedPlayCards = validShownPlayCards(convCtx?.frozenPlayCards)
     ? convCtx.frozenPlayCards
     : validShownPlayCards(convCtx?.lastRecommendations?.cards)
@@ -670,8 +672,8 @@ function ResultsContent({
     scenarioObject: scenarioObjectForHomeCards,
     courseIdParam,
     tonkatsuRecommendDisabled,
-    skipFetchExtra: mealKeepsPlay || holdTranscript,
-    retainCardsOnSkip: mealKeepsPlay,
+    skipFetchExtra: mealKeepsPlay || holdTranscript || holdRecommendations,
+    retainCardsOnSkip: mealKeepsPlay || holdRecommendations,
     explicitIntent: resolvedExplicitIntentForHome,
     explicitCategory: resolvedExplicitCategoryForHome,
     explicitMode: resolvedModeForHome,
@@ -901,8 +903,8 @@ function ResultsContent({
     excludeStoreIds: [],
     searchQuery: foodScenarioForFetch?.region ? `${foodScenarioForFetch.region} 식당` : "식당",
     scenarioObject: foodScenarioForFetch,
-    skipFetch: !foodScenarioForFetch || holdTranscript,
-    deferRanking: !foodScenarioForFetch || holdTranscript,
+    skipFetch: !foodScenarioForFetch || holdTranscript || holdRecommendations,
+    deferRanking: !foodScenarioForFetch || holdTranscript || holdRecommendations,
   });
   const foodRestaurantCards = useMemo(
     () => (linkedFoodCards ?? []).filter((card) => storeCategoryMatchesIntentCategory(card, "FOOD")),
@@ -1005,6 +1007,7 @@ function ResultsContent({
   useEffect(() => {
     if (!convCtx?.sessionId || bootstrapBusy) return;
     if (placeLookupBusy) return;
+    if (convCtx.holdRecommendations || shouldHoldRecommendations(qRaw, convCtx)) return;
 
     const hitIds = placeHits.slice(0, RECOMMEND_DECK_SIZE).map((c) => c.id);
 
@@ -1038,7 +1041,7 @@ function ResultsContent({
 
   useLayoutEffect(() => {
     if (!convCtx?.sessionId || bootstrapBusy || pageBusy || isLoading) return;
-    if (convCtx.clarificationNeeded) return;
+    if (convCtx.clarificationNeeded || convCtx.holdRecommendations) return;
     const ids = displayedPlayCards.map((card) => card.id).filter(Boolean);
     if (!ids.length) return;
     patchLastRecommendations(convCtx.sessionId, ids.slice(0, 20), qRaw, displayedPlayCards, embedded ? utterance?.id : undefined);
@@ -1315,6 +1318,7 @@ function ResultsContent({
 
   useEffect(() => {
     if (!qRaw || bootstrapBusy || placeLookupBusy) return;
+    if (holdRecommendations || convCtx?.holdRecommendations) return;
     if (impressionLogged.current) return;
     impressionLogged.current = true;
     const latency_ms = Math.round(performance.now() - started.current);
@@ -1323,6 +1327,7 @@ function ResultsContent({
 
   useEffect(() => {
     if (!qRaw || pageBusy || showNameSearch) return;
+    if (holdRecommendations || convCtx?.holdRecommendations) return;
     if (!showRecommendationList || primaryListCards.length === 0) return;
     if (recommendDeckLogged.current) return;
     const slice = (
@@ -1439,7 +1444,7 @@ function ResultsContent({
     recommendDeckLogged.current = false;
   }, [qRaw, shuffleKey]);
 
-  const askInstead = convCtx?.clarificationNeeded === true;
+  const askInstead = convCtx?.clarificationNeeded === true || holdRecommendations;
   const shownPlaceNames = askInstead ? [] : displayedPlayCards.slice(0, 3).map((card) => card.name);
   const conversationShownPlayCount =
     !askInstead && displayedPlayCards.length > 0 && (!pageBusy || mealKeepsPlay)

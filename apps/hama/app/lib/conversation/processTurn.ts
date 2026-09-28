@@ -8,6 +8,7 @@ import { saveConversationContext } from "./storage";
 import { nextLinkedPurposes, detectLinkedFoodPurpose, validShownPlayCards } from "./linkedPurpose";
 import { regionClarificationFor, withNamedRegion } from "./namedRegion";
 import { AMBIGUOUS_PLACE_PROMPT, classifyShownExclusion } from "./shownReference";
+import { classifyRequestCapability, diningOutCategory } from "./capability";
 import type { FoodSubCategory } from "@/lib/scenarioEngine/types";
 
 function makeSessionId(): string {
@@ -61,7 +62,12 @@ export function processConversationTurn(
   const cumulativeText = [previous?.cumulativeText, raw].filter(Boolean).join(" · ");
 
   if (!previous) {
-    const currentIntent = withNamedRegion(applyConversationMemory(parseScenarioIntent(raw), {}), raw);
+    const decision = classifyRequestCapability(raw, null);
+    let currentIntent = withNamedRegion(applyConversationMemory(parseScenarioIntent(raw), {}), raw);
+    if (!decision.holdRecommendations && !currentIntent.intentCategory) {
+      const dining = diningOutCategory(raw);
+      if (dining) currentIntent = { ...currentIntent, intentCategory: dining };
+    }
     const regionQuestion = regionClarificationFor(raw);
     const ctx: ConversationContext = {
       sessionId,
@@ -69,13 +75,19 @@ export function processConversationTurn(
       currentIntent,
       cumulativeText: raw,
       linkedPurposes: nextLinkedPurposes(undefined, raw, "new_request"),
-      clarificationNeeded: regionQuestion ? true : undefined,
+      clarificationNeeded: regionQuestion || decision.holdRecommendations ? true : undefined,
       regionClarification: regionQuestion ?? undefined,
+      clarificationPrompt: decision.prompt ?? undefined,
+      holdRecommendations: decision.holdRecommendations ? true : undefined,
+      capabilityClass: decision.requestClass === "search" ? undefined : decision.requestClass,
+      capabilityTopic: decision.topic ?? undefined,
+      responseKind: decision.responseKind ?? undefined,
     };
     if (persist) saveConversationContext(ctx);
     return ctx;
   }
 
+  const decision = classifyRequestCapability(raw, previous);
   const refinement = detectRefinementType(raw, previous);
   const parsed = parseTurnIntent(raw, previous, refinement);
 
@@ -148,6 +160,11 @@ export function processConversationTurn(
     clarificationPrompt: ambiguousPlace ? AMBIGUOUS_PLACE_PROMPT : undefined,
   };
 
+  if (!decision.holdRecommendations && !nextIntent.intentCategory) {
+    const dining = diningOutCategory(raw);
+    if (dining) nextIntent = { ...nextIntent, intentCategory: dining };
+  }
+
   nextIntent = withNamedRegion(
     applyConversationMemory(nextIntent, {
       rejectedPlaceIds: ctx.rejectedPlaceIds,
@@ -175,12 +192,19 @@ export function processConversationTurn(
     ...ctx,
     currentIntent: playIntent,
     linkedPurposes: nextLinkedPurposes(previous.linkedPurposes, raw, refinement),
-    clarificationNeeded: regionQuestion || ambiguousPlace || refinement === "clarify" ? true : undefined,
-    clarificationPrompt: ambiguousPlace ? AMBIGUOUS_PLACE_PROMPT : undefined,
+    clarificationNeeded:
+      regionQuestion || ambiguousPlace || refinement === "clarify" || decision.holdRecommendations
+        ? true
+        : undefined,
+    clarificationPrompt: decision.prompt ?? (ambiguousPlace ? AMBIGUOUS_PLACE_PROMPT : undefined),
+    holdRecommendations: decision.holdRecommendations ? true : undefined,
+    capabilityClass: decision.requestClass === "search" ? undefined : decision.requestClass,
+    capabilityTopic: decision.topic ?? undefined,
+    responseKind: decision.responseKind ?? undefined,
     regionClarification: regionQuestion ?? undefined,
     shownPlayCards: previous.shownPlayCards,
     shownPlayKey: previous.shownPlayKey,
-    frozenPlayCards: mealOnly ? keptPlay : undefined,
+    frozenPlayCards: decision.holdRecommendations ? previous.frozenPlayCards : mealOnly ? keptPlay : undefined,
     dialogueHistory: previous.dialogueHistory,
   };
 

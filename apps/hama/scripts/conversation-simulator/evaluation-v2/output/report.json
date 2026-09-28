@@ -1,0 +1,210 @@
+{
+  "note": "기존 159턴 정답 점수와 검토 해석 점수와 새 시나리오 점수는 합치지 않는다.",
+  "legacyGold": {
+    "before": {
+      "overall": {
+        "passed": 127,
+        "total": 159,
+        "percent": 79.9
+      },
+      "firmTurns": {
+        "passed": 103,
+        "total": 116,
+        "percent": 88.8
+      },
+      "conversations": {
+        "passed": 25,
+        "total": 40,
+        "percent": 62.5
+      },
+      "context": {
+        "passed": 92,
+        "total": 104,
+        "percent": 88.5
+      },
+      "condition": {
+        "passed": 45,
+        "total": 45,
+        "percent": 100
+      },
+      "rejection": {
+        "passed": 20,
+        "total": 22,
+        "percent": 90.9
+      },
+      "unsupported": {
+        "passed": 0,
+        "total": 13,
+        "percent": 0
+      },
+      "clarificationWhenNeeded": {
+        "passed": 3,
+        "total": 17,
+        "percent": 17.6
+      }
+    },
+    "after": {
+      "overall": {
+        "passed": 145,
+        "total": 159,
+        "percent": 91.2
+      },
+      "firmTurns": {
+        "passed": 106,
+        "total": 116,
+        "percent": 91.4
+      },
+      "conversations": {
+        "passed": 35,
+        "total": 40,
+        "percent": 87.5
+      },
+      "unsupported": {
+        "passed": 13,
+        "total": 13,
+        "percent": 100
+      }
+    },
+    "regressedTurns": []
+  },
+  "interpretedReview": {
+    "turns": {
+      "passed": 159,
+      "total": 159,
+      "percent": 100
+    },
+    "scenarios": {
+      "passed": 40,
+      "total": 40,
+      "percent": 100
+    },
+    "kidsCafeScenarioLabelWaived": 3,
+    "kidsCafeLabels": [
+      {
+        "id": "S08#1",
+        "scenario": "generic",
+        "withKids": true
+      },
+      {
+        "id": "S15#1",
+        "scenario": "generic",
+        "withKids": true
+      },
+      {
+        "id": "S33#1",
+        "scenario": "generic",
+        "withKids": true
+      }
+    ],
+    "stillFailing": []
+  },
+  "heldout": {
+    "turns": {
+      "passed": 50,
+      "total": 55,
+      "percent": 90.9
+    },
+    "scenarios": {
+      "passed": 17,
+      "total": 22,
+      "percent": 77.3
+    }
+  },
+  "heldoutFailures": [
+    {
+      "scenarioId": "H01",
+      "title": "예약 시각을 말한 뒤 다시 장소만 요청",
+      "turnIndex": 3,
+      "utterance": "그럼 그냥 다른 식당",
+      "passed": false,
+      "failed": [
+        "exclude:r1",
+        "exclude:r2"
+      ],
+      "actualClass": "search",
+      "actualTopic": null,
+      "hold": false,
+      "category": "FOOD",
+      "scenario": "generic",
+      "withKids": false,
+      "prompt": ""
+    },
+    {
+      "scenarioId": "H04",
+      "title": "대기와 혼잡을 식당 재검색으로 바꾸지 않음",
+      "turnIndex": 3,
+      "utterance": "지금 사람 많아?",
+      "passed": false,
+      "failed": [
+        "class",
+        "topic",
+        "hold"
+      ],
+      "actualClass": "search",
+      "actualTopic": null,
+      "hold": false,
+      "category": "ACTIVITY",
+      "scenario": "generic",
+      "withKids": true,
+      "prompt": ""
+    },
+    {
+      "scenarioId": "H11",
+      "title": "영어 메뉴 유무를 단정하지 않음",
+      "turnIndex": 2,
+      "utterance": "메뉴가 영어로 돼 있어?",
+      "passed": false,
+      "failed": [
+        "class",
+        "topic",
+        "hold",
+        "prompt_missing:영어"
+      ],
+      "actualClass": "search",
+      "actualTopic": null,
+      "hold": false,
+      "category": "CAFE",
+      "scenario": "generic",
+      "withKids": false,
+      "prompt": ""
+    },
+    {
+      "scenarioId": "H18",
+      "title": "테이블 요청은 완료로 안내하지 않음",
+      "turnIndex": 2,
+      "utterance": "테이블 좀 잡아 줄래",
+      "passed": false,
+      "failed": [
+        "class",
+        "topic",
+        "hold"
+      ],
+      "actualClass": "search",
+      "actualTopic": null,
+      "hold": false,
+      "category": "FOOD",
+      "scenario": "generic",
+      "withKids": false,
+      "prompt": ""
+    },
+    {
+      "scenarioId": "H19",
+      "title": "문 닫기 전에는 영업 데이터 없이 거르지 않음",
+      "turnIndex": 2,
+      "utterance": "문 닫기 전에 갈 수 있는 곳",
+      "passed": false,
+      "failed": [
+        "class",
+        "topic",
+        "hold"
+      ],
+      "actualClass": "search",
+      "actualTopic": null,
+      "hold": false,
+      "category": "FOOD",
+      "scenario": "generic",
+      "withKids": false,
+      "prompt": ""
+    }
+  ]
+}
