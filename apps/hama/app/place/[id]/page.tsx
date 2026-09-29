@@ -15,6 +15,12 @@ import { parseScenarioIntent } from "@/lib/scenarioEngine/parseScenarioIntent";
 import { analyticsFromScenario, mergeLogPayload } from "@/lib/analytics/buildLogPayload";
 import { openPlace } from "@/lib/openPlace";
 import {
+  kakaoPlaceButtonLabel,
+  naverPlaceButtonLabel,
+  resolveKakaoPlaceLink,
+  resolveNaverPlaceLink,
+} from "@/lib/placeExternalUrl";
+import {
   buildRecommendationBullets,
   buildRecommendationReason,
   getClientTimeOfDay,
@@ -191,6 +197,8 @@ export default function PlaceDetailPage() {
     ? getReservationPreviewForStore(card.id, card.category)
     : null;
   const hamaPayEnabled = ENABLE_HAMA_PAY_UI && card.hama_pay_enabled === true;
+  const naverPlaceLink = resolveNaverPlaceLink(card);
+  const kakaoPlaceLink = resolveKakaoPlaceLink(card);
 
   const goReserve = () => {
     if (!SHOW_RESERVATION_UI) return;
@@ -686,7 +694,9 @@ export default function PlaceDetailPage() {
           </button>
           <button
             type="button"
+            disabled={!naverPlaceLink}
             onClick={() => {
+              if (!naverPlaceLink) return;
               logEvent(
                 HamaEvents.external_place_open,
                 mergeLogPayload(analyticsFromScenario(null), {
@@ -705,15 +715,18 @@ export default function PlaceDetailPage() {
               background: colors.bgSurface,
               fontWeight: 700,
               fontSize: 13,
-              cursor: "pointer",
+              cursor: naverPlaceLink ? "pointer" : "not-allowed",
               color: colors.textSecondary,
+              opacity: naverPlaceLink ? 1 : 0.45,
             }}
           >
-            네이버에서 보기
+            {naverPlaceButtonLabel(naverPlaceLink)}
           </button>
           <button
             type="button"
+            disabled={!kakaoPlaceLink}
             onClick={() => {
+              if (!kakaoPlaceLink) return;
               logEvent(
                 HamaEvents.external_place_open,
                 mergeLogPayload(analyticsFromScenario(null), {
@@ -732,11 +745,12 @@ export default function PlaceDetailPage() {
               background: colors.bgSurface,
               fontWeight: 700,
               fontSize: 13,
-              cursor: "pointer",
+              cursor: kakaoPlaceLink ? "pointer" : "not-allowed",
               color: colors.textSecondary,
+              opacity: kakaoPlaceLink ? 1 : 0.45,
             }}
           >
-            카카오맵에서 보기
+            {kakaoPlaceButtonLabel(kakaoPlaceLink)}
           </button>
         </div>
 

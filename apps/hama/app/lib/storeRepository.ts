@@ -54,6 +54,7 @@ export type StoreRow = {
   cover_image_url?: string | null;
 
   kakao_place_url: string | null;
+  naver_place_url?: string | null;
   naver_place_id: string | null;
 
   mood: string[] | null;
@@ -139,6 +140,7 @@ export function toHomeCard(row: StoreRow): HomeCard {
     imageUrl: safeImage,
 
     kakao_place_url: row.kakao_place_url ?? null,
+    naver_place_url: row.naver_place_url ?? null,
     naver_place_id: row.naver_place_id ?? null,
 
     mood: row.mood ?? [],
@@ -231,6 +233,7 @@ const STORES_HOME_CARD_SELECT = `
       phone,
       image_url,
       kakao_place_url,
+      naver_place_url,
       naver_place_id,
       mood,
       tags,
@@ -756,6 +759,7 @@ export async function fetchNearbyStores(options: FetchNearbyOptions): Promise<Ho
       phone,
       image_url,
       kakao_place_url,
+      naver_place_url,
       naver_place_id,
       mood,
       tags,

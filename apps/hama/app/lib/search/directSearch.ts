@@ -120,6 +120,7 @@ export async function fetchDirectSearchStoreRows(query: string): Promise<CardFet
     phone: c.phone ?? null,
     image_url: c.image_url ?? c.imageUrl ?? null,
     kakao_place_url: c.kakao_place_url ?? null,
+    naver_place_url: c.naver_place_url ?? null,
     naver_place_id: c.naver_place_id ?? null,
     mood: c.mood ?? null,
     tags: c.tags ?? null,

@@ -3,29 +3,12 @@
 
 import React from "react";
 import type { HomeCard } from "@/lib/storeTypes";
+import { directExternalPlaceUrl } from "@/lib/placeExternalUrl";
 
 type Props = {
   items: HomeCard[];
   onSelect?: (card: HomeCard) => void;
 };
-
-function getNaverMobilePlaceUrl(card: HomeCard): string | null {
-  const id = (card as any)?.naver_place_id as string | undefined | null;
-  if (!id) return null;
-  return `https://m.place.naver.com/place/${id}`;
-}
-
-function getExternalPlaceUrl(card: HomeCard): string | null {
-  // 1) 네이버 place id가 있으면 네이버 "모바일 place"로 (오른쪽 스샷 형태에 제일 가까움)
-  const naverUrl = getNaverMobilePlaceUrl(card);
-  if (naverUrl) return naverUrl;
-
-  // 2) 없으면 DB에 있는 링크(카카오/네이버 me 등) 사용
-  const kakaoOrEtc = (card as any)?.kakao_place_url as string | undefined | null;
-  if (kakaoOrEtc) return kakaoOrEtc;
-
-  return null;
-}
 
 export default function SearchResultList({ items, onSelect }: Props) {
   if (!items || items.length === 0) {
@@ -62,7 +45,7 @@ export default function SearchResultList({ items, onSelect }: Props) {
           onSelect?.(p);
 
           // 2) 외부로도 열고 싶으면(원하면 이 줄만 살려)
-          const url = getExternalPlaceUrl(p);
+          const url = directExternalPlaceUrl(p);
           if (url) window.open(url, "_blank", "noopener,noreferrer");
         };
 

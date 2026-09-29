@@ -27,6 +27,7 @@ export function snapshotHomeCardForCourse(p: HomeCard): HomeCard {
     reservation_required: p.reservation_required,
     price_level: p.price_level,
     kakao_place_url: p.kakao_place_url,
+    naver_place_url: p.naver_place_url ?? null,
     naver_place_id: p.naver_place_id,
     placeUrl: p.placeUrl,
   };

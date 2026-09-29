@@ -4,7 +4,8 @@
 import React from "react";
 import type { HomeCard } from "@/lib/storeTypes";
 import { openNaverPlace } from "@/lib/openNaverPlace";
-import { openDirections } from "@/lib/openDirections"; // 이미 너 프로젝트에 있던 걸로 보임
+import { openDirections } from "@/lib/openDirections";
+import { naverPlaceButtonLabel, resolveNaverPlaceLink } from "@/lib/placeExternalUrl";
 
 type Props = {
   card: HomeCard;
@@ -33,7 +34,7 @@ export default function CardActionButtons({ card }: Props) {
         onClick={() => openNaverPlace(card)}
         style={btnStyle}
       >
-        네이버로 보기
+        {naverPlaceButtonLabel(resolveNaverPlaceLink(card))}
       </button>
     </div>
   );

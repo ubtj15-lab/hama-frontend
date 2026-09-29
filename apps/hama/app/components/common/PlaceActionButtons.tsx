@@ -4,6 +4,12 @@ import React from "react";
 import { openNaverPlace } from "@/lib/openNaverPlace";
 import { openKakaoPlace } from "@/lib/openKakaoPlace";
 import type { HomeCard } from "@/lib/storeTypes";
+import {
+  kakaoPlaceButtonLabel,
+  naverPlaceButtonLabel,
+  resolveKakaoPlaceLink,
+  resolveNaverPlaceLink,
+} from "@/lib/placeExternalUrl";
 
 type Props = {
   card: HomeCard;
@@ -11,36 +17,17 @@ type Props = {
 };
 
 export default function PlaceActionButtons({ card }: Props) {
-  const anyCard = card as any;
+  const naverLink = resolveNaverPlaceLink(card);
+  const kakaoLink = resolveKakaoPlaceLink(card);
 
-  // ✅ DB/모델이 섞여있어도 안전하게 받기
-  const name = String(anyCard?.name ?? "").trim();
-
-  const naverPlaceId = String(anyCard?.naver_place_id ?? anyCard?.naverPlaceId ?? "").trim();
-  const naverPlaceUrl = String(anyCard?.naver_place_url ?? anyCard?.naverPlaceUrl ?? "").trim();
-
-  const kakaoPlaceUrl = String(anyCard?.kakao_place_url ?? anyCard?.kakaoPlaceUrl ?? "").trim();
-
-  const hasNaver = !!naverPlaceUrl || !!naverPlaceId;
-  const hasKakao = !!kakaoPlaceUrl;
-
-  // ✅ 둘 다 없으면 아예 숨김(UX 원칙)
-  if (!hasNaver && !hasKakao) return null;
+  if (!naverLink && !kakaoLink) return null;
 
   return (
     <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-      {hasNaver && (
+      {naverLink ? (
         <button
           type="button"
-          onClick={() => {
-            // 1) URL 있으면 URL 우선(네이버 me 링크 등)
-            if (naverPlaceUrl) {
-              window.open(naverPlaceUrl, "_blank", "noopener,noreferrer");
-              return;
-            }
-            // 2) 없으면 placeId로 상세 시도 → fallback 검색
-            openNaverPlace({ name, naverPlaceId: naverPlaceId || null });
-          }}
+          onClick={() => openNaverPlace(card)}
           style={{
             flex: 1,
             height: 44,
@@ -52,16 +39,14 @@ export default function PlaceActionButtons({ card }: Props) {
             cursor: "pointer",
           }}
         >
-          네이버에서 보기
+          {naverPlaceButtonLabel(naverLink)}
         </button>
-      )}
+      ) : null}
 
-      {hasKakao && (
+      {kakaoLink ? (
         <button
           type="button"
-          onClick={() => {
-            openKakaoPlace({ name, kakaoPlaceUrl: kakaoPlaceUrl || null });
-          }}
+          onClick={() => openKakaoPlace(card)}
           style={{
             flex: 1,
             height: 44,
@@ -73,9 +58,9 @@ export default function PlaceActionButtons({ card }: Props) {
             cursor: "pointer",
           }}
         >
-          카카오맵에서 보기
+          {kakaoPlaceButtonLabel(kakaoLink)}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -18,6 +18,7 @@ type ApiStoreLoose = {
   image_url?: any;
 
   kakao_place_url?: any;
+  naver_place_url?: any;
   naver_place_id?: any;
 
   mood?: any;
@@ -54,6 +55,7 @@ function normalizeStoreRow(x: ApiStoreLoose) {
     image_url: x?.image_url != null ? String(x.image_url) : null,
 
     kakao_place_url: x?.kakao_place_url != null ? String(x.kakao_place_url) : null,
+    naver_place_url: x?.naver_place_url != null ? String(x.naver_place_url) : null,
     naver_place_id: x?.naver_place_id != null ? String(x.naver_place_id) : null,
 
     mood: Array.isArray(x?.mood) ? x.mood.map(String) : [],

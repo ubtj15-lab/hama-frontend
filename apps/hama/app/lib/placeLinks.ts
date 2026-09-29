@@ -1,33 +1,33 @@
 // app/lib/placeLinks.ts
 import type { HomeCard } from "@/lib/storeTypes";
+import { resolveKakaoPlaceLink, resolveNaverPlaceLink } from "@/lib/placeExternalUrl";
 
 function cleanName(name: string) {
   return String(name ?? "").trim();
 }
 
-// ✅ 네이버 모바일 place (id 있을 때 제일 깔끔)
+// 확인된 네이버 장소 페이지만 반환한다. 검색 주소는 포함하지 않는다.
 export function buildNaverPlaceUrl(card: HomeCard): string | null {
-  const anyCard = card as any;
-  const id = String(anyCard?.naver_place_id ?? "").trim();
-  if (!id) return null;
-  return `https://m.place.naver.com/place/${id}`;
+  const link = resolveNaverPlaceLink(card);
+  return link?.mode === "direct" ? link.url : null;
 }
 
-// ✅ 네이버 검색 fallback
-export function buildNaverSearchUrl(card: HomeCard, action?: "예약" | "평점" | "메뉴"): string {
+// 네이버 검색. 결과 목록이지 확인된 매장 페이지가 아니다.
+export function buildNaverSearchUrl(card: HomeCard, action?: "예약" | "평점" | "메뉴"): string | null {
   const name = cleanName((card as any)?.name);
+  const address = cleanName((card as any)?.address);
   const suffix =
     action === "예약" ? " 예약" : action === "평점" ? " 리뷰" : action === "메뉴" ? " 메뉴" : "";
-  const q = `${name}${suffix}`.trim();
-  return `https://m.search.naver.com/search.naver?query=${encodeURIComponent(q)}`;
+  const q = `${[name, address].filter(Boolean).join(" ")}${suffix}`.trim();
+  if (!q) return null;
+  const link = resolveNaverPlaceLink({ name: q });
+  return link?.mode === "search" ? link.url : null;
 }
 
-// ✅ 카카오 place url (DB에 있는 경우)
+// 카카오 공식 도메인만 반환한다. 네이버 주소가 들어 있으면 null이다.
 export function buildKakaoPlaceUrl(card: HomeCard): string | null {
-  const anyCard = card as any;
-  const url = String(anyCard?.kakao_place_url ?? "").trim();
-  if (!url) return null;
-  return url;
+  const link = resolveKakaoPlaceLink(card);
+  return link?.mode === "direct" ? link.url : null;
 }
 
 // ✅ 길안내 (카카오맵 / 네이버지도)
