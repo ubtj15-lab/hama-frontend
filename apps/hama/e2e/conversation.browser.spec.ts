@@ -922,9 +922,13 @@ test("opens a place panel over the third question and returns to the same card",
   await expect(turns).toHaveCount(3);
   const third = turns.nth(2);
   const deck = third.locator("[data-hama-swipe='play']");
-  await expect.poll(async () => Number((await deck.getAttribute("data-hama-card-count")) ?? "0")).toBeGreaterThan(1);
-  await deck.getByRole("button", { name: "다음 추천" }).click();
-  await expect(deck).toHaveAttribute("data-hama-card-index", "1");
+  await expect.poll(async () => Number((await deck.getAttribute("data-hama-card-count")) ?? "0")).toBeGreaterThan(0);
+  const count = Number(await deck.getAttribute("data-hama-card-count"));
+  if (count > 1) {
+    await deck.getByRole("button", { name: "다음 추천" }).click();
+    await expect(deck).toHaveAttribute("data-hama-card-index", "1");
+  }
+  const selectedIndex = (await deck.getAttribute("data-hama-card-index")) ?? "0";
   const selectedFace = deck.locator("[data-hama-place-id]");
   const selectedId = await selectedFace.getAttribute("data-hama-place-id");
   expect(selectedId).toBeTruthy();
@@ -953,7 +957,7 @@ test("opens a place panel over the third question and returns to the same card",
 
   await page.getByRole("button", { name: "닫기" }).click();
   await expect(panel).toHaveCount(0);
-  await expect(deck).toHaveAttribute("data-hama-card-index", "1");
+  await expect(deck).toHaveAttribute("data-hama-card-index", selectedIndex);
   await expect(deck.locator("[data-hama-place-id]")).toHaveAttribute("data-hama-place-id", selectedId!);
   await expect.poll(() => scroller.evaluate((element, before) => Math.abs(element.scrollTop - before), scrollBefore)).toBeLessThan(40);
   expect(outcomeLogs().length).toBe(outcomesBefore);
@@ -961,7 +965,7 @@ test("opens a place panel over the third question and returns to the same card",
 
   await ask(page, "오산에서 조용한 카페 찾아줘");
   await expect(page.locator("[data-hama-turn]")).toHaveCount(4);
-  await expect(page.locator("[data-hama-turn]").nth(2).locator("[data-hama-swipe='play']")).toHaveAttribute("data-hama-card-index", "1");
+  await expect(page.locator("[data-hama-turn]").nth(2).locator("[data-hama-swipe='play']")).toHaveAttribute("data-hama-card-index", selectedIndex);
   await expect(page.locator("[data-hama-turn]").nth(3)).toContainText("오산 조용한 카페");
 });
 
@@ -997,23 +1001,55 @@ test("refreshes the current deck without repeating shown places or the turn outc
 
   const again = deck.getByRole("button", { name: "다시 찾기" });
   await again.click();
-  await expect.poll(async () => ((await turn.getAttribute("data-hama-play-ids")) ?? "").split("|").filter(Boolean).join("|")).not.toBe(firstIds.join("|"));
-  await expect(deck).toHaveAttribute("data-hama-card-index", "0");
-  await expect(turn.locator(".hama-assistant-line")).toHaveText(answer);
+  await expect.poll(async () => {
+    const note = await turn.locator("[data-hama-refresh-empty]").count();
+    const ids = ((await turn.getAttribute("data-hama-play-ids")) ?? "").split("|").filter(Boolean).join("|");
+    if (note > 0) return "empty";
+    if (ids && ids !== firstIds.join("|")) return ids;
+    return "";
+  }).not.toBe("");
   const nextIds = ((await turn.getAttribute("data-hama-play-ids")) ?? "").split("|").filter(Boolean);
-  expect(nextIds.length).toBeGreaterThan(0);
   expect(nextIds.length).toBeLessThanOrEqual(3);
   for (const id of nextIds) expect(firstIds).not.toContain(id);
+  if (nextIds.length === 0) {
+    await expect(turn.locator("[data-hama-refresh-empty]")).toHaveText("조건에 맞는 다른 장소를 찾지 못했어요.");
+  } else {
+    await expect(deck).toHaveAttribute("data-hama-card-index", "0");
+  }
+  const refreshed = await turn.locator(".hama-assistant-line").innerText();
+  expect(refreshed).not.toBe(answer);
+  const placeNames: Record<string, string> = {
+    "play-dongtan-1": "동탄 키즈플레이",
+    "play-dongtan-2": "동탄 실내놀이터",
+    "food-dongtan-1": "동탄 아이밥집",
+    "food-dongtan-2": "동탄 가족식당",
+    "cafe-first": "첫검색 카페",
+    "cafe-osan": "오산 조용한 카페",
+  };
+  const categoryOf = (id: string) => (id.startsWith("play-") ? "activity" : id.startsWith("food-") ? "restaurant" : "cafe");
+  const firstCategories = new Set(firstIds.map(categoryOf));
+  for (const id of nextIds) expect(firstCategories.has(categoryOf(id))).toBe(true);
+  for (const id of firstIds) {
+    if (!nextIds.includes(id)) expect(refreshed).not.toContain(placeNames[id] ?? id);
+  }
+  for (const id of nextIds) expect(refreshed).toContain(placeNames[id] ?? id);
   expect(outcomeLogs().length).toBe(outcomesBefore);
   await page.screenshot({ path: `${shotDir}/mobile-again.png` });
 
   await ask(page, "그 근처에 밥 먹을 곳도 있어?");
   await expect(page.locator("[data-hama-turn]")).toHaveCount(2);
   const previous = page.locator("[data-hama-turn]").nth(0);
+  const meal = page.locator("[data-hama-turn]").nth(1);
   await expect(previous).toHaveAttribute("data-hama-play-ids", nextIds.join("|"));
-  await expect(previous.locator("[data-hama-swipe='play']")).toHaveAttribute("data-hama-card-index", "0");
+  if (nextIds.length > 0) {
+    await expect(previous.locator("[data-hama-swipe='play']")).toHaveAttribute("data-hama-card-index", "0");
+  }
   await expect(previous.locator("[data-hama-find-again]")).toHaveCount(0);
-  await expect.poll(async () => (await page.locator("[data-hama-turn]").nth(1).getAttribute("data-hama-food-ids")) ?? "").not.toBe("");
+  await expect.poll(async () => (await meal.getAttribute("data-hama-food-ids")) ?? "").not.toBe("");
+  const mealPlay = ((await meal.getAttribute("data-hama-play-ids")) ?? "").split("|").filter(Boolean);
+  const mealFood = ((await meal.getAttribute("data-hama-food-ids")) ?? "").split("|").filter(Boolean);
+  for (const id of mealFood) expect(mealPlay).not.toContain(id);
+  for (const id of mealPlay) expect(categoryOf(id)).not.toBe("restaurant");
   await expect.poll(() => outcomeLogs().length).toBe(outcomesBefore + 1);
 });
 
@@ -1048,4 +1084,207 @@ test("says when another refresh has no new place and ignores a second click", as
   refreshGate = null;
   await expect(turn.locator("[data-hama-refresh-empty]")).toHaveText("조건에 맞는 다른 장소를 찾지 못했어요.");
   await expect(deck).toHaveCount(0);
+});
+
+const CAFE_IDS = ["cafe-first", "cafe-osan"];
+const FOOD_IDS = ["food-dongtan-1", "food-dongtan-2"];
+const PLAY_IDS = ["play-dongtan-1", "play-dongtan-2"];
+
+async function shownIds(turn: ReturnType<typeof currentTurn>, kind: "play" | "food") {
+  const raw = (await turn.getAttribute(kind === "play" ? "data-hama-play-ids" : "data-hama-food-ids")) ?? "";
+  return raw.split("|").filter(Boolean);
+}
+
+test("cafe and restaurant follow-ups stay in category and do not rename old cards", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  await page.goto("/");
+
+  await ask(page, "동탄에서 카페 찾아줘");
+  const cafe = currentTurn(page);
+  await expect.poll(async () => (await shownIds(cafe, "play")).join("|")).toBe("cafe-first");
+  await expect(cafe.locator(".hama-assistant-line")).toContainText("첫검색 카페");
+  const outcomes = outcomeLogs().length;
+  const turns = await page.locator("[data-hama-turn]").count();
+
+  await cafe.locator("[data-hama-find-again]").click();
+  await expect(cafe.locator("[data-hama-refresh-empty]")).toHaveText("조건에 맞는 다른 장소를 찾지 못했어요.");
+  await expect.poll(async () => (await shownIds(cafe, "play")).join("|")).toBe("");
+  await expect(cafe.locator(".hama-assistant-line")).not.toContainText("첫검색 카페");
+  await expect(cafe.locator(".hama-assistant-line")).not.toContainText("동탄 가족식당");
+  await expect(cafe.locator(".hama-assistant-line")).not.toContainText("동탄 실내놀이터");
+  expect(outcomeLogs().length).toBe(outcomes);
+  await expect(page.locator("[data-hama-turn]")).toHaveCount(turns);
+
+  await ask(page, "근처 식당도 찾아줘");
+  const meal = currentTurn(page);
+  await expect.poll(async () => (await shownIds(meal, "play")).join("|")).toBe("cafe-first");
+  await expect.poll(async () => shownIds(meal, "food")).not.toEqual([]);
+  const mealFood = await shownIds(meal, "food");
+  expect(mealFood.every((id) => FOOD_IDS.includes(id))).toBe(true);
+  expect(mealFood).not.toContain("cafe-first");
+  const mealText = await meal.locator(".hama-assistant-line").innerText();
+  expect(mealText).toContain("첫검색 카페");
+  expect(mealText).not.toContain("첫 놀이 장소");
+  expect(mealText).not.toContain("동탄 실내놀이터");
+  for (const name of ["동탄 아이밥집", "동탄 가족식당"]) {
+    if (mealFood.includes(name === "동탄 아이밥집" ? "food-dongtan-1" : "food-dongtan-2")) {
+      expect(mealText).toContain(name);
+    }
+  }
+});
+
+test("play and restaurant replacements do not bring back excluded or other-category cards", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installMocks(page);
+  await page.goto("/");
+
+  await ask(page, "동탄에서 아이들이랑 놀 곳 찾아줘");
+  const play = currentTurn(page);
+  await expect.poll(async () => shownIds(play, "play")).not.toEqual([]);
+  const firstPlay = await shownIds(play, "play");
+  expect(firstPlay.every((id) => PLAY_IDS.includes(id))).toBe(true);
+
+  await ask(page, "비 오니까 실내로");
+  const indoor = currentTurn(page);
+  await expect.poll(async () => shownIds(indoor, "play")).not.toEqual([]);
+  const indoorIds = await shownIds(indoor, "play");
+  expect(indoorIds.every((id) => PLAY_IDS.includes(id))).toBe(true);
+
+  await ask(page, "다른 곳 보여줘");
+  const other = currentTurn(page);
+  await expect.poll(async () => other.locator(".hama-assistant-line").innerText()).not.toBe("");
+  const otherIds = await shownIds(other, "play");
+  expect(otherIds.every((id) => PLAY_IDS.includes(id) && !indoorIds.includes(id) && !CAFE_IDS.includes(id) && !FOOD_IDS.includes(id))).toBe(true);
+  const otherText = await other.locator(".hama-assistant-line").innerText();
+  if (otherIds.includes("play-dongtan-2")) {
+    expect(otherText).not.toContain("앞에서 보여 드린 곳은 빼 두었어요");
+  }
+  if (!otherIds.length) {
+    expect(otherText).not.toContain("동탄 실내놀이터");
+    expect(otherText).not.toContain("동탄 키즈플레이");
+  }
+
+  await page.goto("/");
+  await ask(page, "동탄에서 식당 찾아줘");
+  const food = currentTurn(page);
+  await expect.poll(async () => shownIds(food, "play")).not.toEqual([]);
+  const firstFood = await shownIds(food, "play");
+  expect(firstFood.every((id) => FOOD_IDS.includes(id))).toBe(true);
+  const foodNames = firstFood.map((id) => (id === "food-dongtan-1" ? "동탄 아이밥집" : "동탄 가족식당"));
+
+  await ask(page, "그럼 다른 식당 보여줘");
+  const nextFood = currentTurn(page);
+  await expect.poll(async () => nextFood.locator(".hama-assistant-line").innerText()).not.toBe("");
+  const nextFoodIds = await shownIds(nextFood, "play");
+  expect(nextFoodIds.every((id) => FOOD_IDS.includes(id) && !firstFood.includes(id))).toBe(true);
+  expect(nextFoodIds.some((id) => CAFE_IDS.includes(id) || PLAY_IDS.includes(id))).toBe(false);
+  const nextFoodText = await nextFood.locator(".hama-assistant-line").innerText();
+  if (nextFoodIds.some((id) => firstFood.includes(id))) {
+    expect(nextFoodText).not.toContain("앞에서 보여 드린 곳은 빼 두었어요");
+  }
+  if (!nextFoodIds.length) {
+    for (const name of foodNames) expect(nextFoodText).not.toContain(name);
+  }
+});
+
+async function paintDemoBanner(page: Page) {
+  await page.addInitScript(() => {
+    const paint = () => {
+      const header = document.querySelector("header");
+      if (!header) return;
+      let bar = document.querySelector("[data-hama-demo-banner]") as HTMLElement | null;
+      if (!bar) {
+        bar = document.createElement("div");
+        bar.setAttribute("data-hama-demo-banner", "");
+        bar.textContent = "시연 화면 · 모의 매장";
+        bar.style.cssText = [
+          "flex:0 0 auto",
+          "width:100%",
+          "box-sizing:border-box",
+          "margin:8px 0 0",
+          "padding:5px 8px",
+          "background:#E7F0EB",
+          "color:#19584A",
+          "font:600 12px/1.35 sans-serif",
+          "text-align:center",
+          "border-radius:8px",
+        ].join(";");
+      }
+      if (bar.previousElementSibling !== header) header.insertAdjacentElement("afterend", bar);
+    };
+    const start = () => {
+      paint();
+      new MutationObserver(paint).observe(document.documentElement, { childList: true, subtree: true });
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+    else start();
+  });
+}
+
+async function visibleOverlap(page: Page, target: string, cover: string) {
+  return page.evaluate(({ target, cover }) => {
+    const clip = (rect: DOMRect, frame: DOMRect) => {
+      const top = Math.max(rect.top, frame.top);
+      const bottom = Math.min(rect.bottom, frame.bottom);
+      const left = Math.max(rect.left, frame.left);
+      const right = Math.min(rect.right, frame.right);
+      if (bottom - top < 1 || right - left < 1) return null;
+      return { top, bottom, left, right };
+    };
+    const hits = (a: { top: number; bottom: number; left: number; right: number }, b: DOMRect) =>
+      a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    const frame = document.querySelector("[data-hama-conversation-scroll]")?.getBoundingClientRect();
+    const coverBox = document.querySelector(cover)?.getBoundingClientRect();
+    if (!frame || !coverBox) return false;
+    return [...document.querySelectorAll(target)].some((node) => {
+      const box = clip(node.getBoundingClientRect(), frame);
+      return box ? hits(box, coverBox) : false;
+    });
+  }, { target, cover });
+}
+
+test("mobile chrome keeps the latest message and card actions uncovered", async ({ page }) => {
+  const shotDir = "C:/Users/ubtj1/AppData/Local/Temp/hama-manual-demo/after";
+  mkdirSync(shotDir, { recursive: true });
+  for (const viewport of [
+    { width: 390, height: 844, name: "390" },
+    { width: 430, height: 900, name: "430" },
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await installMocks(page);
+    await paintDemoBanner(page);
+    await page.goto("/");
+    await ask(page, "동탄에서 아이들이랑 놀 곳 찾아줘");
+    await ask(page, "비 오니까 실내로");
+    await ask(page, "다른 곳 보여줘");
+    await ask(page, "동탄에서 카페 찾아줘");
+    const cafe = currentTurn(page);
+    await expect.poll(async () => (await shownIds(cafe, "play")).join("|")).toBe("cafe-first");
+    const scroller = page.locator("[data-hama-conversation-scroll]");
+    const beforeScroll = await scroller.evaluate((element) => element.scrollTop);
+    await scroller.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await expect.poll(async () => scroller.evaluate((element) => element.scrollTop)).toBeLessThan(beforeScroll + 5);
+    await page.locator("[data-hama-jump-latest]").click();
+    const user = cafe.locator(".hama-user-line");
+    await expect(user).toBeVisible();
+    expect(await visibleOverlap(page, ".hama-turn-current .hama-user-line", "[data-hama-demo-banner]")).toBe(false);
+    expect(await visibleOverlap(page, "[data-hama-jump-latest]", ".hama-swipe-actions, [data-hama-find-again]")).toBe(false);
+
+    await cafe.locator("[data-hama-find-again]").click();
+    await expect(cafe.locator("[data-hama-refresh-empty]")).toBeVisible();
+    expect(await page.evaluate(() => {
+      const banner = document.querySelector("[data-hama-demo-banner]")?.getBoundingClientRect();
+      const frame = document.querySelector("[data-hama-conversation-scroll]")?.getBoundingClientRect();
+      return Boolean(banner && frame && frame.top >= banner.bottom - 1);
+    })).toBe(true);
+    expect(await visibleOverlap(page, ".hama-turn-current .hama-user-line", "[data-hama-demo-banner]")).toBe(false);
+    await scroller.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    expect(await visibleOverlap(page, "[data-hama-refresh-empty], .hama-assistant-line", "form")).toBe(false);
+    await page.screenshot({ path: `${shotDir}/mobile-${viewport.name}.png` });
+  }
 });

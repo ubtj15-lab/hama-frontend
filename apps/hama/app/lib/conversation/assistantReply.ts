@@ -54,7 +54,7 @@ export function composeAssistantReply(input: {
   const foodLine = !input.linkedFoodKeptSeparate
     ? ""
     : input.foodNearNeedsAnchor
-      ? " 가까운 식당의 거리를 보려면 놀이 장소 하나를 기준으로 골라 주세요."
+      ? " 가까운 식당의 거리를 보려면 보여 드린 장소 하나를 기준으로 골라 주세요."
       : foodNames.length
         ? ` 식사 쪽은 이 순서로 골랐어요: ${foodNames.join(", ")}.${input.foodAnchorNote ?? ""}`
         : input.suppressEmptyFoodResult

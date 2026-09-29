@@ -41,7 +41,7 @@ export function LinkedFoodGroup({
       <h2 style={{ margin: "0 0 8px", fontSize: 16, color: colors.textPrimary }}>식사</h2>
       {anchorName ? (
         <p style={{ margin: "0 0 8px", fontSize: 13, lineHeight: 1.45, color: colors.textSecondary }}>
-          {provisional ? `임시 기준은 첫 놀이 장소인 ${anchorName}예요. ` : `거리 기준은 ${anchorName}예요. `}
+          {provisional ? `임시 기준은 ${anchorName}예요. ` : `거리 기준은 ${anchorName}예요. `}
           표시된 거리는 직선거리이고, 실제 이동시간이 아닙니다.
         </p>
       ) : null}

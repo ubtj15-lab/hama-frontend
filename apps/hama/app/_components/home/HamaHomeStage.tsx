@@ -250,6 +250,24 @@ export function HamaHomeComposer({ onSubmit, onNewConversation, onOpenCalendar }
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => {
+    const node = formRef.current;
+    if (!node) return;
+    const publish = () => {
+      const reserve = window.innerHeight - node.getBoundingClientRect().top + 24;
+      document.documentElement.style.setProperty("--hama-composer-space", `${Math.ceil(reserve)}px`);
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+    window.addEventListener("resize", publish);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", publish);
+    };
+  }, [menuOpen]);
+
   const submit = () => {
     const text = value.trim();
     if (!text) return;
@@ -310,6 +328,7 @@ export function HamaHomeComposer({ onSubmit, onNewConversation, onOpenCalendar }
         </div>
       ) : null}
     <form
+      ref={formRef}
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -317,7 +336,7 @@ export function HamaHomeComposer({ onSubmit, onNewConversation, onOpenCalendar }
       style={{
         position: "fixed",
         left: "50%",
-        bottom: 12,
+        bottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
         transform: "translateX(-50%)",
         width: "min(430px, calc(100% - 24px))",
         zIndex: 30,

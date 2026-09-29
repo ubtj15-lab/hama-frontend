@@ -245,7 +245,7 @@ function HomePageContent({ isLoggedIn, meUser, loginFailReason }: HomePageConten
   return (
     <main
       style={{
-        height: "100vh",
+        height: "100dvh",
         overflow: "hidden",
         background: HAMA_HOME_IVORY,
         color: HAMA_HOME_GREEN,
@@ -258,7 +258,7 @@ function HomePageContent({ isLoggedIn, meUser, loginFailReason }: HomePageConten
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          padding: "22px 20px 0",
+          padding: "calc(12px + env(safe-area-inset-top, 0px)) 20px 0",
           boxSizing: "border-box",
         }}
       >

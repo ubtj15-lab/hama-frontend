@@ -136,10 +136,15 @@ export function HamaConversationView({
     const element = scrollerRef.current;
     if (!element) return;
     const onScroll = () => {
+      const line = element.querySelector(".hama-turn-current .hama-user-line");
+      const frame = element.getBoundingClientRect();
+      const lineVisible = line instanceof HTMLElement
+        ? line.getBoundingClientRect().bottom > frame.top + 8 && line.getBoundingClientRect().top < frame.bottom - 8
+        : false;
       const nearBottom = distanceFromBottom(element) <= PIN_THRESHOLD;
-      followingRef.current = nearBottom;
+      followingRef.current = nearBottom || lineVisible;
       publish(element.scrollTop);
-      setShowJump(element.scrollHeight > element.clientHeight + 8 && !nearBottom);
+      setShowJump(!nearBottom && !lineVisible && element.scrollHeight > element.clientHeight + 8);
     };
     element.addEventListener("scroll", onScroll, { passive: true });
     return () => element.removeEventListener("scroll", onScroll);
@@ -162,7 +167,12 @@ export function HamaConversationView({
       return;
     }
     if (!followingRef.current) {
-      setShowJump(element.scrollHeight > element.clientHeight + 8);
+      const line = element.querySelector(".hama-turn-current .hama-user-line");
+      const frame = element.getBoundingClientRect();
+      const lineVisible = line instanceof HTMLElement
+        ? line.getBoundingClientRect().bottom > frame.top + 8 && line.getBoundingClientRect().top < frame.bottom - 8
+        : false;
+      setShowJump(!lineVisible && distanceFromBottom(element) > PIN_THRESHOLD && element.scrollHeight > element.clientHeight + 8);
       return;
     }
     element.scrollTop = element.scrollHeight;
@@ -177,9 +187,12 @@ export function HamaConversationView({
           flex: 1;
           min-height: 0;
           height: 100%;
+          display: flex;
+          flex-direction: column;
         }
         .hama-conversation-scroll {
-          height: 100%;
+          flex: 1;
+          min-height: 0;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
@@ -191,15 +204,15 @@ export function HamaConversationView({
           flex-direction: column;
           justify-content: flex-end;
           gap: 18px;
-          padding: 18px 0 120px;
+          padding: 12px 0 var(--hama-composer-space, calc(168px + env(safe-area-inset-bottom, 0px)));
           box-sizing: border-box;
         }
         .hama-jump-latest {
-          position: absolute;
-          left: 50%;
-          bottom: 128px;
-          transform: translateX(-50%);
+          position: static;
+          align-self: center;
+          flex: 0 0 auto;
           z-index: 2;
+          margin: 8px 0 4px;
           border: 1px solid ${LINE};
           background: #fff;
           color: ${GREEN};
@@ -241,6 +254,22 @@ export function HamaConversationView({
           }
         }
       `}</style>
+      {showJump ? (
+        <button
+          type="button"
+          className="hama-jump-latest"
+          data-hama-jump-latest=""
+          onClick={() => {
+            followingRef.current = true;
+            const element = scrollerRef.current;
+            if (!element) return;
+            const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            element.scrollTo({ top: element.scrollHeight, behavior: reduce ? "auto" : "smooth" });
+          }}
+        >
+          최신 대화
+        </button>
+      ) : null}
       <div ref={scrollerRef} className="hama-conversation-scroll" data-hama-conversation-scroll="">
       <div className="hama-conversation-thread">
       {entries.map((entry, index) => {
@@ -331,7 +360,7 @@ export function HamaConversationView({
                 <h2 style={{ margin: 0, color: GREEN, fontSize: 15, fontWeight: 700 }}>식사</h2>
                 {entry.anchorName ? (
                   <p style={{ margin: 0, color: MUTED, fontSize: 13, lineHeight: 1.45 }}>
-                    {entry.provisional ? `임시 기준은 첫 놀이 장소인 ${entry.anchorName}예요. ` : `거리 기준은 ${entry.anchorName}예요. `}
+                    {entry.provisional ? `임시 기준은 ${entry.anchorName}예요. ` : `거리 기준은 ${entry.anchorName}예요. `}
                     표시된 거리는 직선거리이고, 실제 이동시간이 아닙니다.
                   </p>
                 ) : null}
@@ -393,22 +422,6 @@ export function HamaConversationView({
       })}
       </div>
       </div>
-      {showJump ? (
-        <button
-          type="button"
-          className="hama-jump-latest"
-          data-hama-jump-latest=""
-          onClick={() => {
-            followingRef.current = true;
-            const element = scrollerRef.current;
-            if (!element) return;
-            const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-            element.scrollTo({ top: element.scrollHeight, behavior: reduce ? "auto" : "smooth" });
-          }}
-        >
-          최신 대화
-        </button>
-      ) : null}
       {detailCard ? <HamaPlaceDetailPanel card={detailCard} onClose={() => setDetailCard(null)} /> : null}
     </div>
   );

@@ -32,7 +32,7 @@ import { resolveScenarioConfig } from "@/lib/scenarioEngine/resolveScenarioConfi
 import { generateCourses } from "@/lib/scenarioEngine/courseEngine";
 import { fetchRecommendationPatternBoostMap } from "@/lib/recommend/getPatternBoost";
 import { applyRecommendationModeToScenario } from "@/lib/scenarioEngine/effectiveScenario";
-import type { RecommendationMode, ScenarioObject } from "@/lib/scenarioEngine/types";
+import type { IntentCategory, RecommendationMode, ScenarioObject } from "@/lib/scenarioEngine/types";
 import type { IntentionType } from "@/lib/intention";
 import type { NamedFoodPreset } from "@/lib/recommend/namedFoodPresets";
 import type { HomeCard } from "@/lib/storeTypes";
@@ -216,6 +216,7 @@ function ResultsContent({
   const started = useRef<number>(0);
   const rankingSeenForQuery = useRef("");
   const preserveAssistantRef = useRef(false);
+  const refreshCategoryLockRef = useRef<IntentCategory[] | null>(null);
   const frozenPlayRef = useRef<HomeCard[] | null>(null);
   const awaitingRefreshBusy = useRef(false);
   const [modeOverride, setModeOverride] = useState<RecommendationMode | null>(null);
@@ -262,6 +263,7 @@ function ResultsContent({
 
   useEffect(() => {
     setRejectedMainPickIds([]);
+    refreshCategoryLockRef.current = null;
     setContextualReject(null);
     preserveAssistantRef.current = false;
     frozenPlayRef.current = null;
@@ -840,8 +842,18 @@ function ResultsContent({
         courseFixedCards,
         narrowPrimaryList: (list) => {
           const regional = filterCardsByNamedRegion(list, effectiveScenario?.region);
-          if (effectiveScenario?.intentCategory !== "ACTIVITY") return regional;
-          return regional.filter((card) => storeCategoryMatchesIntentCategory(card, "ACTIVITY"));
+          const category = effectiveScenario?.intentCategory;
+          if (
+            category !== "FOOD" &&
+            category !== "CAFE" &&
+            category !== "ACTIVITY" &&
+            category !== "BEAUTY" &&
+            category !== "FITNESS" &&
+            category !== "LIFE"
+          ) {
+            return regional;
+          }
+          return regional.filter((card) => storeCategoryMatchesIntentCategory(card, category));
         },
       }),
     [
@@ -863,13 +875,31 @@ function ResultsContent({
     if (!linkedFoodActive || !scenarioObject) return null;
     return buildLinkedFoodScenario(scenarioObject, /근처|가까운|가까이/.test(qRaw));
   }, [linkedFoodActive, scenarioObject, qRaw]);
-  const displayedPlayCards = mealKeepsPlay && savedPlayCards ? savedPlayCards : primaryListCards;
-  const freshPlayCards = rejectedMainPickIds.length
-    ? primaryListCards.filter((card) => card.id && !rejectedMainPickIds.includes(card.id))
-    : primaryListCards;
+  const excludedShownIds = new Set([
+    ...(mealKeepsPlay
+      ? []
+      : [...(effectiveScenario?.conversationExcludePlaceIds ?? []), ...(convCtx?.rejectedPlaceIds ?? [])]),
+    ...rejectedMainPickIds,
+  ]);
+  const freshCandidates = primaryListCards.filter((card) => card.id && !excludedShownIds.has(card.id));
+  const intentCategory = effectiveScenario?.intentCategory;
+  const intentCategoryIsExplicit =
+    intentCategory === "FOOD" ||
+    intentCategory === "CAFE" ||
+    intentCategory === "ACTIVITY" ||
+    intentCategory === "BEAUTY" ||
+    intentCategory === "FITNESS" ||
+    intentCategory === "LIFE";
+  const refreshCategoryLock = intentCategoryIsExplicit ? null : refreshCategoryLockRef.current;
+  const freshPlayCards = refreshCategoryLock?.length
+    ? freshCandidates.filter((card) => refreshCategoryLock.some((category) => storeCategoryMatchesIntentCategory(card, category)))
+    : freshCandidates;
+  const keptVisitCards = savedPlayCards?.filter((card) => !storeCategoryMatchesIntentCategory(card, "FOOD"));
+  const displayedPlayCards =
+    mealKeepsPlay && keptVisitCards && keptVisitCards.length > 0 ? keptVisitCards : mealKeepsPlay ? [] : freshPlayCards;
   const conversationPlayCards =
-    mealKeepsPlay && savedPlayCards
-      ? savedPlayCards
+    mealKeepsPlay && displayedPlayCards.length > 0
+      ? displayedPlayCards
       : refreshingDeck && frozenPlayRef.current
         ? frozenPlayRef.current
         : freshPlayCards;
@@ -883,12 +913,25 @@ function ResultsContent({
     if (!awaitingRefreshBusy.current) return;
     awaitingRefreshBusy.current = false;
     frozenPlayRef.current = null;
+    preserveAssistantRef.current = false;
     setRefreshingDeck(false);
   }, [refreshingDeck, pageBusy, isLoading]);
-  const foodAnchorPick = resolveFoodAnchor(displayedPlayCards, foodAnchorId);
-  const foodAnchor = foodAnchorPick.card;
+  const visitAnchors = displayedPlayCards.filter(
+    (card) =>
+      !storeCategoryMatchesIntentCategory(card, "FOOD") &&
+      typeof card.lat === "number" &&
+      typeof card.lng === "number"
+  );
+  const foodAnchorPick = resolveFoodAnchor(visitAnchors, foodAnchorId);
+  const foodNearRequested = /근처|가까운|가까이/.test(qRaw);
+  const foodNearNeedsAnchor = Boolean(
+    linkedFoodScenario && foodNearRequested && !foodAnchorId && visitAnchors.length > 1
+  );
+  const foodAnchor = foodNearNeedsAnchor ? null : foodAnchorPick.card;
   const foodAnchorLat = typeof foodAnchor?.lat === "number" ? foodAnchor.lat : null;
   const foodAnchorLng = typeof foodAnchor?.lng === "number" ? foodAnchor.lng : null;
+  const foodAnchorProvisional = Boolean(foodAnchor) && foodAnchorPick.provisional && visitAnchors.length > 1;
+  const foodMissingCoords = Boolean(linkedFoodActive && !foodAnchor && !foodNearNeedsAnchor);
   const foodScenarioForFetch = linkedFoodScenario
     ? { ...linkedFoodScenario, conversationExcludePlaceIds: undefined }
     : null;
@@ -900,19 +943,22 @@ function ResultsContent({
   } = useHomeCards("all", shuffleKey, "none", {
     userLat: foodAnchorLat,
     userLng: foodAnchorLng,
-    excludeStoreIds: [],
+    excludeStoreIds: displayedPlayCards.map((card) => card.id).filter(Boolean),
     searchQuery: foodScenarioForFetch?.region ? `${foodScenarioForFetch.region} 식당` : "식당",
     scenarioObject: foodScenarioForFetch,
     skipFetch: !foodScenarioForFetch || holdTranscript || holdRecommendations,
     deferRanking: !foodScenarioForFetch || holdTranscript || holdRecommendations,
   });
-  const foodRestaurantCards = useMemo(
-    () => (linkedFoodCards ?? []).filter((card) => storeCategoryMatchesIntentCategory(card, "FOOD")),
-    [linkedFoodCards]
-  );
-  const foodNearNeedsAnchor = false;
-  const foodAnchorProvisional = foodAnchorPick.provisional;
-  const foodMissingCoords = Boolean(linkedFoodActive && !foodAnchor);
+  const foodPool = (linkedFoodCards ?? []).filter((card) => storeCategoryMatchesIntentCategory(card, "FOOD"));
+  const foodPoolIds = new Set(foodPool.map((card) => card.id));
+  const separatedPlayCards = linkedFoodActive
+    ? displayedPlayCards.filter((card) => card.id && !foodPoolIds.has(card.id) && !storeCategoryMatchesIntentCategory(card, "FOOD"))
+    : displayedPlayCards;
+  const foodRestaurantCards = (
+    foodAnchorLat == null || foodAnchorLng == null ? foodPool.map((card) => ({ ...card, distanceKm: undefined })) : foodPool
+  )
+    .filter((card) => card.id && !separatedPlayCards.some((play) => play.id === card.id))
+    .slice(0, 3);
 
   const beautyV2HardMode = useMemo(
     () =>
@@ -1442,10 +1488,15 @@ function ResultsContent({
     impressionLogged.current = false;
     placeNameSearchLogged.current = false;
     recommendDeckLogged.current = false;
-  }, [qRaw, shuffleKey]);
+  }, [qRaw]);
 
   const askInstead = convCtx?.clarificationNeeded === true || holdRecommendations;
-  const shownPlaceNames = askInstead ? [] : displayedPlayCards.slice(0, 3).map((card) => card.name);
+  const shownPlayCards = askInstead ? [] : separatedPlayCards.slice(0, 3);
+  const shownPlaceNames = shownPlayCards.map((card) => card.name);
+  const shownPlayIdSet = new Set(shownPlayCards.map((card) => card.id));
+  const claimedExcludedIds = convCtx?.rejectedPlaceIds ?? [];
+  const exclusionHeld =
+    claimedExcludedIds.length > 0 && claimedExcludedIds.every((id) => !shownPlayIdSet.has(id));
   const conversationShownPlayCount =
     !askInstead && displayedPlayCards.length > 0 && (!pageBusy || mealKeepsPlay)
       ? Math.min(3, displayedPlayCards.length)
@@ -1496,7 +1547,7 @@ function ResultsContent({
       clarificationText: convCtx.clarificationPrompt ?? convCtx.regionClarification,
       intent,
       placeNames: shownPlaceNames,
-      excludedPlaceCount: convCtx.rejectedPlaceIds?.length ?? 0,
+      excludedPlaceCount: exclusionHeld ? claimedExcludedIds.length : 0,
       linkedFoodKeptSeparate: linkedFoodActive,
       foodPlaceNames:
         linkedFoodActive && !linkedFoodLoading && !foodRecommendationBlocked && !foodRecommendationLoadFailed
@@ -1506,11 +1557,9 @@ function ResultsContent({
         linkedFoodActive && (linkedFoodLoading || foodRecommendationBlocked || foodRecommendationLoadFailed),
       foodNearNeedsAnchor,
       foodAnchorNote: foodAnchor
-        ? foodAnchorProvisional
-          ? ` 식사 거리는 첫 놀이 장소인 ${foodAnchor.name} 기준 직선거리예요.`
-          : ` 식사 거리는 ${foodAnchor.name} 기준 직선거리예요.`
+        ? ` 식사 거리는 ${foodAnchor.name} 기준 직선거리예요.`
         : foodMissingCoords
-          ? " 놀이 장소 좌표가 없어 식사 직선거리를 계산하지 않았어요."
+          ? " 기준 장소 좌표가 없어 직선거리를 계산하지 않았어요."
           : "",
       indoorEvidenceOnly: effectiveScenario?.indoorPreferred === true,
     });
@@ -1534,6 +1583,10 @@ function ResultsContent({
     effectiveScenario,
     foodRestaurantCards,
     foodNearNeedsAnchor,
+    foodAnchor,
+    foodMissingCoords,
+    exclusionHeld,
+    refreshingDeck,
     linkedFoodActive,
     linkedFoodLoading,
     foodRecommendationBlocked,
@@ -1553,7 +1606,7 @@ function ResultsContent({
     if ((pageBusy && !mealKeepsPlay) || bootstrapBusy) return;
     if (!mealKeepsPlay && rankingSeenForQuery.current !== qRaw) return;
     if (linkedFoodActive && linkedFoodLoading) return;
-    const play = (rejectedMainPickIds.length ? freshPlayCards : displayedPlayCards).slice(0, 3);
+    const play = separatedPlayCards.slice(0, 3);
     const playRefreshNote =
       rejectedMainPickIds.length > 0 &&
       play.length === 0 &&
@@ -1596,6 +1649,7 @@ function ResultsContent({
     linkedFoodActive,
     linkedFoodLoading,
     displayedPlayCards,
+    separatedPlayCards,
     freshPlayCards,
     rejectedMainPickIds,
     dataNotice.showFetchError,
@@ -1657,9 +1711,16 @@ function ResultsContent({
 
   const findAgain = () => {
     if (refreshingDeck || pageBusy || isLoading || mealKeepsPlay || holdTranscript) return;
-    const source = rejectedMainPickIds.length ? freshPlayCards : primaryListCards;
-    const deck = source.slice(0, RECOMMEND_DECK_SIZE);
+    const deck = displayedPlayCards.slice(0, RECOMMEND_DECK_SIZE);
     const ids = deck.map((card) => card.id).filter(Boolean);
+    const categories: IntentCategory[] = ["FOOD", "CAFE", "ACTIVITY", "BEAUTY", "FITNESS", "LIFE"];
+    const locked = new Set<IntentCategory>();
+    for (const card of deck) {
+      for (const category of categories) {
+        if (storeCategoryMatchesIntentCategory(card, category)) locked.add(category);
+      }
+    }
+    if (!intentCategoryIsExplicit && locked.size) refreshCategoryLockRef.current = [...locked];
     if (!ids.length) return;
     frozenPlayRef.current = deck;
     awaitingRefreshBusy.current = false;
@@ -1813,9 +1874,10 @@ function ResultsContent({
   }
 
   if (embedded) {
+    const playSource = refreshingDeck && frozenPlayRef.current ? frozenPlayRef.current : separatedPlayCards;
     const visiblePlay =
-      !askInstead && conversationPlayCards.length > 0 && (!pageBusy || mealKeepsPlay || refreshingDeck)
-        ? conversationPlayCards.slice(0, 3)
+      !askInstead && playSource.length > 0 && (!pageBusy || mealKeepsPlay || refreshingDeck)
+        ? playSource.slice(0, 3)
         : [];
     const refreshEmptyNote =
       !refreshingDeck &&
@@ -1921,7 +1983,7 @@ function ResultsContent({
         initialOpened={holdTranscript ? resume?.opened : undefined}
         initialSelected={holdTranscript ? resume?.selected : undefined}
         transcriptRef={transcriptRef}
-        playChoices={visiblePlay.filter((card) => typeof card.lat === "number" && typeof card.lng === "number")}
+        playChoices={visitAnchors}
         onPickAnchor={setFoodAnchorId}
         onReject={(placeId) => {
           freezeRejectForPlace(placeId);
@@ -2183,9 +2245,7 @@ function ResultsContent({
             anchorName={foodAnchor?.name ?? null}
             provisional={foodAnchorProvisional}
             needsCoords={foodMissingCoords}
-            playChoices={displayedPlayCards.filter(
-              (card) => typeof card.lat === "number" && typeof card.lng === "number"
-            )}
+            playChoices={visitAnchors}
             onPickAnchor={setFoodAnchorId}
             onOpen={(card) => {
               stashPlaceForSession(card);
