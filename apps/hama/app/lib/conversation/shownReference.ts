@@ -67,6 +67,7 @@ function mentionsCard(utterance: string, name: string): boolean {
 export function classifyShownExclusion(text: string, previous: ConversationContext | null): ShownExclusion {
   const q = norm(text);
   if (!q || CUISINE_OR_MENU.test(q)) return { kind: "none" };
+  if (/다른\s*(종류|업종|유형)/.test(q)) return { kind: "none" };
   const cards = shownCards(previous);
   if (!cards.length) return { kind: "none" };
 

@@ -1,5 +1,6 @@
 import type { ConversationContext } from "./types";
 import { namedAreaFromUtterance } from "./namedRegion";
+import { OTHER_KIND_PROMPT, asksOtherVenueKind } from "./followUp";
 
 /** A. search, B. needs_detail, C. missing_data, D. external_action */
 export type RequestClass = "search" | "needs_detail" | "missing_data" | "external_action";
@@ -263,6 +264,10 @@ export function classifyRequestCapability(
       "어디쯤인지, 식사·카페·놀 곳 중 무엇인지를 알려 주세요. 그전까지는 장소를 고르지 않을게요.",
       Boolean(previous)
     );
+  }
+
+  if (asksOtherVenueKind(q) && !/박물관|미술관|도서관|전시|식당|카페/.test(q)) {
+    return decide("needs_detail", "venue_shift", "question", OTHER_KIND_PROMPT);
   }
 
   if (isOutsidePlaceSearch(q)) {

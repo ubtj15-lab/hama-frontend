@@ -3,7 +3,7 @@ import { namedAreaFromUtterance } from "./namedRegion";
 import type { RefinementType } from "./types";
 import { isSelfContainedCurrentTurn } from "./selfContainedTurn";
 import { classifyShownExclusion } from "./shownReference";
-import { isAdditivePurpose } from "./followUp";
+import { asksOtherVenueKind, isAdditivePurpose } from "./followUp";
 import { classifyRequestCapability } from "./capability";
 
 function norm(s: string): string {
@@ -71,6 +71,10 @@ function classifyRefinement(
     /(복잡|단순|시끄|멀리|맵|주차|데는\s*싫|곳은\s*싫|건\s*싫|않았으면|있으면\s*좋)/.test(q)
   ) {
     return previous ? "refine" : "new_request";
+  }
+
+  if (previous && asksOtherVenueKind(text) && !/박물관|미술관|도서관|전시|식당|카페/.test(q)) {
+    return "clarify";
   }
 
   if (previous) {

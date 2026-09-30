@@ -18,8 +18,53 @@ export function isExplicitNewSearch(text: string): boolean {
 export function isAdditivePurpose(text: string): boolean {
   const q = norm(text);
   if (isExplicitNewSearch(q)) return false;
+  if (isNearbyShownMeal(q)) return true;
   if (/넣어|포함/.test(q)) return true;
   return /도/.test(q) && /밥|식사|먹을|맛집|식당|디저트|간식/.test(q);
+}
+
+/** A meal beside places already shown, including sentences without "도". */
+export function isNearbyShownMeal(text: string): boolean {
+  const q = norm(text);
+  if (!/밥\s*먹|식사|먹을\s*곳|맛집|식당/.test(q)) return false;
+  if (/(추천한|보여\s*준|보여준|방금|아까).{0,30}(근처|주변|가까이)/.test(q)) return true;
+  return /그\s*주변/.test(q);
+}
+
+export const OTHER_KIND_PROMPT = "놀이, 식당, 카페, 박물관 중에서 어떤 종류로 바꿀까요?";
+
+export function asksOtherVenueKind(text: string): boolean {
+  return /다른\s*(종류|업종|유형)/.test(norm(text));
+}
+
+/** A follow-up that names the next place type. Broad outing sentences are not a choice. */
+export function explicitVenueChoice(text: string): IntentCategory | null {
+  const q = norm(text);
+  if (/박물관|미술관|도서관|전시/.test(q)) return "ACTIVITY";
+  if (/놀이/.test(q) && !asksOtherVenueKind(q)) return "ACTIVITY";
+  if (/식당|맛집/.test(q) && !asksOtherVenueKind(q)) return "FOOD";
+  if (/카페/.test(q) && !/키즈\s*카페|키즈카페/.test(q) && !asksOtherVenueKind(q)) return "CAFE";
+  return null;
+}
+
+const VENUE_WORD: Record<string, RegExp> = {
+  박물관: /박물관/,
+  미술관: /미술관/,
+  도서관: /도서관/,
+  전시: /전시/,
+};
+
+/** Keep only stores whose own text matches a named venue. An empty list stays empty. */
+export function cardsForNamedVenue<T extends { name?: string | null; tags?: string[] | null; description?: string | null }>(
+  text: string,
+  cards: readonly T[]
+): T[] {
+  const q = norm(text);
+  if (/말고|제외|빼/.test(q)) return [...cards];
+  const word = Object.keys(VENUE_WORD).find((key) => q.includes(key));
+  if (!word) return [...cards];
+  const pattern = VENUE_WORD[word]!;
+  return cards.filter((card) => pattern.test([card.name, card.description, ...(card.tags ?? [])].filter(Boolean).join(" ")));
 }
 
 /**

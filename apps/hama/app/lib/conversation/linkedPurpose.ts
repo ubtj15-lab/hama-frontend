@@ -1,5 +1,6 @@
 import type { IntentCategory, ScenarioObject } from "@/lib/scenarioEngine/types";
 import type { HomeCard } from "@/lib/storeTypes";
+import { isNearbyShownMeal } from "./followUp";
 
 export type LinkedPurpose = {
   intentCategory: "FOOD";
@@ -21,6 +22,7 @@ function norm(text: string): string {
 /** "밥 먹을 곳도" adds a purpose. It does not by itself replace the current one. */
 export function detectLinkedFoodPurpose(text: string): boolean {
   const q = norm(text);
+  if (isNearbyShownMeal(q)) return true;
   if (!/도/.test(q)) return false;
   return /밥\s*먹|식사|먹을\s*곳|맛집|식당/.test(q);
 }

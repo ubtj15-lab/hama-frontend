@@ -71,6 +71,7 @@ import { type HomeResume } from "@/lib/conversation/homeResume";
 import { filterCardsByNamedRegion } from "@/lib/conversation/namedRegion";
 import { shouldHoldRecommendations } from "@/lib/conversation/capability";
 import { buildLinkedFoodScenario, detectLinkedFoodPurpose, resolveFoodAnchor, validShownPlayCards } from "@/lib/conversation/linkedPurpose";
+import { cardsForNamedVenue } from "@/lib/conversation/followUp";
 import { storeCategoryMatchesIntentCategory } from "@/lib/scenarioEngine/intentClassification";
 import { LinkedFoodGroup } from "@/_components/results/LinkedFoodGroup";
 import { HamaConversationView } from "@/_components/home/HamaConversationView";
@@ -873,7 +874,7 @@ function ResultsContent({
   const linkedFoodActive = Boolean(convCtx?.linkedPurposes?.some((item) => item.intentCategory === "FOOD"));
   const linkedFoodScenario = useMemo(() => {
     if (!linkedFoodActive || !scenarioObject) return null;
-    return buildLinkedFoodScenario(scenarioObject, /근처|가까운|가까이/.test(qRaw));
+    return buildLinkedFoodScenario(scenarioObject, /근처|가까운|가까이|주변/.test(qRaw));
   }, [linkedFoodActive, scenarioObject, qRaw]);
   const excludedShownIds = new Set([
     ...(mealKeepsPlay
@@ -881,7 +882,10 @@ function ResultsContent({
       : [...(effectiveScenario?.conversationExcludePlaceIds ?? []), ...(convCtx?.rejectedPlaceIds ?? [])]),
     ...rejectedMainPickIds,
   ]);
-  const freshCandidates = primaryListCards.filter((card) => card.id && !excludedShownIds.has(card.id));
+  const freshCandidates = cardsForNamedVenue(
+    qRaw,
+    primaryListCards.filter((card) => card.id && !excludedShownIds.has(card.id))
+  );
   const intentCategory = effectiveScenario?.intentCategory;
   const intentCategoryIsExplicit =
     intentCategory === "FOOD" ||
@@ -923,7 +927,7 @@ function ResultsContent({
       typeof card.lng === "number"
   );
   const foodAnchorPick = resolveFoodAnchor(visitAnchors, foodAnchorId);
-  const foodNearRequested = /근처|가까운|가까이/.test(qRaw);
+  const foodNearRequested = /근처|가까운|가까이|주변/.test(qRaw);
   const foodNearNeedsAnchor = Boolean(
     linkedFoodScenario && foodNearRequested && !foodAnchorId && visitAnchors.length > 1
   );

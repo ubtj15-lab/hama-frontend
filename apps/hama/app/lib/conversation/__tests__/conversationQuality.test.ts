@@ -3,6 +3,8 @@ import { processConversationTurn } from "../processTurn";
 import { mergeResultsScenario } from "../mergeResultsScenario";
 import { composeAssistantReply } from "../assistantReply";
 import { classifyRequestCapability } from "../capability";
+import { cardsForNamedVenue, OTHER_KIND_PROMPT } from "../followUp";
+import { detectLinkedFoodPurpose, resolveFoodAnchor } from "../linkedPurpose";
 import type { ConversationContext } from "../types";
 import { applyDiscoveryRerank, classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
 import { filterFoodCandidatesByMenuIntent } from "@/lib/recommend/foodIntentRanking";
@@ -155,5 +157,98 @@ describe("conversation quality gaps", () => {
     const steak = { id: "s", name: "이화옥 스테이크", category: "restaurant", menu_keywords: ["스테이크"] } as HomeCard;
     expect(filterFoodCandidatesByMenuIntent([steak, noodle], intent).map((card) => card.id)).toEqual(["n"]);
     expect(filterFoodCandidatesByMenuIntent([steak], intent)).toEqual([]);
+  });
+});
+
+function playContext() {
+  const line = "아이들과 실내에서 놀 만한 곳 찾아줘.";
+  const ctx = processConversationTurn(line, null, { persist: false });
+  return {
+    line,
+    ctx: {
+      ...ctx,
+      currentIntent: { ...ctx.currentIntent, region: "동탄", distanceTolerance: "near_only" as const },
+      lastRecommendations: {
+        placeIds: ["play-a", "play-b", "play-c"],
+        cards: [
+          { id: "play-a", name: "동탄 실내놀이터", category: "activity" as const, lat: 37.2, lng: 127.07 },
+          { id: "play-b", name: "동탄 키즈플레이", category: "activity" as const, lat: 37.21, lng: 127.08 },
+          { id: "play-c", name: "좌표 없는 놀이터", category: "activity" as const, lat: null, lng: null },
+        ],
+      },
+    },
+  };
+}
+
+describe("other venue kind and nearby meal", () => {
+  it("treats another place and another kind differently", () => {
+    const { ctx } = playContext();
+    const anotherPlace = processConversationTurn("다른 곳 보여줘", ctx, { persist: false, turnId: "place" });
+    expect(anotherPlace.rejectedPlaceIds).toEqual(["play-a", "play-b", "play-c"]);
+    expect(anotherPlace.holdRecommendations).toBeUndefined();
+    expect(anotherPlace.currentIntent.withKids).toBe(true);
+    expect(anotherPlace.currentIntent.indoorPreferred).toBe(true);
+    expect(anotherPlace.currentIntent.region).toBe("동탄");
+
+    const otherKind = processConversationTurn("다른 종류의 장소로 추천해 줘", ctx, { persist: false, turnId: "kind" });
+    expect(otherKind.holdRecommendations).toBe(true);
+    expect(otherKind.clarificationPrompt).toBe(OTHER_KIND_PROMPT);
+    expect(otherKind.currentIntent.intentCategory).toBe(ctx.currentIntent.intentCategory);
+    expect(otherKind.rejectedPlaceIds ?? []).toEqual([]);
+    expect(otherKind.currentIntent.withKids).toBe(true);
+    expect(otherKind.currentIntent.indoorPreferred).toBe(true);
+    expect(otherKind.currentIntent.region).toBe("동탄");
+    expect(otherKind.currentIntent.distanceTolerance).toBe("near_only");
+  });
+
+  it("searches the chosen venue and does not invent stores that are not that venue", () => {
+    const { ctx } = playContext();
+    const asked = processConversationTurn("다른 종류의 장소로 추천해 줘", ctx, { persist: false, turnId: "kind" });
+    const museum = processConversationTurn("박물관", asked, { persist: false, turnId: "museum" });
+    expect(museum.holdRecommendations).toBeUndefined();
+    expect(museum.currentIntent.rawQuery).toBe("박물관");
+    expect(museum.currentIntent.withKids).toBe(true);
+    expect(museum.currentIntent.indoorPreferred).toBe(true);
+    expect(museum.currentIntent.region).toBe("동탄");
+    expect(museum.currentIntent.distanceTolerance).toBe("near_only");
+    const playAgain = processConversationTurn("놀이", asked, { persist: false, turnId: "play-again" });
+    expect(playAgain.currentIntent.intentCategory).toBe("ACTIVITY");
+    expect(playAgain.currentIntent.region).toBe("동탄");
+    const shown = cardsForNamedVenue("박물관", [
+      { name: "동탄 실내놀이터", tags: ["실내"] },
+      { name: "동탄 박물관", tags: ["전시"] },
+    ]);
+    expect(shown.map((card) => card.name)).toEqual(["동탄 박물관"]);
+    expect(cardsForNamedVenue("박물관", [{ name: "동탄 실내놀이터", tags: ["키즈"] }])).toEqual([]);
+  });
+
+  it("keeps the play list and adds a separate nearby meal", () => {
+    const { ctx } = playContext();
+    const line = "추천한 장소 근처에서 식사할 곳 찾아줘";
+    const meal = processConversationTurn(line, ctx, { persist: false, turnId: "meal" });
+    expect(detectLinkedFoodPurpose(line)).toBe(true);
+    expect(detectLinkedFoodPurpose("그 주변에서 밥 먹을 곳")).toBe(true);
+    expect(detectLinkedFoodPurpose("근처에서 밥 먹을 곳도 알려줘")).toBe(true);
+    expect(meal.frozenPlayCards?.map((card) => card.id)).toEqual(["play-a", "play-b", "play-c"]);
+    expect(meal.linkedPurposes?.map((item) => item.intentCategory)).toContain("FOOD");
+    expect(meal.currentIntent.region).toBe("동탄");
+    expect(meal.currentIntent.withKids).toBe(true);
+    expect(meal.currentIntent.indoorPreferred).toBe(true);
+    const anchors = (meal.frozenPlayCards ?? []).filter((card) => typeof card.lat === "number" && typeof card.lng === "number");
+    expect(anchors.length).toBeGreaterThan(1);
+    expect(resolveFoodAnchor(anchors, "play-b").card?.id).toBe("play-b");
+    expect(resolveFoodAnchor(anchors, null).provisional).toBe(true);
+    const noCoords = (meal.frozenPlayCards ?? []).filter((card) => card.lat == null);
+    expect(resolveFoodAnchor(noCoords, null).card).toBeNull();
+    const reply = composeAssistantReply({
+      intent: meal.currentIntent,
+      placeNames: ["동탄 실내놀이터", "동탄 키즈플레이"],
+      linkedFoodKeptSeparate: true,
+      foodPlaceNames: [],
+      foodNearNeedsAnchor: true,
+    });
+    expect(reply.text).toContain("동탄 실내놀이터");
+    expect(reply.text).toContain("장소 하나를 기준으로");
+    expect(reply.text).not.toContain("가깝습니다");
   });
 });

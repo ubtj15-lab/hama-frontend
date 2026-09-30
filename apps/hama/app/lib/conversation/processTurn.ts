@@ -1,4 +1,5 @@
 import { parseScenarioIntent } from "@/lib/scenarioEngine/intentClassification";
+import { explicitVenueChoice } from "./followUp";
 import type { ConversationContext } from "./types";
 import { detectRefinementType } from "./refinement";
 import { parseTurnIntent } from "./parseTurn";
@@ -181,6 +182,27 @@ export function processConversationTurn(
     raw,
     previous.currentIntent.region
   );
+  const chosenVenue =
+    explicitVenueChoice(raw) &&
+    (previous.capabilityTopic === "venue_shift" || /다른\s*(종류|업종|유형)/.test(raw))
+      ? explicitVenueChoice(raw)
+      : null;
+  if (chosenVenue) {
+    const fresh = parseScenarioIntent(raw);
+    nextIntent = {
+      ...nextIntent,
+      intentCategory: chosenVenue,
+      intentType: "search_strict",
+      intentStrict: true,
+      rawQuery: raw,
+      queryUnderstanding: fresh.queryUnderstanding,
+      region: nextIntent.region ?? previous.currentIntent.region,
+      withKids: previous.currentIntent.withKids,
+      indoorPreferred: previous.currentIntent.indoorPreferred,
+      distanceTolerance: previous.currentIntent.distanceTolerance,
+      weatherHint: previous.currentIntent.weatherHint,
+    };
+  }
   const regionQuestion = regionClarificationFor(raw);
   const mealOnly = detectLinkedFoodPurpose(raw);
   const playIntent = mealOnly
