@@ -609,8 +609,9 @@ export function buildTopRecommendations(
 
       if (
         !relaxed &&
-        strict?.intentType === "search_strict" &&
-        strict.hardConstraints?.length &&
+        strict &&
+        ((strict.intentType === "search_strict" && strict.hardConstraints?.length) ||
+          strict.hardConstraints?.includes("indoor")) &&
         violatesHardConstraints(card, strict)
       ) {
         continue;

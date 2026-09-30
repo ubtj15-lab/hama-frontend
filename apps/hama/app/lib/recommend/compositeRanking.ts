@@ -134,6 +134,7 @@ export function violatesHardConstraints(card: HomeCard, parsed: ScenarioObject):
 
   if (hard.includes("indoor")) {
     if (/야외\s*전용|야외에서만|오픈에어만/.test(blob)) return true;
+    if (/공원|근린공원|호수공원/.test(blob) && !/실내/.test(blob)) return true;
   }
   if (hard.includes("category_cafe") && cat !== "cafe") return true;
   if (hard.includes("category_salon") && cat !== "salon") return true;
