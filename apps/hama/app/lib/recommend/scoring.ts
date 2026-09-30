@@ -7,7 +7,7 @@ import {
 } from "./strictCategoryCompatibility";
 import { resolveScenarioConfig } from "@/lib/scenarioEngine/resolveScenarioConfig";
 import { configTagBoostRaw, placeTypePreferenceRaw } from "@/lib/scenarioEngine/scoringBoost";
-import { scenarioObjectToIntention, scenarioTypeToRankKey } from "@/lib/scenarioEngine/scenarioRankBridge";
+import { scenarioObjectToIntention, scenarioRankKeyForRecommendationCopy, scenarioTypeToRankKey } from "@/lib/scenarioEngine/scenarioRankBridge";
 import { logScenarioEngineDebug } from "@/lib/scenarioEngine/scenarioDebug";
 import {
   WEIGHT_FOOD_INTENT,
@@ -814,7 +814,11 @@ export function buildTopRecommendations(
     };
 
     const reasonText = buildHomeRecommendationReason({
-      voice: voiceForContent,
+      voice: ctx.scenarioObject
+        ? scenarioRankKeyForRecommendationCopy(ctx.scenarioObject)
+        : userScenarioKey !== "neutral"
+          ? userScenarioKey
+          : undefined,
       intent: legacyIntent,
       business: businessState,
       km,

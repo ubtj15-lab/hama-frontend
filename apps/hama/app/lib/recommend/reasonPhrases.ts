@@ -23,7 +23,7 @@ function hasVerifiedKidFacility(blob: string): boolean {
 
 export function buildReasonWordLine(params: {
   km: number | null;
-  voice: RecommendScenarioKey;
+  voice: RecommendScenarioKey | undefined;
   intent: IntentionType;
   blob: string;
   withKids: boolean;
@@ -75,7 +75,8 @@ export function buildReasonWordLine(params: {
   return out.length > 0 ? out.join(SEP) : "추천";
 }
 
-function topScenarioTagLabels(voice: RecommendScenarioKey, blob: string, max: number): string[] {
+function topScenarioTagLabels(voice: RecommendScenarioKey | undefined, blob: string, max: number): string[] {
+  if (!voice) return [];
   const rules = SCENARIO_TAG_RULES[voice] ?? [];
   const hits = rules.filter((r) => r.patterns.some((p) => p.test(blob)));
   hits.sort((a, b) => b.weight - a.weight);
@@ -84,10 +85,10 @@ function topScenarioTagLabels(voice: RecommendScenarioKey, blob: string, max: nu
 
 function distanceClause(km: number | null): string | null {
   if (km == null || !Number.isFinite(km)) return null;
-  if (km <= 0.5) return "바로 근처에 있어요";
-  if (km <= 1) return "도보로 가기 좋은 거리예요";
-  if (km <= 3) return "거리는 가까운 편이에요";
-  return "거리는 조금 있는 편이에요";
+  if (km <= 0.5) return "직선거리 0.5km 이내예요";
+  if (km <= 1) return "직선거리 1km 이내예요";
+  if (km <= 3) return "직선거리 3km 이내예요";
+  return "직선거리로는 3km보다 떨어져 있어요";
 }
 
 function businessClause(state: BusinessState): string {
@@ -105,7 +106,7 @@ function businessClause(state: BusinessState): string {
 }
 
 function scenarioClause(params: {
-  voice: RecommendScenarioKey;
+  voice: RecommendScenarioKey | undefined;
   intent: IntentionType;
   blob: string;
   withKids: boolean;
@@ -133,7 +134,7 @@ function scenarioClause(params: {
         ? "회식·모임에 맞는 편이에요"
         : "여럿이 함께 쓰기 좋아요";
     default:
-      return "이동 동선이 과하지 않은 후보예요";
+      return "조건에 맞춰 고른 곳이에요";
   }
 }
 
@@ -141,7 +142,7 @@ function scenarioClause(params: {
  * LLM 없이 시나리오·태그·거리·영업을 한 문장으로 묶은 추천 이유.
  */
 export function buildHomeRecommendationReason(params: {
-  voice: RecommendScenarioKey;
+  voice: RecommendScenarioKey | undefined;
   intent: IntentionType;
   business: BusinessState;
   km: number | null;

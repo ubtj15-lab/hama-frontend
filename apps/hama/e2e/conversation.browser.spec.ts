@@ -669,6 +669,11 @@ test("does not record a cancelled first search when the next question wins", asy
 });
 
 test("keeps earlier questions in one transcript and does not pull the reader back down", async ({ page }) => {
+  gate.mode = "catalog";
+  gate.generation = 0;
+  gate.release.clear();
+  gate.held = [];
+  gate.logs = [];
   await page.setViewportSize({ width: 390, height: 844 });
   await installMocks(page);
   await page.goto("/");
@@ -686,6 +691,10 @@ test("keeps earlier questions in one transcript and does not pull the reader bac
   const turns = page.locator("[data-hama-turn]");
   await expect(turns).toHaveCount(3);
   await expect(turns.nth(2)).toContainText("오산 조용한 카페");
+  await expect(turns.nth(2)).not.toContainText("아이 동반");
+  await expect(turns.nth(2)).not.toContainText("아이 메뉴");
+  await expect(turns.nth(2)).not.toContainText("식사 쪽");
+  await expect.poll(async () => (await turns.nth(2).getAttribute("data-hama-food-ids")) ?? "").toBe("");
   await expect(turns.nth(0)).toContainText("동탄에서 아이들이랑 갈 만한 곳 찾아줘");
   await expect(turns.nth(1)).toContainText("그 근처에 밥 먹을 곳도 있어?");
   const laterY = await first.evaluate((element) => element.getBoundingClientRect().top);
@@ -709,6 +718,32 @@ test("keeps earlier questions in one transcript and does not pull the reader bac
   await expect(first.locator("[data-hama-place-id]")).toHaveCount(0);
   await first.getByRole("button", { name: /추천 \d+곳 다시 보기/ }).click();
   await expect(first.locator("[data-hama-place-id]").first()).toBeVisible();
+});
+
+test("keeps the finished meal and starts a separate Osan cafe search", async ({ page }) => {
+  gate.mode = "catalog";
+  gate.generation = 0;
+  gate.release.clear();
+  gate.held = [];
+  gate.logs = [];
+  await installMocks(page);
+  await page.goto("/");
+  await ask(page, "동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  const turns = page.locator("[data-hama-turn]");
+  await expect.poll(async () => (await turns.nth(0).getAttribute("data-hama-play-ids")) ?? "").not.toBe("");
+  await ask(page, "그 근처에 밥 먹을 곳도 있어?");
+  await expect.poll(async () => (await turns.nth(1).getAttribute("data-hama-food-ids")) ?? "").not.toBe("");
+  const keptFood = await turns.nth(1).getAttribute("data-hama-food-ids");
+  await ask(page, "오산에서 조용한 카페");
+  await expect(turns).toHaveCount(3);
+  await expect(turns.nth(2)).toContainText("오산 조용한 카페");
+  await expect(turns.nth(2)).not.toContainText("아이 동반");
+  await expect(turns.nth(2)).not.toContainText("아이 메뉴");
+  await expect(turns.nth(2)).not.toContainText("식사 쪽");
+  await expect.poll(async () => (await turns.nth(2).getAttribute("data-hama-food-ids")) ?? "").toBe("");
+  await expect.poll(async () => (await turns.nth(1).getAttribute("data-hama-food-ids")) ?? "").toBe(keptFood ?? "");
+  await expect(turns.nth(0)).toContainText("동탄에서 아이들이랑 갈 만한 곳 찾아줘");
+  await expect(turns.nth(1)).toContainText("그 근처에 밥 먹을 곳도 있어?");
 });
 
 test("restores the same conversation when returning from place detail", async ({ page }) => {

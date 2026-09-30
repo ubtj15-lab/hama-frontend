@@ -95,6 +95,30 @@ describe("current-turn precedence", () => {
     expect(merged?.intentCategory).toBe("CAFE");
     expect(merged?.distanceTolerance ?? ctx.currentIntent.distanceTolerance).toBe("near_only");
   });
+
+  it("osan quiet cafe after a kids meal is a new cafe search", () => {
+    const first = "동탄에서 아이들이랑 갈 만한 곳 찾아줘";
+    const meal = "그 근처에 밥 먹을 곳도 있어?";
+    const cafe = "오산에서 조용한 카페";
+    const started = processConversationTurn(first, null, { persist: false, turnId: "t1" });
+    const withMeal = processConversationTurn(meal, started, { persist: false, turnId: "t2" });
+    expect(withMeal.currentIntent.withKids).toBe(true);
+    expect(withMeal.currentIntent.region).toBe("동탄");
+    expect(withMeal.linkedPurposes?.some((item) => item.intentCategory === "FOOD")).toBe(true);
+    expect(detectRefinementType(cafe, withMeal)).toBe("new_request");
+    const next = processConversationTurn(cafe, withMeal, { persist: false, turnId: "t3" });
+    const merged = mergeResultsScenario(cafe, next);
+    expect(next.currentIntent.intentCategory).toBe("CAFE");
+    expect(next.currentIntent.region).toBe("오산");
+    expect(next.currentIntent.withKids).not.toBe(true);
+    expect(next.currentIntent.scenario).not.toBe("family_kids");
+    expect(next.linkedPurposes).toBeUndefined();
+    expect(merged?.withKids).not.toBe(true);
+    expect(merged?.intentCategory).toBe("CAFE");
+    expect(merged?.region).toBe("오산");
+    expect(merged?.foodPreference ?? []).not.toContain("kid_friendly_menu");
+    expect(next.turns.filter((turn) => turn.role === "user").map((turn) => turn.text)).toEqual([first, meal, cafe]);
+  });
 });
 
 describe("clean current-turn controls", () => {

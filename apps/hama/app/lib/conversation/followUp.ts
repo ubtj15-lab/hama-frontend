@@ -1,4 +1,5 @@
 import type { FoodSubCategory, IntentCategory } from "@/lib/scenarioEngine/types";
+import { namedAreaFromUtterance } from "./namedRegion";
 
 function norm(text: string): string {
   return String(text ?? "")
@@ -79,6 +80,7 @@ export function isDependentFollowUp(text: string): boolean {
   if (/추천|찾아\s*줘|찾아줘|갈\s*(곳|데)|어디|가고\s*싶|먹으러|놀\s*만한|데이트할|코스\s*짜/.test(q)) {
     return false;
   }
+  if (namedAreaFromUtterance(q) && venueVertical(q)) return false;
   return true;
 }
 

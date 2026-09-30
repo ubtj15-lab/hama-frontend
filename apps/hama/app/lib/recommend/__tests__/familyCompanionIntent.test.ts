@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { HomeCard } from "@/lib/storeTypes";
 import { parseScenarioIntent } from "@/lib/scenarioEngine/intentClassification";
-import { scenarioTypeToRankKey } from "@/lib/scenarioEngine/scenarioRankBridge";
+import { scenarioRankKeyForRecommendationCopy, scenarioTypeToRankKey } from "@/lib/scenarioEngine/scenarioRankBridge";
 import { buildHomeRecommendationReason } from "@/lib/recommend/reasonPhrases";
+import { buildTopRecommendations } from "@/lib/recommend/scoring";
 import { classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
 
-function reason(voice: "family" | "solo" | "date", card: Partial<HomeCard>): string {
+function reason(voice: "family" | "solo" | "date" | undefined, card: Partial<HomeCard>): string {
   return buildHomeRecommendationReason({
     voice,
-    intent: voice === "family" ? "family" : voice === "date" ? "date" : "solo",
+    intent: voice === "family" ? "family" : voice === "date" ? "date" : voice === "solo" ? "solo" : "none",
     business: "UNKNOWN",
     km: null,
     blob: [card.name, ...(card.tags ?? [])].join(" "),
@@ -63,5 +64,31 @@ describe("explicit child age and kids meals stay a family context", () => {
     const cafe = parseScenarioIntent("카페 추천");
     expect(cafe.intentCategory).toBe("CAFE");
     expect(cafe.scenario).not.toBe("family_kids");
+    expect(scenarioRankKeyForRecommendationCopy(cafe)).toBeUndefined();
+    const deck = buildTopRecommendations(
+      [{ id: "cafe-1", name: "야곱의축복", category: "cafe", lat: 37.2, lng: 127.1, tags: ["아이동반"], with_kids: true } as HomeCard],
+      { intent: "none", searchQuery: "카페 추천", scenarioObject: cafe, userLat: 37.201, userLng: 127.101 }
+    );
+    expect(deck[0]?.reasonText ?? "").not.toContain("혼밥");
+    expect(deck[0]?.reasonText ?? "").not.toContain("혼술");
+    expect(deck[0]?.reasonText ?? "").not.toContain("도보");
+    expect(deck[0]?.reasonText ?? "").toContain("직선거리");
+    const cafeReason = reason(undefined, { name: "야곱의축복", category: "cafe", with_kids: true, tags: ["아이동반"] });
+    expect(cafeReason).not.toContain("혼밥");
+    expect(cafeReason).not.toContain("혼술");
+    expect(cafeReason).not.toContain("아이 동반");
+    expect(cafeReason).not.toContain("도보");
+    const near = buildHomeRecommendationReason({
+      voice: "family",
+      intent: "family",
+      business: "UNKNOWN",
+      km: 0.8,
+      blob: "가족 식당",
+      withKids: false,
+      category: "restaurant",
+    });
+    expect(near).toContain("직선거리");
+    expect(near).not.toContain("도보");
+    expect(near).not.toContain("분");
   });
 });
