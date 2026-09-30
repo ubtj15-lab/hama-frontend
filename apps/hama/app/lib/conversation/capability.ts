@@ -55,6 +55,16 @@ function decide(
   };
 }
 
+function hasPlaceSearchFrame(text: string): boolean {
+  return /카페|식당|밥|맛집|놀이|미용|네일|코스|키즈|외식|곳|추천|찾아|근처|실내|야외|아이|메뉴|예약|주차|조용|가까운|동탄|오산|평택|병점|먹/.test(text);
+}
+
+/** A question with no place request. A place word in the same sentence stays a search. */
+function isOutsidePlaceSearch(text: string): boolean {
+  if (hasPlaceSearchFrame(text)) return false;
+  return /비트코인|암호화폐|코인|주식|환율|시세|날씨|기온|미세먼지|뉴스|번역|계산|숙제|로또|운세|유튜브|넷플릭스|드라마/.test(text);
+}
+
 function asksForKnownPlace(text: string): boolean {
   return /있는\s*(곳|데|카페|식당)|추천|찾아|많은/.test(text);
 }
@@ -252,6 +262,15 @@ export function classifyRequestCapability(
       "question",
       "어디쯤인지, 식사·카페·놀 곳 중 무엇인지를 알려 주세요. 그전까지는 장소를 고르지 않을게요.",
       Boolean(previous)
+    );
+  }
+
+  if (isOutsidePlaceSearch(q)) {
+    return decide(
+      "missing_data",
+      "outside_place_search",
+      "limit",
+      "하마는 갈 장소와 조건을 찾아요. 시세나 실시간 정보는 확인하지 않고, 없는 내용은 만들지 않아요. 보여 드린 장소도 바꾸지 않을게요."
     );
   }
 

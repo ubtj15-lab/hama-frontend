@@ -86,6 +86,11 @@ export function extractPartialFromUtterance(
 
   const menu = detectMenuIntent(raw).filter((item) => !(kidsCafeExcluded && (item === "키즈카페" || item === "놀이카페")));
   if (menu.length) out.menuIntent = uniq([...(out.menuIntent ?? []), ...menu]);
+  if (menu.length && !kidsCafeExcluded && !/(말고|제외|빼)/.test(q)) {
+    out.intentCategory = "FOOD";
+    out.intentType = "search_strict";
+    out.intentStrict = true;
+  }
 
   const sub = detectFoodSubCategory(raw);
   const droppedSub = negatedFoodSub(raw);

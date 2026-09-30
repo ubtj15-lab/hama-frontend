@@ -100,7 +100,7 @@ const WALK_PH = /산책|걷|둘레|호수/;
 const RELAX_PH =
   /조용|책\s*읽|힐링|시간\s*때울|시간\s*보내|쉬(?:다|고|기)|머물|차분/;
 const DATE_PH = /데이트|여자친구|남자친구|연인|커플|둘이/;
-const FAMILY_PH = /아이랑|애들이|애들|아이\s|유아|가족|초등|육아/;
+const FAMILY_PH = /아이랑|아이들이|애들|아이\s|유아|가족|초등|육아/;
 const INDOOR_PH = /실내|비\s*오|비오|장마/;
 const CULTURE_PH = /전시|도서관|관람|박물관|미술관/;
 const PLAY_PH = /놀\s*|체험|방탈출|보드게임|액티비티/;
@@ -163,7 +163,8 @@ export function isKidsIndoorPlayIntent(raw: string, parsed: ScenarioObject): boo
     PLAY_PH.test(raw) ||
     purposes.includes("indoor_play") ||
     purposes.includes("play") ||
-    purposes.includes("kids_cafe");
+    purposes.includes("kids_cafe") ||
+    /갈\s*만|갈\s*곳|장소/.test(raw);
   return isFamily && isIndoor && isPlay;
 }
 
@@ -316,6 +317,7 @@ export function classifyDiscoveryQuery(query: string, parsed: ScenarioObject): D
     (isDate && !EXPLICIT_CAFE_REQUEST.test(focus)) ||
     isFamilyOuting ||
     isCulture ||
+    isKidsIndoorPlay ||
     isIndoorPlaySeekingQuery(raw, parsed) ||
     (isPlay && !EXPLICIT_MENU_OR_VENUE.test(focus) && !EXPLICIT_CAFE_REQUEST.test(focus));
 

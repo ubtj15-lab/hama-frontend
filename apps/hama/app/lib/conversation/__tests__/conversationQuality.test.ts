@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { processConversationTurn } from "../processTurn";
 import { mergeResultsScenario } from "../mergeResultsScenario";
 import { composeAssistantReply } from "../assistantReply";
+import { classifyRequestCapability } from "../capability";
 import type { ConversationContext } from "../types";
+import { applyDiscoveryRerank, classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
+import { filterFoodCandidatesByMenuIntent } from "@/lib/recommend/foodIntentRanking";
+import type { HomeCard } from "@/lib/storeTypes";
 
 function chain(lines: string[], beforeEach?: (ctx: ConversationContext, line: string) => ConversationContext) {
   let ctx: ConversationContext | null = null;
@@ -88,5 +92,68 @@ describe("follow-up conversation quality", () => {
     expect(cafe?.intentCategory).toBe("CAFE");
     expect(cafe?.region).toBe("동탄");
     expect(cafe?.vibePreference ?? []).toContain("calm");
+  });
+});
+
+describe("conversation quality gaps", () => {
+  it("does not repeat the cafe recommendation for an unrelated question", () => {
+    const cafe = processConversationTurn("조용한 카페 추천해줘", null, { persist: false });
+    const asked = processConversationTurn("오늘 비트코인 시세 알려줘", cafe, { persist: false, turnId: "btc" });
+    expect(asked.holdRecommendations).toBe(true);
+    expect(asked.currentIntent.intentCategory).toBe("CAFE");
+    const reply = composeAssistantReply({
+      clarificationNeeded: true,
+      clarificationText: asked.clarificationPrompt,
+      intent: asked.currentIntent,
+      placeNames: ["반복되면 안 되는 카페"],
+    });
+    expect(reply.suppressRecommendations).toBe(true);
+    expect(reply.text).not.toContain("반복되면 안 되는 카페");
+    expect(reply.text).not.toContain("이 순서로 골랐어요");
+    expect(reply.text).not.toMatch(/\d+\s*원|달러|상승|하락/);
+  });
+
+  it("keeps a place request that merely mentions an outside topic", () => {
+    const previous = processConversationTurn("조용한 카페 추천해줘", null, { persist: false });
+    expect(classifyRequestCapability("비트코인 카페 찾아줘", previous).holdRecommendations).toBe(false);
+    expect(classifyRequestCapability("비 오는 날 아이들과 실내 장소 찾아줘", previous).holdRecommendations).toBe(false);
+    expect(classifyRequestCapability("칼국수로 찾아줘", previous).holdRecommendations).toBe(false);
+    const cafe = processConversationTurn("비트코인 카페 찾아줘", previous, { persist: false, turnId: "coin-cafe" });
+    expect(cafe.holdRecommendations).toBeUndefined();
+    expect(cafe.currentIntent.intentCategory).toBe("CAFE");
+  });
+
+  it("uses the indoor family activity deck instead of a restaurant or cafe", () => {
+    const line = "아이들과 갈 만한 실내 장소 찾아줘";
+    const ctx = processConversationTurn(line, null, { persist: false });
+    const intent = mergeResultsScenario(line, ctx)!;
+    expect(intent.withKids).toBe(true);
+    expect(intent.indoorPreferred).toBe(true);
+    expect(intent.intentCategory).not.toBe("FOOD");
+    expect(intent.intentCategory).not.toBe("CAFE");
+    expect(classifyDiscoveryQuery(line, intent).role).toBe("PLAY");
+    const ranked = applyDiscoveryRerank(
+      [
+        { id: "food", name: "두부마을", category: "restaurant", score: 90, payload: null },
+        { id: "cafe", name: "일반 카페", category: "cafe", score: 80, payload: null },
+        { id: "play", name: "동탄 실내놀이터", category: "activity", score: 30, tags: ["실내", "키즈"], payload: null },
+      ],
+      line,
+      intent
+    );
+    expect(ranked.deck.map((card) => card.id)).toEqual(["play"]);
+  });
+
+  it("switches a menu request to food and drops stores without that menu", () => {
+    const place = processConversationTurn("아이들과 갈 만한 실내 장소 찾아줘", null, { persist: false });
+    const line = "칼국수로 찾아줘";
+    const meal = processConversationTurn(line, place, { persist: false, turnId: "noodle" });
+    const intent = mergeResultsScenario(line, meal)!;
+    expect(intent.intentCategory).toBe("FOOD");
+    expect(intent.menuIntent ?? []).toContain("칼국수");
+    const noodle = { id: "n", name: "오산칼국수", category: "restaurant", menu_keywords: ["칼국수"] } as HomeCard;
+    const steak = { id: "s", name: "이화옥 스테이크", category: "restaurant", menu_keywords: ["스테이크"] } as HomeCard;
+    expect(filterFoodCandidatesByMenuIntent([steak, noodle], intent).map((card) => card.id)).toEqual(["n"]);
+    expect(filterFoodCandidatesByMenuIntent([steak], intent)).toEqual([]);
   });
 });

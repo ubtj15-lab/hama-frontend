@@ -345,6 +345,10 @@ export function filterFoodCandidatesByMenuIntent(
   }));
 
   const anyMenuTier = menus.length > 0 ? scored.some((s) => s.hasStrongHit || s.hasSemanticHit) : true;
+  if (menus.length > 0) {
+    if (!anyMenuTier) return [];
+    return scored.filter((s) => s.hasStrongHit || s.hasSemanticHit).map((s) => s.card);
+  }
   const anySubTier = sub ? scored.some((s) => s.hasSubHit) : true;
 
   const tierOf = (s: (typeof scored)[number]): number => {
