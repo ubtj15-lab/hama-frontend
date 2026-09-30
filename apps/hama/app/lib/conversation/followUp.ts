@@ -40,7 +40,8 @@ export function asksOtherVenueKind(text: string): boolean {
 /** A follow-up that names the next place type. Broad outing sentences are not a choice. */
 export function explicitVenueChoice(text: string): IntentCategory | null {
   const q = norm(text);
-  if (/박물관|미술관|도서관|전시/.test(q)) return "ACTIVITY";
+  if (/도서관/.test(q) && !/박물관|미술관|전시/.test(q)) return null;
+  if (/박물관|미술관|전시/.test(q)) return "ACTIVITY";
   if (/놀이/.test(q) && !asksOtherVenueKind(q)) return "ACTIVITY";
   if (/식당|맛집/.test(q) && !asksOtherVenueKind(q)) return "FOOD";
   if (/카페/.test(q) && !/키즈\s*카페|키즈카페/.test(q) && !asksOtherVenueKind(q)) return "CAFE";

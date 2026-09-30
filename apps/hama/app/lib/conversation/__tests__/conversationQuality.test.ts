@@ -3,7 +3,7 @@ import { processConversationTurn } from "../processTurn";
 import { mergeResultsScenario } from "../mergeResultsScenario";
 import { composeAssistantReply } from "../assistantReply";
 import { classifyRequestCapability } from "../capability";
-import { cardsForNamedVenue, OTHER_KIND_PROMPT } from "../followUp";
+import { cardsForNamedVenue, OTHER_KIND_PROMPT, explicitVenueChoice } from "../followUp";
 import { detectLinkedFoodPurpose, resolveFoodAnchor } from "../linkedPurpose";
 import type { ConversationContext } from "../types";
 import { applyDiscoveryRerank, classifyDiscoveryQuery } from "@/lib/recommend/discoveryRole";
@@ -207,6 +207,9 @@ describe("other venue kind and nearby meal", () => {
     const museum = processConversationTurn("박물관", asked, { persist: false, turnId: "museum" });
     expect(museum.holdRecommendations).toBeUndefined();
     expect(museum.currentIntent.rawQuery).toBe("박물관");
+    expect(museum.currentIntent.intentCategory).toBe("ACTIVITY");
+    expect(explicitVenueChoice("미술관")).toBe("ACTIVITY");
+    expect(explicitVenueChoice("전시")).toBe("ACTIVITY");
     expect(museum.currentIntent.withKids).toBe(true);
     expect(museum.currentIntent.indoorPreferred).toBe(true);
     expect(museum.currentIntent.region).toBe("동탄");
@@ -220,6 +223,12 @@ describe("other venue kind and nearby meal", () => {
     ]);
     expect(shown.map((card) => card.name)).toEqual(["동탄 박물관"]);
     expect(cardsForNamedVenue("박물관", [{ name: "동탄 실내놀이터", tags: ["키즈"] }])).toEqual([]);
+    expect(explicitVenueChoice("도서관")).toBeNull();
+    const libraryTurn = processConversationTurn("도서관", asked, { persist: false, turnId: "library" });
+    expect(libraryTurn.currentIntent.intentCategory ?? null).toBe(asked.currentIntent.intentCategory ?? null);
+    expect(cardsForNamedVenue("도서관", [{ name: "오산시립도서관", category: "library", tags: [] }]).map((card) => card.name)).toEqual([
+      "오산시립도서관",
+    ]);
   });
 
   it("keeps the play list and adds a separate nearby meal", () => {
