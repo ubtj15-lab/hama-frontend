@@ -60,6 +60,7 @@ const MARKERS: Array<{ re: RegExp; pattern: NegationPatternId }> = [
   { re: /말고\s*뭐/g, pattern: "X 말고" },
   { re: /제외하고/g, pattern: "X 제외하고" },
   { re: /제외해/g, pattern: "X 제외하고" },
+  { re: /제외(?!하)/g, pattern: "X 제외하고" },
   { re: /빼고/g, pattern: "X 빼고" },
   { re: /말고/g, pattern: "X 말고" },
   { re: /[은는가]\s*싫어/g, pattern: "X는 싫어" },

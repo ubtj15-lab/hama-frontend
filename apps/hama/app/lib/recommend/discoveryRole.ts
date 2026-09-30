@@ -238,7 +238,8 @@ export function classifyDiscoveryQuery(query: string, parsed: ScenarioObject): D
       };
     }
   }
-  if (uq?.strongVertical) {
+  const kidsCafeExcluded = uq?.negation?.excludedVenues?.includes("kids_cafe") === true;
+  if (uq?.strongVertical && !(kidsCafeExcluded && isKidsIndoorPlayIntent(raw, parsed))) {
     return {
       isDiscovery: false,
       role: null,
@@ -250,7 +251,7 @@ export function classifyDiscoveryQuery(query: string, parsed: ScenarioObject): D
   }
 
   const excluded = uq?.negation?.excludedCategories ?? [];
-  if ((EXPLICIT_KIDS_CAFE.test(focus) || EXPLICIT_MENU_OR_VENUE.test(focus)) && !conversational.detected) {
+  if ((EXPLICIT_KIDS_CAFE.test(focus) || EXPLICIT_MENU_OR_VENUE.test(focus)) && !conversational.detected && !kidsCafeExcluded) {
     return {
       isDiscovery: false,
       role: null,

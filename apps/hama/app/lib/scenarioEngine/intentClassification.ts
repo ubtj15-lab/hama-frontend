@@ -241,6 +241,9 @@ export function detectScenario(rawQuery: string): ScenarioDetect {
     }
   }
   if (/(비 오는 날|비오는 날|장마|우산)/.test(q)) {
+    if (/(아이|애들|키즈|유아|초등|가족|놀)/.test(q)) {
+      return { scenario: "family_kids", confidence: 0.62 };
+    }
     return { scenario: "date", confidence: 0.45 };
   }
   /** '조용한'만으로는 부모 동행(parents)으로 보지 않음 — 무드는 detectMoodAndConstraints */
