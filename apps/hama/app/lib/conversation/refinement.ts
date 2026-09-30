@@ -95,6 +95,16 @@ function classifyRefinement(
     return "refine";
   }
 
+  /* "동탄으로 바꿔줘" changes the area and keeps the trip. A new venue still starts over. */
+  if (
+    previous &&
+    namedAreaFromUtterance(text) &&
+    /바꿔/.test(q) &&
+    !/카페|미용|네일|식당|맛집|놀이|실내|야외|데이트|코스/.test(q)
+  ) {
+    return "refine";
+  }
+
   if (
     /이번엔|이번\s*에는|아니\s*미용|아니\s*카페|바꿔\s*줘|바꿔줘|처음부터|다시\s*찾아|미용실|네일\s*샵/.test(
       q

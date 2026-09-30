@@ -9,6 +9,7 @@ import { nextLinkedPurposes, detectLinkedFoodPurpose, validShownPlayCards } from
 import { regionClarificationFor, withNamedRegion } from "./namedRegion";
 import { AMBIGUOUS_PLACE_PROMPT, classifyShownExclusion } from "./shownReference";
 import { classifyRequestCapability, diningOutCategory } from "./capability";
+import { parseQueryNegation } from "@/lib/scenarioEngine/negationUnderstanding";
 import type { FoodSubCategory } from "@/lib/scenarioEngine/types";
 
 function makeSessionId(): string {
@@ -129,6 +130,12 @@ export function processConversationTurn(
     rejectedCategories = uniq([...rejectedCategories, parsed.rejection.addRejectedCategory]);
     const dropped = foodSubForRejected(parsed.rejection.addRejectedCategory);
     if (dropped && nextIntent.foodSubCategory === dropped) delete nextIntent.foodSubCategory;
+  }
+  const utteranceNegation = parseQueryNegation(raw);
+  if (utteranceNegation.excludedVenues.includes("kids_cafe")) {
+    rejectedTags = uniq([...rejectedTags, "키즈카페", "놀이카페"]);
+    nextIntent.menuIntent = (nextIntent.menuIntent ?? []).filter((item) => item !== "키즈카페" && item !== "놀이카페");
+    if (!nextIntent.menuIntent.length) delete nextIntent.menuIntent;
   }
   if (parsed.rejection?.removeMenuIntent) {
     const rm = parsed.rejection.removeMenuIntent;

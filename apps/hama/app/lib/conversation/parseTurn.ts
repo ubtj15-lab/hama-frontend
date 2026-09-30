@@ -5,6 +5,7 @@ import { detectFoodPreference, detectVibePreference } from "@/lib/scenarioEngine
 import type { ConversationContext, ParseTurnResult, RefinementType } from "./types";
 import { detectRefinementType } from "./refinement";
 import { isAdditivePurpose, negatedFoodSub, venueVertical } from "./followUp";
+import { parseQueryNegation } from "@/lib/scenarioEngine/negationUnderstanding";
 
 function norm(s: string): string {
   return String(s ?? "")
@@ -29,7 +30,9 @@ export function extractPartialFromUtterance(
 
   Object.assign(out, detectMoodAndConstraints(q));
 
-  if (/애도|아이도|아이\s*랑|애\s*랑|키즈|유아\s*동반|초등/.test(q)) {
+  const kidsCafeExcluded = parseQueryNegation(raw).excludedVenues.includes("kids_cafe");
+  const kidsText = kidsCafeExcluded ? q.replace(/키즈\s*카페|키즈카페|놀이카페/g, " ") : q;
+  if (/애도|아이도|아이\s*랑|애\s*랑|키즈|유아\s*동반|초등/.test(kidsText)) {
     out.withKids = true;
     out.scenario = "family_kids";
   }
@@ -81,7 +84,7 @@ export function extractPartialFromUtterance(
   const fp = detectFoodPreference(raw);
   if (fp.length) out.foodPreference = uniq([...(out.foodPreference ?? []), ...fp]);
 
-  const menu = detectMenuIntent(raw);
+  const menu = detectMenuIntent(raw).filter((item) => !(kidsCafeExcluded && (item === "키즈카페" || item === "놀이카페")));
   if (menu.length) out.menuIntent = uniq([...(out.menuIntent ?? []), ...menu]);
 
   const sub = detectFoodSubCategory(raw);

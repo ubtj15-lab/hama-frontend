@@ -51,7 +51,10 @@ export function negatedFoodSub(text: string): FoodSubCategory | null {
 export function venueVertical(text: string): IntentCategory | null {
   const q = norm(text);
   if (isAdditivePurpose(q)) return null;
-  if (/카페/.test(q)) return "CAFE";
+  if (/카페/.test(q)) {
+    if (/키즈\s*카페|키즈카페|놀이카페/.test(q) && /제외|빼\s*줘|빼줘|말고/.test(q)) return null;
+    return "CAFE";
+  }
   if (/미용|네일|헤어/.test(q)) return "BEAUTY";
   if (/놀이/.test(q) && !/밥|식사|식당|맛집/.test(q)) return "ACTIVITY";
   return null;

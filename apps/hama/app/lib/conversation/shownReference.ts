@@ -7,7 +7,7 @@ export type ShownExclusion =
   | { kind: "ambiguous" };
 
 const EXPLICIT_SHOWN_SET =
-  /아까\s*(본|나왔|그)|방금\s*(본|나왔)|보여\s*준|보여준|나온\s*(데|곳|집)|다른\s*데|다른데|다른\s*곳|다른곳|이거\s*말고|별로|전부|다\s*빼|다\s*제외/;
+  /아까\s*(본|나왔|그)|방금\s*(본|나왔|추천한)|보여\s*준|보여준|나온\s*(데|곳|집)|다른\s*데|다른데|다른\s*곳|다른곳|이거\s*말고|별로|전부|다\s*빼|다\s*제외/;
 
 /** Another place of the same kind, not another menu, region, or a negated category. */
 function wholeShownSet(q: string): boolean {
