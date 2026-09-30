@@ -44,7 +44,7 @@ export const FAMILY_TAG_RULES: ScenarioTagRule[] = [
   {
     id: "아이동반가능",
     weight: 28,
-    patterns: [/아이(?!스)|키즈|유아|어린이|아이동반|키즈룸/],
+    patterns: [/키즈\s*카페|키즈카페|키즈룸|키즈존|어린이|유아/],
   },
   { id: "주차가능", weight: 18, patterns: [/주차|무료주차|발렛/] },
   /** '넓은' 단독 매칭 제거 — 가족석/테이블 등과 함께일 때만 가산 */

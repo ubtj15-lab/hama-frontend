@@ -224,6 +224,10 @@ type ScenarioDetect = { scenario: ScenarioType; confidence: number };
 /**
  * 긴 구문을 먼저 매칭해 시나리오 충돌을 줄임.
  */
+function hasExplicitChildCompanion(q: string): boolean {
+  return /아이(?!스)|애들|키즈|유아|초등|(?<![0-9])(?:[1-9]|1[0-2])\s*살|(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉|열한|열두|열)\s*살/.test(q);
+}
+
 export function detectScenario(rawQuery: string): ScenarioDetect {
   const q = normIntentQuery(rawQuery);
   const pairs: { scenario: ScenarioType; phrase: string }[] = [];
@@ -239,6 +243,9 @@ export function detectScenario(rawQuery: string): ScenarioDetect {
       const base = Math.min(0.95, 0.52 + Math.min(phrase.length, 18) * 0.022);
       return { scenario, confidence: base };
     }
+  }
+  if (hasExplicitChildCompanion(q)) {
+    return { scenario: "family_kids", confidence: 0.6 };
   }
   if (/(비 오는 날|비오는 날|장마|우산)/.test(q)) {
     if (/(아이|애들|키즈|유아|초등|가족|놀)/.test(q)) {
@@ -302,7 +309,7 @@ export function detectMoodAndConstraints(rawQuery: string): Partial<ScenarioObje
   if (/(고급|프리미엄|코스요리)/.test(q)) out.budgetLevel = "high";
   if (/(분위기 있는|감성)/.test(q) && !out.budgetLevel) out.budgetLevel = "medium";
 
-  if (/(아이|애들|애 |키즈|유아|초등|영유아)/.test(q)) out.withKids = true;
+  if (hasExplicitChildCompanion(q)) out.withKids = true;
   if (/(부모님|어른)/.test(q)) out.withParents = true;
 
   if (/(주차\s*되|주차되|주차\s*편한|주차\s*가능|주차)/.test(q) && !/(주차장만|주차타워)/.test(q)) {
@@ -398,7 +405,7 @@ function mergeScenarioObject(
 
 /** 가족/아이 시나리오는 명시적 키워드가 있을 때만 유지 (모호한 문장의 family 오분류 방지) */
 function explicitFamilyKeywordsInQuery(q: string): boolean {
-  return /(아이랑|아이\s|아이와|가족|부모님|부모와|유아|영유아|초등|애\s*데리고|가족\s*외식|가족끼리|가족이랑|키즈\s*나들이|키즈\s*메뉴|유아\s*동반|나들이\s*갈)/.test(
+  return /(아이랑|아이들이|아이들|애들|아이\s|아이와|가족|부모님|부모와|유아|영유아|초등|애\s*데리고|가족\s*외식|가족끼리|가족이랑|키즈\s*나들이|키즈\s*메뉴|유아\s*동반|나들이\s*갈|(?<![0-9])(?:[1-9]|1[0-2])\s*살|(?:일곱|여섯|다섯|여덟|아홉|열)\s*살)/.test(
     q
   );
 }

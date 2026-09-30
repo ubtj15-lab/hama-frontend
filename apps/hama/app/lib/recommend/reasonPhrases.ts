@@ -17,6 +17,10 @@ function dedupeOrdered(tags: string[]): string[] {
  * 거리 + 시나리오 핵심 단어 (+ 짧은 힌트 1개까지).
  * 예: 가까운 · 데이트 · 조용 / 근처 · 혼밥 / 가까운 · 아이와 · 주차
  */
+function hasVerifiedKidFacility(blob: string): boolean {
+  return /키즈\s*카페|키즈카페|키즈룸|키즈존|어린이|유아\s*의자|아이\s*의자|키즈\s*메뉴|어린이\s*메뉴/.test(blob);
+}
+
 export function buildReasonWordLine(params: {
   km: number | null;
   voice: RecommendScenarioKey;
@@ -29,9 +33,7 @@ export function buildReasonWordLine(params: {
   const { km, voice, intent, blob, withKids } = params;
   const has = (re: RegExp) => re.test(blob);
 
-  const kidSignal =
-    withKids ||
-    /아이(?!스)|키즈|유아|어린이|아이동반/.test(blob);
+  const kidSignal = hasVerifiedKidFacility(blob);
 
   const tags: string[] = [];
 
@@ -112,8 +114,7 @@ function scenarioClause(params: {
   blockKidMessaging?: boolean;
 }): string {
   const { voice, intent, blob, withKids } = params;
-  const kidSignal =
-    withKids || /아이(?!스)|키즈|유아|어린이|아이동반/.test(blob);
+  const kidSignal = hasVerifiedKidFacility(blob);
 
   switch (voice) {
     case "date":
